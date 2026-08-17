@@ -13,6 +13,7 @@ import {
   formatSize,
   listMaterials,
 } from '../lib/materials'
+import { listSubjects, updateSubject, type SubjectMeta } from '../lib/subjects'
 
 export default function Teacher() {
   const { user, state, error, signIn, signOutTeacher } = useAuth()
@@ -93,6 +94,94 @@ export default function Teacher() {
 function TeacherDashboard() {
   const { user, signOutTeacher } = useAuth()
 
+  const [subjects, setSubjects] = useState<SubjectMeta[]>([])
+  const [loadingSubjects, setLoadingSubjects] = useState(true)
+  const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null)
+
+  useEffect(() => {
+    listSubjects()
+      .then((list) => {
+        setSubjects(list)
+        setActiveSubjectId((current) => current ?? list[0]?.id ?? null)
+      })
+      .finally(() => setLoadingSubjects(false))
+  }, [])
+
+  const activeSubject = subjects.find((subject) => subject.id === activeSubjectId) ?? null
+
+  function handleSubjectUpdate(subjectId: string, patch: Partial<SubjectMeta>) {
+    setSubjects((list) =>
+      list.map((subject) => (subject.id === subjectId ? { ...subject, ...patch } : subject)),
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-wrap items-center gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">교사 페이지</h1>
+          <p className="text-sm text-ink-500">과목을 고르고 수업자료를 올리고 관리합니다.</p>
+        </div>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-sm text-ink-700">{user?.email}</span>
+          <button
+            onClick={signOutTeacher}
+            className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+          >
+            로그아웃
+          </button>
+        </div>
+      </header>
+
+      {loadingSubjects ? (
+        <p className="text-ink-500">과목을 불러오는 중…</p>
+      ) : subjects.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
+          아직 등록된 과목이 없습니다. Firebase 콘솔에서 subjects 컬렉션에 과목 문서를 먼저
+          만들어 주세요.
+        </p>
+      ) : (
+        <>
+          <nav className="flex flex-wrap gap-2">
+            {subjects.map((subject) => (
+              <button
+                key={subject.id}
+                onClick={() => setActiveSubjectId(subject.id)}
+                className={[
+                  'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+                  subject.id === activeSubjectId
+                    ? 'bg-cheese-400 text-ink-900'
+                    : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
+                ].join(' ')}
+              >
+                {subject.name}
+              </button>
+            ))}
+          </nav>
+
+          {activeSubject && (
+            <SubjectPanel
+              key={activeSubject.id}
+              subject={activeSubject}
+              uploaderEmail={user?.email ?? ''}
+              onSubjectChange={(patch) => handleSubjectUpdate(activeSubject.id, patch)}
+            />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function SubjectPanel({
+  subject,
+  uploaderEmail,
+  onSubjectChange,
+}: {
+  subject: SubjectMeta
+  uploaderEmail: string
+  onSubjectChange: (patch: Partial<SubjectMeta>) => void
+}) {
   const [materials, setMaterials] = useState<MaterialMeta[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -102,8 +191,8 @@ function TeacherDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    listMaterials().then(setMaterials)
-  }, [])
+    listMaterials(subject.id).then(setMaterials)
+  }, [subject.id])
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -112,8 +201,13 @@ function TeacherDashboard() {
     setBusy(true)
     setUploadError(null)
     try {
-      await addMaterial(file, { title, description, uploadedBy: user?.email ?? '' })
-      setMaterials(await listMaterials())
+      await addMaterial(file, {
+        title,
+        description,
+        uploadedBy: uploaderEmail,
+        subjectId: subject.id,
+      })
+      setMaterials(await listMaterials(subject.id))
       setTitle('')
       setDescription('')
       setFile(null)
@@ -132,32 +226,18 @@ function TeacherDashboard() {
   async function handleDelete(material: MaterialMeta) {
     if (!confirm(`"${material.title}" 자료를 삭제할까요?`)) return
     await deleteMaterial(material.id)
-    setMaterials(await listMaterials())
+    setMaterials(await listMaterials(subject.id))
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-center gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">교사 페이지</h1>
-          <p className="text-sm text-ink-500">수업자료를 올리고 관리합니다.</p>
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-ink-700">{user?.email}</span>
-          <button
-            onClick={signOutTeacher}
-            className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
-          >
-            로그아웃
-          </button>
-        </div>
-      </header>
+      <SubjectSettings subject={subject} onChange={onSubjectChange} />
 
       <form
         onSubmit={handleSubmit}
         className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
       >
-        <h2 className="font-bold text-ink-900">자료 올리기</h2>
+        <h2 className="font-bold text-ink-900">{subject.name} 자료 올리기</h2>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
@@ -214,7 +294,9 @@ function TeacherDashboard() {
       </form>
 
       <section className="flex flex-col gap-3">
-        <h2 className="font-bold text-ink-900">올린 자료 ({materials.length})</h2>
+        <h2 className="font-bold text-ink-900">
+          {subject.name} 자료 ({materials.length})
+        </h2>
 
         {materials.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
@@ -243,6 +325,102 @@ function TeacherDashboard() {
         )}
       </section>
     </div>
+  )
+}
+
+function SubjectSettings({
+  subject,
+  onChange,
+}: {
+  subject: SubjectMeta
+  onChange: (patch: Partial<SubjectMeta>) => void
+}) {
+  const [pin, setPin] = useState(subject.pin)
+  const [notionUrl, setNotionUrl] = useState(subject.notionUrl ?? '')
+  const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  async function handleSave(event: React.FormEvent) {
+    event.preventDefault()
+    const trimmedPin = pin.trim()
+    if (!trimmedPin) {
+      setSaveError('핀번호는 비워둘 수 없습니다.')
+      return
+    }
+
+    setBusy(true)
+    setSaveError(null)
+    try {
+      const patch = { pin: trimmedPin, notionUrl: notionUrl.trim() }
+      await updateSubject(subject.id, patch)
+      onChange(patch)
+      setSavedAt(Date.now())
+    } catch (caught) {
+      console.error('과목 설정 저장 실패', caught)
+      setSaveError('저장하지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSave}
+      className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
+    >
+      <h2 className="font-bold text-ink-900">{subject.name} 설정</h2>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          핀번호
+          <input
+            value={pin}
+            onChange={(event) => {
+              setPin(event.target.value)
+              setSaveError(null)
+            }}
+            placeholder="예: 1234"
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          노션 링크 (선택)
+          <input
+            value={notionUrl}
+            onChange={(event) => {
+              setNotionUrl(event.target.value)
+              setSaveError(null)
+            }}
+            placeholder="https://www.notion.so/..."
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+          />
+        </label>
+      </div>
+
+      {saveError && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {saveError}
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={busy}
+          className="self-start rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? '저장 중…' : '설정 저장'}
+        </button>
+        {savedAt && <span className="text-sm text-ink-500">저장했습니다.</span>}
+      </div>
+
+      <p className="text-xs text-ink-500">
+        학생은 이 핀번호를 입력해야 {subject.name} 자료를 볼 수 있습니다. 다만 진짜 보안 장치는
+        아니므로, 정말 민감한 자료는 올리지 마세요.
+      </p>
+    </form>
   )
 }
 
