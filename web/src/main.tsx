@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
 import './index.css'
 import App from './App'
+import { AuthProvider } from './auth/AuthProvider'
 import Home from './pages/Home'
 import Materials from './pages/Materials'
 import Teacher from './pages/Teacher'
@@ -15,23 +16,25 @@ const PythonLab = lazy(() => import('./pages/PythonLab'))
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<App />}>
-          <Route index element={<Home />} />
-          <Route path="materials" element={<Materials />} />
-          <Route
-            path="python"
-            element={
-              <Suspense fallback={<p className="text-ink-500">Python 실습 화면을 여는 중…</p>}>
-                <PythonLab />
-              </Suspense>
-            }
-          />
-          <Route path="teacher" element={<Teacher />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<App />}>
+            <Route index element={<Home />} />
+            <Route path="materials" element={<Materials />} />
+            <Route
+              path="python"
+              element={
+                <Suspense fallback={<p className="text-ink-500">Python 실습 화면을 여는 중…</p>}>
+                  <PythonLab />
+                </Suspense>
+              }
+            />
+            <Route path="teacher" element={<Teacher />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   </StrictMode>,
 )

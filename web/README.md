@@ -45,12 +45,40 @@ Python은 **학생 브라우저 안에서** 돈다. Pyodide(WebAssembly로 컴�
 
 관련 파일: `src/python/pyodide.worker.ts`, `src/python/usePython.ts`, `src/python/examples.ts`
 
+## 교사 인증 (Firebase)
+
+Google 로그인에 성공했다고 교사가 되는 것이 아니다. Firestore `teachers` 컬렉션에
+해당 이메일 문서가 있어야 교사로 인정한다.
+
+```
+Google 로그인 → Firestore teachers/{이메일} 존재? → 교사 페이지 / 접근 거부
+```
+
+**핵심은 이 확인이 브라우저에서만 이뤄지지 않는다는 점이다.** `firestore.rules` 와
+`storage.rules` 가 구글 서버에서 같은 검사를 하므로, 프론트엔드 코드를 고쳐 화면을
+열어도 자료를 쓰거나 지울 수 없다. 브라우저 쪽 확인은 화면을 그리기 위한 것일 뿐이다.
+
+교사 추가/삭제는 Firebase 콘솔의 Firestore 에서 직접 한다 (규칙이 클라이언트 쓰기를 막는다).
+
+설정값은 `.env.local` 에 둔다 (`.env.example` 참고). 이 값들은 비밀이 아니며 빌드되면
+브라우저에 노출된다 — 실제 통제는 위의 보안 규칙이 담당한다.
+
+## 배포
+
+```bash
+npx firebase login      # 최초 1회, Google 계정 인증
+npm run build
+npx firebase deploy
+```
+
+`firebase.json` 에 SPA rewrite 규칙이 들어 있어 `/materials` 에서 새로고침해도 404 가 나지 않는다.
+
 ## 아직 없는 것 (다음 단계)
 
-1. **교사 인증** — Firebase Google 로그인 + 허용 계정 확인. 지금 `/teacher` 는 누구나 들어간다.
-2. **서버 저장** — 자료는 현재 브라우저 IndexedDB에만 있다. 다른 기기에서는 보이지 않는다.
-   전환할 때 손댈 곳은 `src/lib/materials.ts` 하나다. 화면 코드는 이 파일의 함수만 호출한다.
-3. **학생 식별** — 회원가입은 없지만, 나중에 과제·자동채점을 붙이려면 수업 참여 코드 같은
+1. **서버 저장** — 자료는 현재 브라우저 IndexedDB에만 있다. 교사가 올려도 학생 기기에는
+   보이지 않는다. Firestore + Storage 로 옮겨야 실제 수업에 쓸 수 있다.
+   손댈 곳은 `src/lib/materials.ts` 하나다 — 화면 코드는 이 파일의 함수만 호출한다.
+2. **학생 식별** — 회원가입은 없지만, 나중에 과제·자동채점을 붙이려면 수업 참여 코드 같은
    최소한의 식별이 필요하다.
 
 ## 참고

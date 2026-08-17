@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// 수업자료 파일 접근 규칙.
+// Storage 규칙에서도 Firestore 의 teachers 목록을 직접 조회할 수 있다.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    match /materials/{fileName} {
+      // 학생은 로그인이 없으므로 읽기는 열어둔다.
+      allow read: if true;
+
+      allow write: if request.auth != null
+        && request.auth.token.email_verified == true
+        && firestore.exists(
+             /databases/(default)/documents/teachers/$(request.auth.token.email)
+           )
+        && request.resource.size < 50 * 1024 * 1024;
+
+      allow delete: if request.auth != null
+        && request.auth.token.email_verified == true
+        && firestore.exists(
+             /databases/(default)/documents/teachers/$(request.auth.token.email)
+           );
+    }
+
+    // 그 밖의 경로는 전부 막는다.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

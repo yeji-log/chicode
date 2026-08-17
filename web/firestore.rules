@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// chicode 접근 규칙.
+//
+// 여기가 실제 방어선이다. 프론트엔드에서 버튼을 숨기는 것은 편의일 뿐이고,
+// 브라우저 코드를 아무리 고쳐도 이 규칙을 우회할 수 없다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Google 로그인에 성공했다고 교사가 되는 것이 아니다.
+    // teachers 컬렉션에 해당 이메일 문서가 있어야 한다.
+    function isTeacher() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/teachers/$(request.auth.token.email));
+    }
+
+    // 교사 목록: 로그인한 사람이 '자기 자신'의 등록 여부만 확인할 수 있다.
+    // 목록 전체 조회를 막아 교사 이메일이 새어나가지 않게 한다.
+    // 추가·삭제는 Firebase 콘솔에서만 한다.
+    match /teachers/{teacherEmail} {
+      allow get: if request.auth != null && teacherEmail == request.auth.token.email;
+      allow list, create, update, delete: if false;
+    }
+
+    // 수업자료: 학생은 로그인이 없으므로 읽기는 열어둔다. 쓰기는 교사만.
+    match /materials/{materialId} {
+      allow read: if true;
+      allow create, update, delete: if isTeacher();
+    }
+  }
+}
