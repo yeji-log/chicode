@@ -8,6 +8,7 @@ import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
 import Home from './pages/Home'
 import Materials from './pages/Materials'
+import SubjectMaterials from './pages/SubjectMaterials'
 import Practice from './pages/Practice'
 import Teacher from './pages/Teacher'
 import ComingSoon from './pages/ComingSoon'
@@ -27,6 +28,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/" element={<App />}>
             <Route index element={<Home />} />
             <Route path="materials" element={<Materials />} />
+            <Route path="materials/:subjectId" element={<SubjectMaterials />} />
             <Route path="practice" element={<Practice />} />
             <Route
               path="practice/python"

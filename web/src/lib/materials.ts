@@ -24,6 +24,7 @@ import {
   orderBy,
   query,
   setDoc,
+  where,
   writeBatch,
 } from 'firebase/firestore'
 
@@ -40,6 +41,8 @@ export interface MaterialMeta {
   chunkCount: number
   createdAt: number
   uploadedBy: string
+  /** 어느 과목(subjects/{id})에 속하는지. 과목별 핀 잠금의 기준이 된다. */
+  subjectId: string
 }
 
 export type MaterialKind = 'pdf' | 'image' | 'text' | 'archive' | 'other'
@@ -88,7 +91,23 @@ export function formatDate(timestamp: number): string {
   })
 }
 
-export async function listMaterials(): Promise<MaterialMeta[]> {
+/**
+ * subjectId 를 주면 그 과목 자료만 가져온다.
+ *
+ * `where` 와 `orderBy(다른 필드)` 를 함께 쓰면 Firestore 가 복합 색인을 요구하므로,
+ * 과목으로 걸러낸 뒤에는 정렬을 서버가 아니라 이 함수 안에서 직접 한다.
+ */
+export async function listMaterials(subjectId?: string): Promise<MaterialMeta[]> {
+  if (subjectId) {
+    const snapshot = await getDocs(
+      query(collection(db, MATERIALS), where('subjectId', '==', subjectId)),
+    )
+    const materials = snapshot.docs.map(
+      (entry) => ({ id: entry.id, ...entry.data() }) as MaterialMeta,
+    )
+    return materials.sort((a, b) => b.createdAt - a.createdAt)
+  }
+
   const snapshot = await getDocs(
     query(collection(db, MATERIALS), orderBy('createdAt', 'desc')),
   )
@@ -120,7 +139,7 @@ export async function getMaterialFile(id: string): Promise<Blob | null> {
 
 export async function addMaterial(
   file: File,
-  meta: { title?: string; description?: string; uploadedBy?: string } = {},
+  meta: { title?: string; description?: string; uploadedBy?: string; subjectId: string },
 ): Promise<MaterialMeta> {
   const ext = extensionOf(file.name)
 
@@ -150,6 +169,7 @@ export async function addMaterial(
     chunkCount: chunks.length,
     createdAt: Date.now(),
     uploadedBy: meta.uploadedBy ?? '',
+    subjectId: meta.subjectId,
   }
 
   // 조각을 먼저 올리고 메타데이터를 마지막에 쓴다. 도중에 실패해도 목록에는
