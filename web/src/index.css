@@ -46,3 +46,35 @@ body {
     transparent 55%
   );
 }
+
+/*
+ * 히어로 캐릭터 이미지.
+ *
+ * 원본 파일은 정사각 캔버스에 흰 배경 + 원형 일러스트라, 그대로 놓으면 페이지의
+ * 크림색 배경과 미묘하게 다른 흰색 사각 테두리가 비쳐 보여 "스티커를 붙인" 것처럼
+ * 보인다. 딱 떨어지는 원으로 오려내는 대신 가장자리를 서서히 투명하게 지우고
+ * (mask), 이미지의 따뜻한 톤을 반영한 흐린 빛무리를 뒤에 깔아 배경과 이어지게 한다.
+ */
+.hero-portrait-wrap {
+  position: relative;
+}
+
+.hero-portrait-glow {
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  background: radial-gradient(
+    circle at 48% 46%,
+    var(--color-cheese-200) 0%,
+    var(--color-cheese-100) 42%,
+    transparent 70%
+  );
+  filter: blur(48px);
+}
+
+.hero-portrait {
+  position: relative;
+  z-index: 1;
+  -webkit-mask-image: radial-gradient(circle at 50% 48%, black 56%, transparent 84%);
+  mask-image: radial-gradient(circle at 50% 48%, black 56%, transparent 84%);
+}

@@ -38,11 +38,14 @@ export default function Home() {
           </div>
         </div>
 
-        <img
-          src={asset("chicode.png")}
-          alt="노트북 앞에 앉은 CHICODE 치즈 캐릭터"
-          className="mx-auto w-full max-w-sm drop-shadow-xl"
-        />
+        <div className="hero-portrait-wrap mx-auto w-full max-w-sm">
+          <div className="hero-portrait-glow" aria-hidden="true" />
+          <img
+            src={asset("chicode.png")}
+            alt="노트북 앞에 앉은 CHICODE 치즈 캐릭터"
+            className="hero-portrait w-full"
+          />
+        </div>
       </section>
 
       <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
