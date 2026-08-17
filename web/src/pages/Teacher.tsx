@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthProvider'
+import { asset } from '../lib/asset'
 import { isFirebaseConfigured } from '../lib/firebase'
 import {
   type MaterialMeta,
@@ -39,13 +41,17 @@ export default function Teacher() {
   if (state === 'anonymous') {
     return (
       <Centered>
-        <img src="/chicode.png" alt="" className="size-20 rounded-full ring-2 ring-cheese-300" />
+        <img
+          src={asset('chicode.png')}
+          alt=""
+          className="size-20 rounded-full ring-2 ring-cheese-300"
+        />
         <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">교사 로그인</h1>
         <p className="max-w-sm text-sm text-ink-700">
           허용된 교사 계정만 들어올 수 있습니다. 학생은 로그인 없이{' '}
-          <a href="/materials" className="font-semibold text-cheese-600 underline">
+          <Link to="/materials" className="font-semibold text-cheese-600 underline">
             수업자료
-          </a>
+          </Link>
           와 Python 실습을 이용합니다.
         </p>
 

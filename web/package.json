@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && vite build --base=/chicode/ && cp dist/index.html dist/404.html",
     "lint": "oxlint",
     "preview": "vite preview",
     "sync:pyodide": "node scripts/sync-pyodide.mjs",

@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 
+import { asset } from '../lib/asset'
+
 export default function Home() {
   return (
     <div className="flex flex-col gap-12 py-4">
@@ -37,7 +39,7 @@ export default function Home() {
         </div>
 
         <img
-          src="/chicode.png"
+          src={asset("chicode.png")}
           alt="노트북 앞에 앉은 CHICODE 치즈 캐릭터"
           className="mx-auto w-full max-w-sm drop-shadow-xl"
         />
