@@ -77,7 +77,7 @@ export default function Home() {
           웹에서 바로 확인하고 학습해 보세요.
         </FeatureCard>
         <FeatureCard to="/practice" emoji="💻" title="실습">
-          Python부터 Arduino, Pico 2 W까지
+          Python부터 C언어, Pico 2 W까지
           <br />
           직접 코드를 작성하고 실행해 보세요.
         </FeatureCard>

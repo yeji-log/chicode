@@ -28,3 +28,5 @@ public/pyodide/
 
 # npm 캐시 경로는 컴퓨터마다 다르다
 .npmrc
+.vercel
+.env*

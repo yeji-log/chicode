@@ -10,3 +10,5 @@ CHICODE_브랜드_문서.docx
 .vscode/*
 !.vscode/extensions.json
 .idea
+.vercel
+.env*
