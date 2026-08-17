@@ -41,6 +41,9 @@ body {
   color: var(--color-ink-900);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  /* 히어로의 확대된 캐릭터가 오른쪽 여백 밖으로 의도적으로 살짝 번진다.
+     그 bleed 가 가로 스크롤바를 만들지 않도록 여기서 잘라낸다. */
+  overflow-x: hidden;
 }
 
 /* 종이 질감을 아주 옅게 — 브랜드 이미지의 따뜻한 책상 느낌 */
