@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { asset } from '../lib/asset'
@@ -47,8 +48,9 @@ export default function Home() {
           </h1>
 
           <p className="max-w-lg text-lg leading-relaxed text-ink-700">
-            수업자료를 찾아보고, 브라우저에서 바로 Python을 실행해 보세요. 설치할 것도,
-            가입할 것도 없습니다.
+            배우고, 직접 만들고, 새로운 것을 발견해 보세요.
+            <br />
+            수업자료부터 코딩 실습, 프로젝트까지 CHICODE에서 바로 시작할 수 있습니다.
           </p>
 
           <div className="flex flex-wrap gap-3 pt-1">
@@ -56,7 +58,7 @@ export default function Home() {
               to="/python"
               className="rounded-xl bg-cheese-400 px-5 py-3 font-bold text-ink-900 shadow-sm transition-colors hover:bg-cheese-300"
             >
-              Python 실습 시작하기
+              실습 시작하기
             </Link>
             <Link
               to="/materials"
@@ -69,23 +71,21 @@ export default function Home() {
       </section>
 
       <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        <FeatureCard
-          to="/materials"
-          emoji="📚"
-          title="수업자료"
-          body="선생님이 올린 PDF와 이미지를 웹에서 바로 열어보고 내려받습니다."
-        />
-        <FeatureCard
-          to="/python"
-          emoji="🐍"
-          title="Python 실습"
-          body="코드를 쓰고 실행 버튼만 누르면 됩니다. 결과가 옆 창에 바로 나옵니다."
-        />
-        <UpcomingCard
-          emoji="🔌"
-          title="Pico 2 W 시뮬레이터"
-          body="가상 보드로 LED와 버튼을 다루는 실습입니다. 다음 단계에서 준비합니다."
-        />
+        <FeatureCard to="/materials" emoji="📚" title="수업자료">
+          선생님이 준비한 수업자료를
+          <br />
+          웹에서 바로 확인하고 학습해 보세요.
+        </FeatureCard>
+        <FeatureCard to="/python" emoji="💻" title="실습">
+          Python부터 Arduino, Pico 2 W까지
+          <br />
+          직접 코드를 작성하고 실행해 보세요.
+        </FeatureCard>
+        <FeatureCard to="/projects" emoji="🚀" title="프로젝트">
+          배운 내용을 직접 활용해
+          <br />
+          나만의 작품과 프로젝트를 만들어 보세요.
+        </FeatureCard>
       </section>
     </div>
   )
@@ -95,12 +95,12 @@ function FeatureCard({
   to,
   emoji,
   title,
-  body,
+  children,
 }: {
   to: string
   emoji: string
   title: string
-  body: string
+  children: ReactNode
 }) {
   return (
     <Link
@@ -109,29 +109,10 @@ function FeatureCard({
     >
       <span className="text-3xl">{emoji}</span>
       <h2 className="text-lg font-bold text-ink-900">{title}</h2>
-      <p className="text-sm leading-relaxed text-ink-700">{body}</p>
+      <p className="text-sm leading-relaxed text-ink-700">{children}</p>
       <span className="mt-auto pt-3 text-sm font-semibold text-cheese-600 opacity-0 transition-opacity group-hover:opacity-100">
         들어가기 →
       </span>
     </Link>
-  )
-}
-
-function UpcomingCard({
-  emoji,
-  title,
-  body,
-}: {
-  emoji: string
-  title: string
-  body: string
-}) {
-  return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-cream-deep p-6">
-      <span className="text-3xl opacity-50 grayscale">{emoji}</span>
-      <h2 className="text-lg font-bold text-ink-500">{title}</h2>
-      <p className="text-sm leading-relaxed text-ink-500">{body}</p>
-      <span className="mt-auto pt-3 text-sm font-semibold text-ink-500">준비 중</span>
-    </div>
   )
 }

@@ -9,6 +9,7 @@ import { AuthProvider } from './auth/AuthProvider'
 import Home from './pages/Home'
 import Materials from './pages/Materials'
 import Teacher from './pages/Teacher'
+import ComingSoon from './pages/ComingSoon'
 import NotFound from './pages/NotFound'
 
 // Monaco 에디터는 무겁다(2MB 남짓). 홈과 수업자료 화면까지 느려지지 않도록
@@ -30,6 +31,26 @@ createRoot(document.getElementById('root')!).render(
                 <Suspense fallback={<p className="text-ink-500">Python 실습 화면을 여는 중…</p>}>
                   <PythonLab />
                 </Suspense>
+              }
+            />
+            <Route
+              path="projects"
+              element={
+                <ComingSoon
+                  emoji="🚀"
+                  title="프로젝트"
+                  description="배운 내용을 활용해 나만의 작품과 프로젝트를 만들어보는 공간입니다. 곧 열립니다!"
+                />
+              }
+            />
+            <Route
+              path="lab"
+              element={
+                <ComingSoon
+                  emoji="🧪"
+                  title="Lab"
+                  description="동아리 활동을 위한 공간입니다. 조금만 기다려 주세요!"
+                />
               }
             />
             <Route path="teacher" element={<Teacher />} />
