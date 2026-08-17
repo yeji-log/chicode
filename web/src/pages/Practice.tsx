@@ -14,11 +14,16 @@ export default function Practice() {
         <p className="text-sm text-ink-500">무엇을 실습해 볼까요?</p>
       </header>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <FeatureCard to="/practice/python" emoji="🐍" title="Python">
           웹 브라우저에서 바로 Python 코드를
           <br />
           작성하고 실행 결과를 확인해 보세요.
+        </FeatureCard>
+        <FeatureCard to="/practice/c" emoji="⚙️" title="C언어">
+          컴파일부터 실행까지 브라우저에서.
+          <br />
+          진짜 C 컴파일러가 그대로 돌아갑니다.
         </FeatureCard>
         <FeatureCard to="/practice/pico" emoji="🔌" title="Pico 2 W">
           가상 보드로 GPIO, LED, Button 을

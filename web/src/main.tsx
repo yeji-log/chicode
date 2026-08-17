@@ -16,6 +16,7 @@ import NotFound from './pages/NotFound'
 // Monaco 에디터는 무겁다(2MB 남짓). 홈과 수업자료 화면까지 느려지지 않도록
 // Python 실습에 들어갈 때만 내려받는다.
 const PythonLab = lazy(() => import('./pages/PythonLab'))
+const CLab = lazy(() => import('./pages/CLab'))
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -32,6 +33,14 @@ createRoot(document.getElementById('root')!).render(
               element={
                 <Suspense fallback={<p className="text-ink-500">Python 실습 화면을 여는 중…</p>}>
                   <PythonLab />
+                </Suspense>
+              }
+            />
+            <Route
+              path="practice/c"
+              element={
+                <Suspense fallback={<p className="text-ink-500">C언어 실습 화면을 여는 중…</p>}>
+                  <CLab />
                 </Suspense>
               }
             />

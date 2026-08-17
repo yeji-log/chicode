@@ -10,7 +10,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "sync:pyodide": "node scripts/sync-pyodide.mjs",
-    "postinstall": "node scripts/sync-pyodide.mjs"
+    "postinstall": "node scripts/sync-pyodide.mjs && node scripts/sync-clang.mjs",
+    "sync:clang": "node scripts/sync-clang.mjs"
   },
   "dependencies": {
     "@fontsource/jua": "^5.3.0",

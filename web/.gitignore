@@ -30,3 +30,6 @@ public/pyodide/
 .npmrc
 .vercel
 .env*
+
+# clang 툴체인 — npm install 시 scripts/sync-clang.mjs 가 다시 받는다 (약 51MB)
+public/clang/
