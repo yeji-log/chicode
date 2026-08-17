@@ -65,13 +65,21 @@ Google 로그인 → Firestore teachers/{이메일} 존재? → 교사 페이지
 
 ## 배포
 
+호스팅은 **GitHub Pages 한 곳**만 쓴다. `main` 에 push 하면 GitHub Actions 가 빌드해서
+<https://yeji-log.github.io/chicode/> 에 올린다 (`.github/workflows/deploy-pages.yml`).
+
+Firebase 는 인증·데이터·파일 저장만 담당한다. 호스팅은 쓰지 않으므로 `firebase.json` 에
+hosting 항목을 두지 않았다 — 실수로 `firebase deploy` 를 쳐서 두 번째 사이트가 생기는 것을 막는다.
+
+보안 규칙을 고쳤을 때만 이렇게 반영한다:
+
 ```bash
 npx firebase login      # 최초 1회, Google 계정 인증
-npm run build
-npx firebase deploy
+npx firebase deploy --only firestore:rules,storage
 ```
 
-`firebase.json` 에 SPA rewrite 규칙이 들어 있어 `/materials` 에서 새로고침해도 404 가 나지 않는다.
+Pages 는 `/chicode/` 하위 경로라 `npm run build:pages` 로 빌드한다 (base 경로 + SPA 404 폴백).
+로컬 확인이나 다른 호스팅에는 `npm run build` 를 쓴다.
 
 ## 아직 없는 것 (다음 단계)
 
