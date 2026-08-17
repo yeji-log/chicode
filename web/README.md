@@ -114,7 +114,11 @@ Blaze 로 올려 Storage 를 쓰게 되면 `src/lib/materials.ts` 의 함수 본
 
 ## 참고
 
-- PDF는 브라우저 내장 뷰어(`<iframe>`)로 연다. 데스크톱 브라우저에서는 문제없지만 일부
-  모바일 브라우저는 iframe 안에서 PDF를 열지 못한다. 모든 환경에서 보장하려면 PDF.js가 필요하다.
+- PDF는 PDF.js 로 직접 캔버스에 그린다 (`src/components/PdfViewer.tsx`). 브라우저 내장 뷰어에
+  맡겼더니 blob 주소로 만든 PDF 를 렌더링하지 않아 화면이 비어버렸다. 라이브러리가 1MB 를
+  넘으므로 PDF 를 실제로 열 때만 내려받는다.
+- pdf.js 6 은 `render()` 에 `canvas` 가 필수다. 예전 방식대로 `canvasContext` 만 넘기면
+  오류 없이 렌더가 끝나지 않는다. 문서 정리도 `PDFDocumentProxy` 가 아니라 로딩 작업의
+  `destroy()` 로 한다.
 - `.npmrc` 는 npm 캐시 경로를 지정한다 (`~/.npm` 안에 root 소유 폴더가 섞여 설치가 실패했다).
   `sudo chown -R $(id -u):$(id -g) ~/.npm` 으로 원인을 고치면 지워도 된다.

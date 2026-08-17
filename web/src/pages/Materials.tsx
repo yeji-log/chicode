@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import PdfViewer from '../components/PdfViewer'
 import {
   type MaterialMeta,
   formatDate,
@@ -93,20 +94,32 @@ function iconFor(material: MaterialMeta): string {
 }
 
 function Viewer({ material, onClose }: { material: MaterialMeta; onClose: () => void }) {
+  const [file, setFile] = useState<Blob | null>(null)
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const kind = kindOf(material)
 
   useEffect(() => {
     let objectUrl: string | null = null
     let cancelled = false
 
-    getMaterialFile(material.id).then(async (blob) => {
-      if (!blob || cancelled) return
-      if (kind === 'text') setText(await blob.text())
-      objectUrl = URL.createObjectURL(blob)
-      setUrl(objectUrl)
-    })
+    getMaterialFile(material.id)
+      .then(async (blob) => {
+        if (!blob || cancelled) {
+          if (!blob && !cancelled) setLoadError('자료를 찾을 수 없습니다.')
+          return
+        }
+        if (kind === 'text') setText(await blob.text())
+        objectUrl = URL.createObjectURL(blob)
+        setFile(blob)
+        setUrl(objectUrl)
+      })
+      .catch((caught) => {
+        if (cancelled) return
+        console.error('자료 불러오기 실패', caught)
+        setLoadError('자료를 불러오지 못했습니다. 잠시 후 다시 열어주세요.')
+      })
 
     return () => {
       cancelled = true
@@ -156,11 +169,15 @@ function Viewer({ material, onClose }: { material: MaterialMeta; onClose: () => 
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto bg-cream/40">
-          {!url ? (
+        <div
+          className={`flex-1 bg-cream/40 ${kind === 'pdf' ? 'overflow-hidden' : 'overflow-auto'}`}
+        >
+          {loadError ? (
+            <p className="p-8 text-center text-ink-500">{loadError}</p>
+          ) : !url || !file ? (
             <p className="p-8 text-center text-ink-500">불러오는 중…</p>
           ) : kind === 'pdf' ? (
-            <iframe src={url} title={material.title} className="h-full w-full" />
+            <PdfViewer file={file} filename={material.filename} />
           ) : kind === 'image' ? (
             <img src={url} alt={material.title} className="mx-auto max-h-full object-contain" />
           ) : kind === 'text' ? (
