@@ -112,7 +112,7 @@ function TeacherDashboard() {
     setBusy(true)
     setUploadError(null)
     try {
-      await addMaterial(file, { title, description })
+      await addMaterial(file, { title, description, uploadedBy: user?.email ?? '' })
       setMaterials(await listMaterials())
       setTitle('')
       setDescription('')
@@ -152,12 +152,6 @@ function TeacherDashboard() {
           </button>
         </div>
       </header>
-
-      {/* 자료 저장 위치는 아직 옮기지 않았다. 사실대로 적어 둔다. */}
-      <p className="rounded-xl border border-cheese-300 bg-cheese-50 px-4 py-3 text-sm text-ink-700">
-        <strong className="font-bold">자료는 아직 이 브라우저에만 저장됩니다.</strong> 학생 기기에는
-        보이지 않습니다. Firebase Storage 로 옮기는 작업이 남아 있습니다.
-      </p>
 
       <form
         onSubmit={handleSubmit}
@@ -200,7 +194,7 @@ function TeacherDashboard() {
             className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 file:mr-3 file:rounded-md file:border-0 file:bg-cheese-200 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-ink-900"
           />
           <span className="text-xs font-normal text-ink-500">
-            PDF, 이미지, 텍스트, ZIP · 최대 50MB
+            PDF, 이미지, 텍스트, ZIP · 최대 10MB
           </span>
         </label>
 

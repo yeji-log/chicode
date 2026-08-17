@@ -51,7 +51,7 @@ MVP는 **수업자료 + Python 실습**까지입니다.
 - [x] Python 실습 (에디터·실행·중지·입력·오류 표시)
 - [x] 수업자료 열람·다운로드
 - [x] 교사 Google 로그인 + 허용 계정 확인
-- [ ] 자료를 Firebase Storage로 이전 *(현재는 브라우저에만 저장됩니다)*
+- [x] 수업자료를 Firestore에 저장 — 교사가 올리면 학생 기기에서 바로 보입니다
 - [ ] Python 과제 / 자동 채점
 - [ ] Raspberry Pi Pico 2 W 시뮬레이터
 

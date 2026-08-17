@@ -27,6 +27,13 @@ service cloud.firestore {
     match /materials/{materialId} {
       allow read: if true;
       allow create, update, delete: if isTeacher();
+
+      // 파일 내용 조각. 규칙은 하위 컬렉션으로 자동 상속되지 않으므로 따로 적어야 한다.
+      // 여기를 빠뜨리면 파일 본문이 무방비로 열린다.
+      match /chunks/{chunkIndex} {
+        allow read: if true;
+        allow create, update, delete: if isTeacher();
+      }
     }
   }
 }

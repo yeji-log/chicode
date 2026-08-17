@@ -20,6 +20,7 @@ npm run dev
 | `npm run dev` | 개발 서버 |
 | `npm run build` | 프로덕션 빌드 (`dist/`) |
 | `npm run lint` | oxlint |
+| `npm run build:pages` | GitHub Pages 용 빌드 (base `/chicode/`) |
 | `npm run sync:pyodide` | Pyodide 런타임 재복사 |
 
 ## 화면
@@ -29,7 +30,7 @@ npm run dev
 | `/` | 브랜드 메인 — 각 탭으로 이동 |
 | `/materials` | 수업자료 목록·뷰어·다운로드 (학생) |
 | `/python` | Python 에디터 + 실행 결과 |
-| `/teacher` | 자료 업로드·삭제 (**아직 인증 없음**) |
+| `/teacher` | 자료 업로드·삭제 (Google 로그인 + 허용 계정 확인) |
 
 ## Python 실행 방식
 
@@ -54,9 +55,9 @@ Google 로그인에 성공했다고 교사가 되는 것이 아니다. Firestore
 Google 로그인 → Firestore teachers/{이메일} 존재? → 교사 페이지 / 접근 거부
 ```
 
-**핵심은 이 확인이 브라우저에서만 이뤄지지 않는다는 점이다.** `firestore.rules` 와
-`storage.rules` 가 구글 서버에서 같은 검사를 하므로, 프론트엔드 코드를 고쳐 화면을
-열어도 자료를 쓰거나 지울 수 없다. 브라우저 쪽 확인은 화면을 그리기 위한 것일 뿐이다.
+**핵심은 이 확인이 브라우저에서만 이뤄지지 않는다는 점이다.** `firestore.rules` 가
+구글 서버에서 같은 검사를 하므로, 프론트엔드 코드를 고쳐 화면을 열어도 자료를 쓰거나
+지울 수 없다. 브라우저 쪽 확인은 화면을 그리기 위한 것일 뿐이다.
 
 교사 추가/삭제는 Firebase 콘솔의 Firestore 에서 직접 한다 (규칙이 클라이언트 쓰기를 막는다).
 
@@ -75,18 +76,40 @@ hosting 항목을 두지 않았다 — 실수로 `firebase deploy` 를 쳐서 �
 
 ```bash
 npx firebase login      # 최초 1회, Google 계정 인증
-npx firebase deploy --only firestore:rules,storage
+npx firebase deploy --only firestore:rules
 ```
 
 Pages 는 `/chicode/` 하위 경로라 `npm run build:pages` 로 빌드한다 (base 경로 + SPA 404 폴백).
 로컬 확인이나 다른 호스팅에는 `npm run build` 를 쓴다.
 
+## 수업자료가 저장되는 곳
+
+파일은 원래 Cloud Storage 가 맡을 일이지만, Firebase 는 새 프로젝트에서 Storage 를 쓰려면
+유료(Blaze) 플랜을 요구한다. 무료(Spark)로 운영하기 위해 **Firestore 에 파일을 나눠 담는다.**
+
+```
+materials/{id}              메타데이터 (제목·파일명·크기·조각 수)
+materials/{id}/chunks/{n}   파일 내용 (base64, 원본 512KB 단위)
+```
+
+Firestore 는 문서 하나가 1MiB 를 넘을 수 없어 조각을 낸다. base64 는 약 1.34배로 불어나므로
+512KB → 약 683KB 가 되어 제한 안에 들어간다.
+
+**한계를 알고 쓸 것:**
+
+- 파일 하나당 최대 10MB
+- 무료 플랜의 Firestore 총 용량은 1GiB (PDF 200개 남짓)
+- 데이터베이스를 파일 저장소로 쓰는 것이므로 정공법은 아니다
+
+Blaze 로 올려 Storage 를 쓰게 되면 `src/lib/materials.ts` 의 함수 본문만 바꾸면 된다.
+화면 코드는 이 파일의 함수만 호출하므로 그대로 둔다.
+
+> 하위 컬렉션은 보안 규칙을 상속하지 않는다. `chunks` 에 대한 규칙을 따로 적지 않으면
+> 파일 본문이 무방비로 열린다 — `firestore.rules` 참고.
+
 ## 아직 없는 것 (다음 단계)
 
-1. **서버 저장** — 자료는 현재 브라우저 IndexedDB에만 있다. 교사가 올려도 학생 기기에는
-   보이지 않는다. Firestore + Storage 로 옮겨야 실제 수업에 쓸 수 있다.
-   손댈 곳은 `src/lib/materials.ts` 하나다 — 화면 코드는 이 파일의 함수만 호출한다.
-2. **학생 식별** — 회원가입은 없지만, 나중에 과제·자동채점을 붙이려면 수업 참여 코드 같은
+1. **학생 식별** — 회원가입은 없지만, 나중에 과제·자동채점을 붙이려면 수업 참여 코드 같은
    최소한의 식별이 필요하다.
 
 ## 참고

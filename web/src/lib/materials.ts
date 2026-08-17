@@ -1,33 +1,64 @@
 /**
  * 수업자료 데이터 계층.
  *
- * 화면(components/pages)은 이 파일의 함수만 호출한다. 나중에 FastAPI + Firebase
- * Storage 로 옮길 때 이 파일의 본문만 fetch 호출로 바꾸면 화면은 그대로 둔 채
- * 서버 전환이 끝난다. 이 경계를 지키는 것이 이후 단계의 작업량을 결정한다.
+ * 화면(pages/*)은 이 파일의 함수만 호출한다. 저장 위치를 바꿀 때 손댈 곳은 여기뿐이다.
+ *
+ * ── 왜 파일을 Firestore 에 넣는가 ──
+ * 파일은 원래 Cloud Storage 가 맡을 일이지만, Firebase 는 새 프로젝트에서 Storage 를
+ * 쓰려면 유료(Blaze) 플랜을 요구한다. 무료(Spark)로 운영하기 위해 Firestore 를 쓴다.
+ *
+ * Firestore 는 문서 하나가 1MiB 를 넘을 수 없으므로 파일을 조각으로 나눠 저장한다.
+ *
+ *   materials/{id}              ← 제목·파일명·크기 같은 메타데이터
+ *   materials/{id}/chunks/{n}   ← 파일 내용 (base64 조각)
+ *
+ * 나중에 Blaze 로 올려 Storage 를 쓰게 되면 이 파일의 함수 본문만 바꾸면 된다.
  */
 
-import { STORE_MATERIALS, dbDelete, dbGet, dbGetAll, dbPut } from './db'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  writeBatch,
+} from 'firebase/firestore'
 
-export interface Material {
+import { db } from './firebase'
+
+export interface MaterialMeta {
   id: string
   title: string
   description: string
   filename: string
   mimeType: string
   size: number
+  /** 파일을 몇 조각으로 나눠 저장했는지 */
+  chunkCount: number
   createdAt: number
-  /** MVP 한정: 파일 본체를 브라우저에 함께 저장한다. 서버 전환 시 storagePath 로 대체된다. */
-  blob: Blob
+  uploadedBy: string
 }
-
-/** 목록/상세 화면에 넘기는 형태 — 파일 본체는 필요할 때만 따로 읽는다. */
-export type MaterialMeta = Omit<Material, 'blob'>
 
 export type MaterialKind = 'pdf' | 'image' | 'text' | 'archive' | 'other'
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+/** 무료 플랜의 Firestore 총 용량은 1GiB 다. 한 파일이 이를 잠식하지 않도록 묶어둔다. */
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+
+/**
+ * 조각 하나에 담을 원본 바이트 수.
+ * base64 로 바꾸면 약 1.34배로 불어나므로 512KB → 약 683KB 가 되어 1MiB 제한 안에 들어간다.
+ */
+const CHUNK_BYTES = 512 * 1024
 
 const ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'txt', 'md', 'py', 'zip']
+
+const MATERIALS = 'materials'
+const CHUNKS = 'chunks'
+
+export class MaterialValidationError extends Error {}
 
 export function extensionOf(filename: string): string {
   const dot = filename.lastIndexOf('.')
@@ -58,27 +89,43 @@ export function formatDate(timestamp: number): string {
 }
 
 export async function listMaterials(): Promise<MaterialMeta[]> {
-  const rows = await dbGetAll<Material>(STORE_MATERIALS)
-  return rows
-    .map(({ blob: _blob, ...meta }) => meta)
-    .sort((a, b) => b.createdAt - a.createdAt)
+  const snapshot = await getDocs(
+    query(collection(db, MATERIALS), orderBy('createdAt', 'desc')),
+  )
+  return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as MaterialMeta)
 }
 
+/**
+ * 파일 내용을 조각째로 읽어 하나의 Blob 으로 되돌린다.
+ * 조각은 순서대로 필요하므로 병렬로 받아 인덱스 순으로 붙인다.
+ */
 export async function getMaterialFile(id: string): Promise<Blob | null> {
-  const row = await dbGet<Material>(STORE_MATERIALS, id)
-  return row?.blob ?? null
-}
+  const metaSnapshot = await getDoc(doc(db, MATERIALS, id))
+  if (!metaSnapshot.exists()) return null
 
-export class MaterialValidationError extends Error {}
+  const meta = metaSnapshot.data() as MaterialMeta
+  const chunkSnapshot = await getDocs(collection(db, MATERIALS, id, CHUNKS))
+
+  const parts: Uint8Array[] = new Array(meta.chunkCount)
+  for (const entry of chunkSnapshot.docs) {
+    parts[Number(entry.id)] = base64ToBytes(entry.data().data as string)
+  }
+
+  if (parts.some((part) => part === undefined)) {
+    throw new Error('자료 일부를 불러오지 못했습니다. 다시 시도해 주세요.')
+  }
+
+  return new Blob(parts as BlobPart[], { type: meta.mimeType })
+}
 
 export async function addMaterial(
   file: File,
-  meta: { title?: string; description?: string } = {},
+  meta: { title?: string; description?: string; uploadedBy?: string } = {},
 ): Promise<MaterialMeta> {
   const ext = extensionOf(file.name)
 
-  // 화면에서 막는 것과 별개로 저장 직전에 한 번 더 검사한다.
-  // 서버를 붙이면 같은 검사를 백엔드에도 두어야 한다 — 이쪽 검사는 편의용일 뿐이다.
+  // 화면에서 막는 것과 별개로 저장 직전에 한 번 더 확인한다.
+  // 진짜 방어선은 firestore.rules 다 — 이 검사는 사용자에게 이유를 알려주기 위한 것이다.
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
     throw new MaterialValidationError(
       `지원하지 않는 형식입니다 (.${ext || '확장자 없음'}). 허용: ${ALLOWED_EXTENSIONS.join(', ')}`,
@@ -90,23 +137,69 @@ export async function addMaterial(
     )
   }
 
-  const material: Material = {
-    id: crypto.randomUUID(),
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const chunks = splitIntoBase64Chunks(bytes, CHUNK_BYTES)
+
+  const id = crypto.randomUUID()
+  const material: Omit<MaterialMeta, 'id'> = {
     title: meta.title?.trim() || file.name.replace(/\.[^.]+$/, ''),
     description: meta.description?.trim() ?? '',
     filename: file.name,
     mimeType: file.type || 'application/octet-stream',
     size: file.size,
+    chunkCount: chunks.length,
     createdAt: Date.now(),
-    blob: file,
+    uploadedBy: meta.uploadedBy ?? '',
   }
 
-  await dbPut(STORE_MATERIALS, material)
+  // 조각을 먼저 올리고 메타데이터를 마지막에 쓴다. 도중에 실패해도 목록에는
+  // 나타나지 않으므로 학생이 반쪽짜리 자료를 여는 일이 없다.
+  const batch = writeBatch(db)
+  chunks.forEach((data, index) => {
+    batch.set(doc(db, MATERIALS, id, CHUNKS, String(index)), { data })
+  })
+  await batch.commit()
 
-  const { blob: _blob, ...result } = material
-  return result
+  await setDoc(doc(db, MATERIALS, id), material)
+
+  return { id, ...material }
 }
 
 export async function deleteMaterial(id: string): Promise<void> {
-  await dbDelete(STORE_MATERIALS, id)
+  // 메타데이터를 먼저 지운다. 조각 삭제가 중간에 끊겨도 목록에서는 사라진 상태가 된다.
+  await deleteDoc(doc(db, MATERIALS, id))
+
+  const chunkSnapshot = await getDocs(collection(db, MATERIALS, id, CHUNKS))
+  const batch = writeBatch(db)
+  chunkSnapshot.docs.forEach((entry) => batch.delete(entry.ref))
+  await batch.commit()
+}
+
+/** 바이트 배열을 base64 문자열 조각들로 나눈다. */
+function splitIntoBase64Chunks(bytes: Uint8Array, chunkBytes: number): string[] {
+  const chunks: string[] = []
+  for (let offset = 0; offset < bytes.length; offset += chunkBytes) {
+    chunks.push(bytesToBase64(bytes.subarray(offset, offset + chunkBytes)))
+  }
+  return chunks.length > 0 ? chunks : ['']
+}
+
+/**
+ * btoa 는 문자열을 받으므로 바이트를 먼저 문자열로 만들어야 한다.
+ * String.fromCharCode 에 배열을 통째로 넘기면 인자 수 한계에 걸리므로 잘라서 넘긴다.
+ */
+function bytesToBase64(bytes: Uint8Array): string {
+  const BLOCK = 8192
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += BLOCK) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + BLOCK))
+  }
+  return btoa(binary)
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
 }
