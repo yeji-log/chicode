@@ -17,14 +17,17 @@ Firebase Google 로그인 기반 교사 인증. 학생은 회원가입 없이 �
 - `chicode_개발_전략_및_단계별_계획.md` — 최초 기획 문서. **많이 낡았다** —
   Pico 2 W를 MVP에 넣었지만 실제로는 뒤로 미뤘고, C언어 실습은 여기 아예 없다.
   전체 방향성 참고용으로만 보고, 세부 사항은 이 문서와 커밋 로그를 믿을 것.
-- `수업자료_과목별_핀잠금_구현_계획.md` — **다음에 할 일**. 아래 "다음 계획" 참고.
+- `수업자료_과목별_핀잠금_구현_계획.md` — 아래 "과목별 탭 + 핀번호 잠금" 기능의 설계
+  문서. **이미 구현되어 배포됨** (`main`, 커밋 `63c3f07`). 문서와 실제 코드가 다를 수
+  있으니 트레이드오프(가벼운 잠금)의 "왜"만 여기서 확인하고, 세부는 코드를 믿을 것.
 
 ## 지금까지 만든 것 (동작 확인됨)
 
 | 기능 | 위치 | 비고 |
 |---|---|---|
 | 홈 화면 | `/` | 히어로 배경(hero-desk.webp, 알파 페이드), Jua 폰트 |
-| 수업자료 | `/materials` | Firestore에 파일을 조각내어 저장(무료 플랜, Storage 안 씀). PDF는 PDF.js로 직접 렌더링 |
+| 수업자료 — 과목 선택 | `/materials` | 과목 카드(정보 / 인공지능 기초) 목록. `web/src/lib/subjects.ts` |
+| 수업자료 — 과목별 자료 | `/materials/:subjectId` | 핀번호 입력 후 열람. `web/src/pages/SubjectMaterials.tsx`. 아래 "과목별 핀잠금" 참고 |
 | 실습 선택 | `/practice` | Python / C언어 / Pico(준비중) 카드 |
 | Python 실습 | `/practice/python` | Pyodide(WASM CPython), Web Worker, 무한루프 중지 가능 |
 | C 실습 | `/practice/c` | **진짜 clang을 브라우저에서 실행**. 아래 "C 실습 구조" 참고 |
@@ -91,21 +94,29 @@ Firebase 승인 도메인은 Vercel 쪽만 등록되어 있다 (GitHub Pages는 
 - 버전 고정 주의: numpy/pandas/matplotlib wheel은 현재 Pyodide 버전
   (`web/node_modules/pyodide` package.json 확인)에 정확히 맞춰 받아야 한다.
 
-## 다음 계획: 수업자료 과목별 탭 + 핀번호 잠금
+## 수업자료 과목별 탭 + 핀번호 잠금 (완료)
 
-`수업자료_과목별_핀잠금_구현_계획.md`에 상세 설계 있음. 요약:
+`수업자료_과목별_핀잠금_구현_계획.md`에 설계, `feature/materials-subject-pin-lock`
+브랜치에서 구현되어 `main`에 merge·push 완료(`63c3f07`). 다른 세션이 작업하는 동안
+이쪽 세션은 대기했다 — 같은 로컬 저장소를 동시에 건드리지 않기 위해서였다.
 
-- `/materials`를 과목 선택 화면으로 바꾸고 (정보 / 인공지능 기초 2개로 시작),
-  각 과목은 핀번호로 잠근다.
-- **의도적으로 가벼운 잠금이다.** Firestore `read: true`는 유지 —
-  개발자도구로 핀 값 자체도 볼 수 있는 걸 알고 받아들인 트레이드오프.
-  "진짜" 서버 검증이 필요해지면 Blaze 유료 플랜 + Cloud Function이 필요하다는
-  것도 문서에 명시되어 있다. **이 트레이드오프를 다음 세션이 몰래 "강화"하려고
-  하지 말 것** — 사용자가 의도적으로 정한 범위다.
-- 신규 `subjects/{subjectId}` 컬렉션, `materials`에 `subjectId` 필드 추가,
-  `sessionStorage`로 잠금 해제 상태 유지(브라우저 닫으면 초기화 — 공용 PC 고려).
-- 아직 코드 작업 시작 전. 이 커밋(`4c3c884`)은 **로컬에만 있고 origin에
-  push 안 됨** — 다음 세션 시작할 때 push 여부부터 확인할 것.
+- `/materials` = 과목 선택(`Materials.tsx`), `/materials/:subjectId` = 핀 입력 +
+  자료 목록(`SubjectMaterials.tsx`, 신규). 과목 데이터는 `lib/subjects.ts`.
+- `materials`에 `subjectId` 필드 추가, `listMaterials(subjectId?)`로 필터 지원
+  (`where` 절 + 클라이언트 정렬 — Firestore 복합 색인을 피하려고 정렬은 코드에서 함).
+- 교사 페이지(`Teacher.tsx`)에 과목 탭 추가 — 과목별 업로드/목록 + 과목 설정
+  (이름·핀·노션 링크 수정).
+- `firestore.rules`에 `subjects/{subjectId}` 규칙 추가 (`read: true`, 쓰기는 `isTeacher()`).
+- **의도적으로 가벼운 잠금이다.** Firestore `read: true`는 유지 — 개발자도구로
+  핀 값 자체도 볼 수 있는 걸 알고 받아들인 트레이드오프. "진짜" 서버 검증이 필요해지면
+  Blaze 유료 플랜 + Cloud Function이 필요하다는 것도 계획 문서에 명시되어 있다.
+  **이 트레이드오프를 다음 세션이 몰래 "강화"하려고 하지 말 것** — 사용자가
+  의도적으로 정한 범위다.
+- `subjects/information`, `subjects/ai-basics` 문서는 Firebase 콘솔에서 수동 생성해야
+  한다(계획 문서 9절). 아직 안 했다면 교사 페이지에 "등록된 과목이 없습니다" 안내가 뜬다.
+- typecheck·build 는 확인했지만, 이 세션은 브라우저로 직접 눌러보며 검증하지는
+  못했다(다른 세션의 작업물이라 손대지 않았음) — 다음 세션이 실제 핀 입력 플로우를
+  한 번 확인해두면 좋다.
 
 ## 작업 스타일 (중요 — 이 톤을 유지할 것)
 
