@@ -5,13 +5,30 @@ import { asset } from '../lib/asset'
 export default function Home() {
   return (
     <div className="flex flex-col gap-12 py-4">
-      <section className="grid items-center gap-10 md:grid-cols-[1.1fr_1fr]">
-        <div className="flex flex-col items-start gap-5">
+      <section className="-mx-5 overflow-hidden sm:relative sm:mx-0 sm:rounded-3xl">
+        {/*
+          hero-desk.webp 는 왼쪽이 완전 투명으로 서서히 사라지도록 미리 만들어진
+          그림이다. 우리가 CSS 로 마스크를 흉내 내는 대신 그림 자체의 알파 채널이
+          배경과 이어 붙이는 일을 다 해준다.
+
+          이미지 비율(3:2)과 정확히 같은 aspect-[3/2] 를 모바일 기본값으로 두면
+          잘리는 부분 없이 그림 전체가 그대로 줄어들어 보인다 — 좁은 화면에서 글과
+          겹치지 않도록 그림을 위, 글을 아래로 쌓는 편이 오려서 겹치는 것보다 낫다.
+          sm 이상에서만 절대 배치로 바꿔 글 뒤에 넓게 깔고 오른쪽을 기준으로 자른다.
+        */}
+        <img
+          src={asset('hero-desk.webp')}
+          alt=""
+          aria-hidden="true"
+          className="aspect-[3/2] w-full object-cover object-right sm:absolute sm:inset-0 sm:-z-10 sm:aspect-auto sm:h-full"
+        />
+
+        <div className="flex max-w-xl flex-col items-start gap-5 px-5 py-8 sm:min-h-[480px] sm:justify-center sm:px-8 sm:py-14">
           <span className="rounded-full bg-cheese-100 px-3 py-1 text-sm font-semibold text-cheese-600">
             Learn · Teach · Grow
           </span>
 
-          <h1 className="text-4xl leading-tight font-extrabold tracking-tight text-ink-900 sm:text-5xl">
+          <h1 className="font-display text-4xl leading-tight tracking-tight text-ink-900 sm:text-5xl">
             치즈처럼 즐겁게,
             <br />
             코드처럼 단단하게.
@@ -36,15 +53,6 @@ export default function Home() {
               수업자료 보기
             </Link>
           </div>
-        </div>
-
-        <div className="hero-portrait-wrap mx-auto w-full max-w-sm">
-          <div className="hero-portrait-glow" aria-hidden="true" />
-          <img
-            src={asset("chicode.png")}
-            alt="노트북 앞에 앉은 CHICODE 치즈 캐릭터"
-            className="hero-portrait w-full"
-          />
         </div>
       </section>
 
