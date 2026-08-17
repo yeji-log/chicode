@@ -25,7 +25,7 @@ export default function App() {
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-6 px-5">
           <NavLink to="/" className="flex shrink-0 items-center gap-2.5">
             <img
-              src={asset("chicode.png")}
+              src={asset("chicode-mark.png")}
               alt=""
               className="size-9 rounded-full ring-2 ring-cheese-300"
             />
