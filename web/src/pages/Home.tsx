@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
+import FeatureCard from '../components/FeatureCard'
 import { asset } from '../lib/asset'
 
 export default function Home() {
@@ -55,7 +55,7 @@ export default function Home() {
 
           <div className="flex flex-wrap gap-3 pt-1">
             <Link
-              to="/python"
+              to="/practice"
               className="rounded-xl bg-cheese-400 px-5 py-3 font-bold text-ink-900 shadow-sm transition-colors hover:bg-cheese-300"
             >
               실습 시작하기
@@ -76,7 +76,7 @@ export default function Home() {
           <br />
           웹에서 바로 확인하고 학습해 보세요.
         </FeatureCard>
-        <FeatureCard to="/python" emoji="💻" title="실습">
+        <FeatureCard to="/practice" emoji="💻" title="실습">
           Python부터 Arduino, Pico 2 W까지
           <br />
           직접 코드를 작성하고 실행해 보세요.
@@ -88,31 +88,5 @@ export default function Home() {
         </FeatureCard>
       </section>
     </div>
-  )
-}
-
-function FeatureCard({
-  to,
-  emoji,
-  title,
-  children,
-}: {
-  to: string
-  emoji: string
-  title: string
-  children: ReactNode
-}) {
-  return (
-    <Link
-      to={to}
-      className="group flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6 transition-all hover:-translate-y-0.5 hover:border-cheese-300 hover:shadow-md"
-    >
-      <span className="text-3xl">{emoji}</span>
-      <h2 className="text-lg font-bold text-ink-900">{title}</h2>
-      <p className="text-sm leading-relaxed text-ink-700">{children}</p>
-      <span className="mt-auto pt-3 text-sm font-semibold text-cheese-600 opacity-0 transition-opacity group-hover:opacity-100">
-        들어가기 →
-      </span>
-    </Link>
   )
 }

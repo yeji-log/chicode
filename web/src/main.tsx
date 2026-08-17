@@ -1,6 +1,6 @@
 import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import '@fontsource/jua'
 import './index.css'
@@ -8,6 +8,7 @@ import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
 import Home from './pages/Home'
 import Materials from './pages/Materials'
+import Practice from './pages/Practice'
 import Teacher from './pages/Teacher'
 import ComingSoon from './pages/ComingSoon'
 import NotFound from './pages/NotFound'
@@ -25,14 +26,28 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/" element={<App />}>
             <Route index element={<Home />} />
             <Route path="materials" element={<Materials />} />
+            <Route path="practice" element={<Practice />} />
             <Route
-              path="python"
+              path="practice/python"
               element={
                 <Suspense fallback={<p className="text-ink-500">Python 실습 화면을 여는 중…</p>}>
                   <PythonLab />
                 </Suspense>
               }
             />
+            <Route
+              path="practice/pico"
+              element={
+                <ComingSoon
+                  emoji="🔌"
+                  title="Pico 2 W 시뮬레이터"
+                  description="브라우저에서 가상 Pico 2 W 보드로 GPIO, LED, Button 을 다루는 실습입니다. 다음 단계에서 준비합니다."
+                  secondary={{ to: '/practice/python', label: 'Python 실습 하러 가기' }}
+                />
+              }
+            />
+            {/* 예전 주소로 온 링크·북마크가 끊기지 않도록 새 위치로 보낸다. */}
+            <Route path="python" element={<Navigate to="/practice/python" replace />} />
             <Route
               path="projects"
               element={
