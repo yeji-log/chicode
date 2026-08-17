@@ -1,6 +1,12 @@
+import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
+import PolicyModal from './components/PolicyModal'
+import PrivacyPolicy, { PRIVACY_POLICY_EFFECTIVE_DATE } from './content/PrivacyPolicy'
+import TermsOfService, { TERMS_OF_SERVICE_EFFECTIVE_DATE } from './content/TermsOfService'
 import { asset } from './lib/asset'
+
+type OpenPolicy = 'privacy' | 'terms' | null
 
 const TABS = [
   { to: '/', label: '홈', end: true },
@@ -11,6 +17,8 @@ const TABS = [
 ]
 
 export default function App() {
+  const [openPolicy, setOpenPolicy] = useState<OpenPolicy>(null)
+
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-20 border-b border-cream-deep bg-cream/85 backdrop-blur">
@@ -58,10 +66,44 @@ export default function App() {
       </main>
 
       <footer className="border-t border-cream-deep px-5 py-6">
-        <p className="mx-auto max-w-6xl text-sm text-ink-500">
-          CHICODE — 치즈처럼 즐겁게, 코드처럼 단단하게.
-        </p>
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-500">
+          <p>CHICODE — 치즈처럼 즐겁게, 코드처럼 단단하게.</p>
+
+          <div className="ml-auto flex items-center gap-4">
+            <button
+              onClick={() => setOpenPolicy('privacy')}
+              className="font-semibold text-ink-500 underline decoration-cream-deep underline-offset-2 transition-colors hover:text-ink-900 hover:decoration-cheese-400"
+            >
+              개인정보처리방침
+            </button>
+            <button
+              onClick={() => setOpenPolicy('terms')}
+              className="font-semibold text-ink-500 underline decoration-cream-deep underline-offset-2 transition-colors hover:text-ink-900 hover:decoration-cheese-400"
+            >
+              이용약관
+            </button>
+          </div>
+        </div>
       </footer>
+
+      {openPolicy === 'privacy' && (
+        <PolicyModal
+          title="개인정보처리방침"
+          effectiveDate={PRIVACY_POLICY_EFFECTIVE_DATE}
+          onClose={() => setOpenPolicy(null)}
+        >
+          <PrivacyPolicy />
+        </PolicyModal>
+      )}
+      {openPolicy === 'terms' && (
+        <PolicyModal
+          title="이용약관"
+          effectiveDate={TERMS_OF_SERVICE_EFFECTIVE_DATE}
+          onClose={() => setOpenPolicy(null)}
+        >
+          <TermsOfService />
+        </PolicyModal>
+      )}
     </div>
   )
 }

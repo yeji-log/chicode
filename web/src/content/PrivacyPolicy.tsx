@@ -1,0 +1,173 @@
+import FillIn from '../components/FillIn'
+import PolicyArticle from '../components/PolicyArticle'
+
+export const PRIVACY_POLICY_EFFECTIVE_DATE = '2026. 8. 18.'
+
+/**
+ * chicode 코드베이스(Firebase 인증 · Firestore · Pyodide 실행 방식)를 실제로 확인하고
+ * 작성한 개인정보처리방침이다. 법률 자문을 거친 문서는 아니므로, 서비스가 커지거나
+ * 학생 개인정보를 다루게 되면 전문가 검토를 받는 것을 권한다.
+ */
+export default function PrivacyPolicy() {
+  return (
+    <>
+      <p className="mb-6 text-sm leading-relaxed text-ink-700">
+        CHICODE(이하 "서비스")는 이용자의 개인정보를 소중히 다루며, 관련 법령을 준수합니다.
+        이 방침은 서비스가 어떤 정보를 어떻게 다루는지 있는 그대로 알려드립니다.
+      </p>
+
+      <PolicyArticle num="제1조" title="수집하는 개인정보 항목">
+        <p>
+          <strong>학생</strong> — 학생은 회원가입이나 로그인 없이 서비스를 이용합니다.
+          CHICODE는 학생의 이름, 이메일 등 어떠한 개인정보도 수집하지 않습니다.
+        </p>
+        <p>
+          <strong>교사</strong> — 교사가 Google 계정으로 로그인하면, Google이 제공하는
+          다음 정보를 Firebase Authentication을 통해 전달받습니다.
+        </p>
+        <ul>
+          <li>이메일 주소</li>
+          <li>이름, 프로필 사진 (Google 계정에 등록되어 있는 경우)</li>
+          <li>Google 계정 고유 식별자(UID)</li>
+        </ul>
+        <p>
+          이 중 이메일 주소는 사전에 허용된 교사 계정인지 확인하는 용도로만 사용되며,
+          별도로 등록된 이메일 목록과 대조됩니다.
+        </p>
+      </PolicyArticle>
+
+      <PolicyArticle num="제2조" title="개인정보의 수집 및 이용 목적">
+        <p>수집한 정보는 다음 목적을 위해서만 사용됩니다.</p>
+        <ol>
+          <li>교사 인증 — 사전에 허용된 계정만 수업자료를 올리고 지울 수 있도록 확인</li>
+          <li>서비스 부정 이용 방지</li>
+        </ol>
+      </PolicyArticle>
+
+      <PolicyArticle num="제3조" title="개인정보의 보유 및 이용 기간">
+        <p>
+          교사 계정 정보는 서비스 운영자가 직접 등록·삭제합니다. 등록이 해제되면 해당
+          계정은 더 이상 교사 권한을 갖지 않으며, 보유하던 인증 정보도 함께 삭제됩니다.
+        </p>
+      </PolicyArticle>
+
+      <PolicyArticle num="제4조" title="개인정보의 제3자 제공 및 처리위탁">
+        <p>
+          CHICODE는 이용자의 개인정보를 외부에 판매하거나 제공하지 않습니다. 다만 서비스
+          운영을 위해 아래 업체에 처리를 위탁합니다.
+        </p>
+        <div className="my-3 overflow-x-auto rounded-lg border border-cream-deep">
+          <table className="w-full min-w-[420px] border-collapse text-xs">
+            <thead>
+              <tr className="bg-cream-deep text-left text-ink-900">
+                <th className="px-3 py-2 font-bold">수탁업체</th>
+                <th className="px-3 py-2 font-bold">위탁 업무</th>
+                <th className="px-3 py-2 font-bold">비고</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-cream-deep align-top">
+                <td className="px-3 py-2">Google Firebase</td>
+                <td className="px-3 py-2">
+                  로그인 인증(Authentication), 수업자료 저장(Firestore)
+                </td>
+                <td className="px-3 py-2 text-ink-500">
+                  Firestore는 서울(asia-northeast3) 리전, Authentication은 Google 글로벌
+                  인프라에서 처리됩니다.
+                </td>
+              </tr>
+              <tr className="border-t border-cream-deep align-top">
+                <td className="px-3 py-2">GitHub Pages</td>
+                <td className="px-3 py-2">웹사이트 정적 파일 호스팅</td>
+                <td className="px-3 py-2 text-ink-500">GitHub(Microsoft) 인프라</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          호스팅 업체는 서비스 접속 과정에서 IP 주소, 브라우저 정보 등 접속 기록을
+          표준적인 서버 로그 형태로 자동 수집할 수 있습니다. CHICODE는 이 로그를 별도로
+          수집·분석·활용하지 않습니다.
+        </p>
+      </PolicyArticle>
+
+      <PolicyArticle num="제5조" title="쿠키 및 브라우저 저장소">
+        <p>CHICODE는 이용자를 추적하기 위한 쿠키를 사용하지 않습니다.</p>
+        <ul>
+          <li>
+            <strong>로그인 유지</strong> — 교사 로그인 상태는 쿠키가 아닌 브라우저
+            저장소(IndexedDB)에 보관되며, Firebase Authentication이 관리합니다.
+          </li>
+          <li>
+            <strong>실습 코드 저장</strong> — Python 실습 화면에서 작성한 코드는
+            새로고침해도 남아 있도록 브라우저의 localStorage에 저장됩니다. 이 정보는
+            이용자의 기기에만 저장되며 서버로 전송되지 않습니다.
+          </li>
+        </ul>
+      </PolicyArticle>
+
+      <PolicyArticle num="제6조" title="Python 코드 실행에 관한 사항">
+        <p>
+          CHICODE의 Python 실습은 서버가 아니라 이용자의 브라우저 안에서 실행됩니다
+          (Pyodide/WebAssembly). 작성한 코드와 실행 결과는 CHICODE 서버로 전송되지
+          않으며, 별도로 저장·수집되지 않습니다.
+        </p>
+      </PolicyArticle>
+
+      <PolicyArticle num="제7조" title="이용자의 권리">
+        <p>
+          교사는 언제든지 Google 계정 로그아웃을 통해 서비스 이용을 중단할 수 있습니다.
+          교사 계정의 등록 해제, 등록된 개인정보의 열람·정정·삭제를 원하시면 제10조의
+          연락처로 문의해 주세요.
+        </p>
+      </PolicyArticle>
+
+      <PolicyArticle num="제8조" title="아동의 개인정보">
+        <p>
+          학생 이용자를 포함해 만 14세 미만 아동으로부터는 어떠한 개인정보도 수집하지
+          않습니다. 향후 아동의 개인정보를 수집하는 기능이 추가될 경우, 관련 법령에 따라
+          법정대리인의 동의를 받는 절차를 먼저 마련한 뒤 이 방침에 반영하겠습니다.
+        </p>
+      </PolicyArticle>
+
+      <PolicyArticle num="제9조" title="개인정보의 안전성 확보 조치">
+        <ul>
+          <li>
+            교사 계정 데이터베이스(Firestore)는 인증된 요청만 접근할 수 있도록 접근
+            규칙(Security Rules)으로 제한되어 있습니다.
+          </li>
+          <li>
+            등록된 교사 목록은 본인 계정으로 로그인한 경우에만 자신의 등록 여부를 확인할
+            수 있으며, 전체 목록은 공개적으로 조회할 수 없습니다.
+          </li>
+        </ul>
+      </PolicyArticle>
+
+      <PolicyArticle num="제10조" title="개인정보 보호책임자">
+        <p>
+          서비스: CHICODE
+          <br />
+          담당자: <FillIn>담당자 이름을 입력해 주세요</FillIn>
+          <br />
+          연락처: <FillIn>공개할 이메일 주소를 입력해 주세요</FillIn>
+        </p>
+        <p>
+          개인정보 처리와 관련한 문의, 불만 처리 등에 대해 위 연락처로 문의해 주시면
+          신속히 답변드리겠습니다.
+        </p>
+      </PolicyArticle>
+
+      <PolicyArticle num="제11조" title="개인정보처리방침의 변경">
+        <p>
+          이 방침은 법령, 정책 또는 서비스 내용의 변경에 따라 수정될 수 있으며, 변경 시
+          이 페이지를 통해 공지합니다.
+        </p>
+      </PolicyArticle>
+
+      <div className="mt-6 border-t border-cream-deep pt-4 text-xs text-ink-500">
+        <p className="font-semibold text-ink-700">부칙</p>
+        <p>이 방침은 {PRIVACY_POLICY_EFFECTIVE_DATE}부터 시행됩니다.</p>
+      </div>
+    </>
+  )
+}

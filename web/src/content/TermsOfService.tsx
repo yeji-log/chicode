@@ -1,0 +1,154 @@
+import PolicyArticle from '../components/PolicyArticle'
+
+export const TERMS_OF_SERVICE_EFFECTIVE_DATE = '2026. 8. 18.'
+
+export default function TermsOfService() {
+  return (
+    <>
+      <PolicyArticle num="제1조" title="목적">
+        <p>
+          이 약관은 CHICODE(이하 "서비스")가 제공하는 수업자료 열람, 실습 등 서비스
+          이용과 관련하여 서비스 운영자와 이용자 간의 권리, 의무 및 책임 사항을 정하는
+          것을 목적으로 합니다.
+        </p>
+      </PolicyArticle>
+
+      <PolicyArticle num="제2조" title="정의">
+        <ol>
+          <li>
+            <strong>서비스</strong> — CHICODE가 웹사이트를 통해 제공하는 수업자료, 실습
+            (Python, 향후 Pico 2 W 등), 프로젝트 관련 기능 일체
+          </li>
+          <li>
+            <strong>학생</strong> — 별도의 로그인 없이 서비스를 이용하는 이용자
+          </li>
+          <li>
+            <strong>교사</strong> — 사전에 허용된 Google 계정으로 로그인하여 수업자료
+            관리 등 추가 권한을 갖는 이용자
+          </li>
+          <li>
+            <strong>콘텐츠</strong> — 교사가 서비스에 업로드하는 수업자료 파일 및
+            이용자가 작성하는 실습 코드
+          </li>
+        </ol>
+      </PolicyArticle>
+
+      <PolicyArticle num="제3조" title="약관의 효력 및 변경">
+        <ol>
+          <li>이 약관은 서비스 화면에 게시함으로써 효력이 발생합니다.</li>
+          <li>
+            서비스 운영자는 관련 법령을 위반하지 않는 범위에서 이 약관을 변경할 수
+            있으며, 변경된 약관은 서비스 화면에 공지한 시점부터 효력이 발생합니다.
+          </li>
+        </ol>
+      </PolicyArticle>
+
+      <PolicyArticle num="제4조" title="서비스의 제공">
+        <ol>
+          <li>
+            서비스는 다음과 같은 기능을 제공합니다.
+            <ul>
+              <li>수업자료 열람 및 다운로드</li>
+              <li>브라우저 기반 Python 코드 작성 및 실행</li>
+              <li>향후 제공 예정 — 프로젝트, Pico 2 W 실습, 동아리(Lab) 활동 지원 등</li>
+            </ul>
+          </li>
+          <li>서비스는 무료로 제공됩니다.</li>
+          <li>
+            서비스 운영자는 서비스의 전부 또는 일부를 사전 통지 없이 변경, 중단할 수
+            있습니다. 이는 개인이 운영하는 교육 목적의 서비스로, 상시적인 운영을
+            보장하지 않습니다.
+          </li>
+        </ol>
+      </PolicyArticle>
+
+      <PolicyArticle num="제5조" title="회원가입 없는 이용">
+        <ol>
+          <li>학생은 별도의 회원가입 절차 없이 서비스를 이용할 수 있습니다.</li>
+          <li>
+            교사는 사전에 서비스 운영자에게 등록된 Google 계정으로만 로그인할 수 있으며,
+            등록되지 않은 계정은 교사 기능을 이용할 수 없습니다.
+          </li>
+        </ol>
+      </PolicyArticle>
+
+      <PolicyArticle num="제6조" title="교사의 의무">
+        <p>교사는 수업자료를 업로드할 때 다음 사항을 준수해야 합니다.</p>
+        <ol>
+          <li>업로드하는 자료에 대한 적법한 이용 권한(저작권 등)을 보유하고 있어야 합니다.</li>
+          <li>타인의 지식재산권, 초상권, 개인정보를 침해하는 자료를 업로드해서는 안 됩니다.</li>
+          <li>법령 또는 공서양속에 위반되는 자료를 업로드해서는 안 됩니다.</li>
+          <li>
+            위 사항을 위반하여 발생하는 모든 책임은 해당 자료를 업로드한 교사에게 있으며,
+            서비스 운영자는 이에 대한 책임을 지지 않습니다.
+          </li>
+        </ol>
+      </PolicyArticle>
+
+      <PolicyArticle num="제7조" title="이용자의 의무">
+        <p>이용자는 다음 행위를 해서는 안 됩니다.</p>
+        <ol>
+          <li>서비스의 정상적인 운영을 방해하는 행위 (대량 요청, 시스템 취약점 공격 등)</li>
+          <li>다른 이용자로 가장하거나 허용되지 않은 방법으로 교사 권한을 얻으려는 행위</li>
+          <li>서비스를 통해 실행한 코드로 제3자의 시스템에 피해를 주려는 행위</li>
+          <li>그 밖에 관련 법령에 위반되는 행위</li>
+        </ol>
+      </PolicyArticle>
+
+      <PolicyArticle num="제8조" title="지식재산권">
+        <ol>
+          <li>
+            "CHICODE"라는 이름, 로고, 캐릭터 및 서비스 화면의 디자인에 대한
+            지식재산권은 서비스 운영자에게 있습니다.
+          </li>
+          <li>
+            교사가 업로드한 수업자료의 지식재산권은 해당 교사(또는 원저작권자)에게
+            있으며, 서비스 운영자는 자료를 서비스 제공 목적 범위 내에서만 저장·전송합니다.
+          </li>
+          <li>이용자가 실습 화면에서 작성한 코드에 대한 권리는 해당 이용자에게 있습니다.</li>
+        </ol>
+      </PolicyArticle>
+
+      <PolicyArticle num="제9조" title="면책조항">
+        <ol>
+          <li>
+            서비스는 "있는 그대로" 무료로 제공되며, 서비스 운영자는 서비스의 지속적인
+            가용성, 정확성, 완전성을 보장하지 않습니다.
+          </li>
+          <li>
+            서비스 운영자는 천재지변, 서비스 제공업체(Google Firebase, GitHub 등)의 장애
+            등 통제할 수 없는 사유로 인한 서비스 중단에 대해 책임을 지지 않습니다.
+          </li>
+          <li>
+            서비스 운영자는 이용자가 서비스를 이용하여 얻은 정보나 실습 결과의 정확성에
+            대해 보증하지 않으며, 이를 신뢰하여 발생한 손해에 대해 책임을 지지 않습니다.
+          </li>
+          <li>
+            서비스 운영자는 교사가 업로드한 수업자료의 내용을 사전에 검수하지 않으며,
+            그 내용에 대한 책임을 지지 않습니다.
+          </li>
+        </ol>
+      </PolicyArticle>
+
+      <PolicyArticle num="제10조" title="서비스 이용의 제한">
+        <p>
+          서비스 운영자는 이용자가 제7조를 위반하는 경우, 사전 통지 없이 서비스 이용을
+          제한할 수 있습니다. 교사의 경우 허용 목록에서 계정을 제외하는 방식으로 이용을
+          제한합니다.
+        </p>
+      </PolicyArticle>
+
+      <PolicyArticle num="제11조" title="준거법 및 관할">
+        <p>
+          이 약관과 관련한 분쟁에는 대한민국 법을 적용하며, 분쟁이 발생할 경우
+          민사소송법상의 관할 법원에 제기합니다.
+        </p>
+      </PolicyArticle>
+
+      <div className="mt-6 border-t border-cream-deep pt-4 text-xs text-ink-500">
+        <p className="font-semibold text-ink-700">부칙</p>
+        <p>이 약관은 {TERMS_OF_SERVICE_EFFECTIVE_DATE}부터 시행됩니다.</p>
+      </div>
+    </>
+  )
+}
