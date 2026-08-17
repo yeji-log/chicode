@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
+import { Link } from 'react-router-dom'
 
+import SupportNote from '../components/SupportNote'
 import { EDITOR_OPTIONS } from '../lib/monaco'
 import { usePython } from '../python/usePython'
 import { EXAMPLES } from '../python/examples'
@@ -50,6 +52,12 @@ export default function PythonLab() {
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center gap-3">
         <div>
+          <Link
+            to="/practice"
+            className="mb-1 inline-flex items-center gap-1 text-sm font-semibold text-ink-500 hover:text-ink-900"
+          >
+            ← 실습
+          </Link>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">Python 실습</h1>
           <p className="text-sm text-ink-500">
             코드는 내 브라우저 안에서 실행됩니다. 서버로 보내지 않습니다.
@@ -103,6 +111,12 @@ export default function PythonLab() {
           Python 실행 환경을 불러오지 못했습니다: {bootError}
         </p>
       )}
+
+      <SupportNote>
+        <li>numpy, pandas, matplotlib 같은 외부 패키지는 사용할 수 없습니다 (표준 라이브러리만 가능)</li>
+        <li>컴퓨터의 실제 파일에는 접근할 수 없습니다</li>
+        <li>인터넷에 요청을 보낼 수 없습니다 (requests 등)</li>
+      </SupportNote>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="flex flex-col overflow-hidden rounded-2xl border border-cream-deep bg-white">

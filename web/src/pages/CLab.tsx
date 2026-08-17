@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
+import { Link } from 'react-router-dom'
 
+import SupportNote from '../components/SupportNote'
 import { EDITOR_OPTIONS } from '../lib/monaco'
 import { useC } from '../c/useC'
 import { EXAMPLES } from '../c/examples'
@@ -50,6 +52,12 @@ export default function CLab() {
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center gap-3">
         <div>
+          <Link
+            to="/practice"
+            className="mb-1 inline-flex items-center gap-1 text-sm font-semibold text-ink-500 hover:text-ink-900"
+          >
+            ← 실습
+          </Link>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">C언어 실습</h1>
           <p className="text-sm text-ink-500">
             컴파일도 실행도 내 브라우저 안에서 이뤄집니다. 서버로 보내지 않습니다.
@@ -103,6 +111,13 @@ export default function CLab() {
           C 실행 환경을 불러오지 못했습니다: {bootError}
         </p>
       )}
+
+      <SupportNote>
+        <li>C++는 지원하지 않습니다 (#include &lt;iostream&gt; 등 불가)</li>
+        <li>파일 하나로만 작성할 수 있습니다 (직접 만든 헤더 파일을 나눠서 불러올 수 없습니다)</li>
+        <li>인터넷에 요청을 보낼 수 없습니다</li>
+        <li>저장한 파일은 실행이 끝나면 사라집니다 (다음 실행에 남지 않습니다)</li>
+      </SupportNote>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="flex flex-col overflow-hidden rounded-2xl border border-cream-deep bg-white">
