@@ -1,4 +1,3 @@
-import FillIn from '../components/FillIn'
 import PolicyArticle from '../components/PolicyArticle'
 
 export const PRIVACY_POLICY_EFFECTIVE_DATE = '2026. 8. 18.'
@@ -147,9 +146,9 @@ export default function PrivacyPolicy() {
         <p>
           서비스: CHICODE
           <br />
-          담당자: <FillIn>담당자 이름을 입력해 주세요</FillIn>
+          담당자: 김예지
           <br />
-          연락처: <FillIn>공개할 이메일 주소를 입력해 주세요</FillIn>
+          연락처: yeji.sdh@gmail.com
         </p>
         <p>
           개인정보 처리와 관련한 문의, 불만 처리 등에 대해 위 연락처로 문의해 주시면
