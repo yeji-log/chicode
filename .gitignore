@@ -1,0 +1,12 @@
+.DS_Store
+*.log
+
+# 브랜드 원본 에셋 — 저장소에 올리지 않는다 (로컬에만 보관)
+# 웹사이트가 표시하는 사본은 web/public/chicode.png 로 따로 있다
+CHICODE_브랜드_문서.docx
+/chicode.png
+
+# 에디터
+.vscode/*
+!.vscode/extensions.json
+.idea

@@ -1,0 +1,30 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Pyodide 런타임 — npm install 시 scripts/sync-pyodide.mjs 가 다시 만든다
+public/pyodide/
+
+# npm 캐시 경로는 컴퓨터마다 다르다
+.npmrc

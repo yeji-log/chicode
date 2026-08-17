@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+/* CHICODE 브랜드 팔레트 — 치즈(노랑) + 칠판(초록) + 따뜻한 크림 배경 */
+@theme {
+  --color-cheese-50: #fdf8e7;
+  --color-cheese-100: #faeec2;
+  --color-cheese-200: #f6df8e;
+  --color-cheese-300: #f2cd52;
+  --color-cheese-400: #eebd2a;
+  --color-cheese-500: #d9a417;
+  --color-cheese-600: #b58311;
+
+  --color-cream: #fbf5e7;
+  --color-cream-deep: #f4ead2;
+
+  --color-ink-900: #33281a;
+  --color-ink-700: #5a4a33;
+  --color-ink-500: #8a7657;
+
+  --color-board: #2e4739;
+  --color-board-light: #3d5c4a;
+
+  --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
+    'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 종이 질감을 아주 옅게 — 브랜드 이미지의 따뜻한 책상 느낌 */
+#root {
+  background-image: radial-gradient(
+    circle at 20% 0%,
+    rgba(242, 205, 82, 0.13),
+    transparent 55%
+  );
+}
