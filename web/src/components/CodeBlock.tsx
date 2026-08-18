@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+
+import { highlightCode } from '../lib/highlightCode'
 
 /**
  * Lab 활동의 "코드" 섹션 전용 표시. 다른 섹션(목표·실습 등)은 그냥 문단이라
@@ -6,9 +8,14 @@ import { useState } from 'react'
  * (2) 학생이 그대로 옮겨 칠 수 있어야 해서 별도 컴포넌트로 뺐다.
  * 상단 바(라벨 + 복사 버튼)를 둔 건 흔한 코드 블록 UI 관례를 따른 것 — 이미
  * 실습(PythonLab/CLab)에서도 에디터가 그런 형태라 사이트 안에서 낯설지 않다.
+ *
+ * 문법 강조는 Prism.js(highlightCode)로 만든 HTML을 그대로 심는다. 코드
+ * 안의 특수문자는 Prism이 이스케이프해서 내보내므로 안전하다 — Node에서
+ * 직접 확인함(스크립트로 <, &, > 처리 검증).
  */
 export default function CodeBlock({ code }: { code: string }) {
   const [copied, setCopied] = useState(false)
+  const highlighted = useMemo(() => highlightCode(code), [code])
 
   async function copy() {
     try {
@@ -33,8 +40,8 @@ export default function CodeBlock({ code }: { code: string }) {
           {copied ? '복사됨 ✓' : '복사'}
         </button>
       </div>
-      <pre className="overflow-x-auto bg-ink-900 p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap text-cream">
-        <code>{code}</code>
+      <pre className="chicode-code overflow-x-auto bg-ink-900 p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap text-cream">
+        <code dangerouslySetInnerHTML={{ __html: highlighted }} />
       </pre>
     </div>
   )

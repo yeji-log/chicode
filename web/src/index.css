@@ -26,6 +26,14 @@
   --color-warn-300: #f2a98f;
   --color-warn-600: #c1441f;
 
+  /* Lab 활동 코드 블록(CodeBlock) 문법 강조 전용 색. keyword/number 는
+     cheese-300·warn-300 을 그대로 재사용하고, 문자열·함수 이름만 이 두 색을
+     새로 더했다 — 코드 테마엔 보통 초록(문자열)·파랑(함수) 계열이 있어야
+     한눈에 구분되는데, 브랜드 팔레트엔 그 계열이 아예 없었다. */
+  --color-code-string: #b6d693;
+  --color-code-function: #8ecbe6;
+  --color-code-comment: #b8a888;
+
   --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
     'Segoe UI', system-ui, sans-serif;
   --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
@@ -59,4 +67,38 @@ body {
     rgba(242, 205, 82, 0.13),
     transparent 55%
   );
+}
+
+/* Lab 활동 코드 블록(CodeBlock.tsx)의 문법 강조. Prism.js 가 만들어주는
+   .token.* 클래스에 색만 입힌다 — Prism 기본 테마 CSS는 안 쓴다(배경색이
+   사이트 팔레트와 안 맞아서). CLab/PythonLab 의 Monaco 에디터에는 영향 없음
+   — 그쪽은 자체 테마를 쓰는 완전히 다른 컴포넌트다. */
+.chicode-code .token.comment,
+.chicode-code .token.prolog,
+.chicode-code .token.doctype,
+.chicode-code .token.cdata {
+  color: var(--color-code-comment);
+  font-style: italic;
+}
+.chicode-code .token.keyword,
+.chicode-code .token.boolean,
+.chicode-code .token.builtin,
+.chicode-code .token.directive,
+.chicode-code .token.directive-hash {
+  color: var(--color-cheese-300);
+}
+.chicode-code .token.string,
+.chicode-code .token.char {
+  color: var(--color-code-string);
+}
+.chicode-code .token.function {
+  color: var(--color-code-function);
+}
+.chicode-code .token.number,
+.chicode-code .token.constant {
+  color: var(--color-warn-300);
+}
+.chicode-code .token.operator,
+.chicode-code .token.punctuation {
+  color: color-mix(in srgb, var(--color-cream) 70%, transparent);
 }
