@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthProvider'
+import ToggleSwitch from '../components/ToggleSwitch'
 import { asset } from '../lib/asset'
 import { isFirebaseConfigured } from '../lib/firebase'
 import {
@@ -385,6 +386,32 @@ function SubjectSettings({
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  // 핀 없이 접속 허용은 "설정 저장" 폼과 별개로 즉시 반영한다 — 수업 중에
+  // 눌러서 바로 효과가 나야 의미가 있는 스위치라, 핀·노션 링크 저장까지
+  // 같이 기다리게 하고 싶지 않았다(TeacherLab.tsx 의 활동 공개 토글과 같은
+  // 이유의 낙관적 업데이트).
+  const [bypassEnabled, setBypassEnabled] = useState(subject.pinRequired === false)
+  const [bypassBusy, setBypassBusy] = useState(false)
+
+  useEffect(() => {
+    setBypassEnabled(subject.pinRequired === false)
+  }, [subject.pinRequired])
+
+  async function toggleBypass() {
+    const next = !bypassEnabled
+    setBypassEnabled(next)
+    setBypassBusy(true)
+    try {
+      await updateSubject(subject.id, { pinRequired: !next })
+      onChange({ pinRequired: !next })
+    } catch (caught) {
+      console.error('핀 잠금 설정 변경 실패', caught)
+      setBypassEnabled(!next)
+      alert('설정을 바꾸지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBypassBusy(false)
+    }
+  }
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault()
@@ -415,6 +442,26 @@ function SubjectSettings({
       className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
     >
       <h2 className="font-bold text-ink-900">{subject.name} 설정</h2>
+
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-cream-deep bg-cream/40 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-ink-900">핀번호 없이 바로 접속 허용</p>
+          <p className="text-xs text-ink-500">
+            수업 중 핀번호를 잘못 불러줬거나 학생들이 계속 틀릴 때 잠깐 꺼두면, 학생이 핀
+            입력 없이 바로 들어옵니다. 평소엔 켜져 있지 않은(핀 필요) 상태를 권장합니다.
+            <br />
+            지금 상태: <strong className="font-semibold text-ink-700">
+              {bypassEnabled ? '🔓 핀 없이 접속 가능' : '🔒 핀 필요'}
+            </strong>
+          </p>
+        </div>
+        <ToggleSwitch
+          checked={bypassEnabled}
+          disabled={bypassBusy}
+          onChange={toggleBypass}
+          label={`${subject.name} 핀번호 없이 접속 허용`}
+        />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">

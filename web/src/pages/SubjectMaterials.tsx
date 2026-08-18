@@ -11,6 +11,7 @@ import {
   kindOf,
   listMaterials,
 } from '../lib/materials'
+import { usePinAttemptThrottle } from '../lib/pinThrottle'
 import { getSubject, isSubjectUnlocked, unlockSubject, type SubjectMeta } from '../lib/subjects'
 
 /**
@@ -59,26 +60,37 @@ export default function SubjectMaterials() {
     )
   }
 
-  if (!unlocked && !isTeacherViewer) {
+  const pinRequired = subject.pinRequired !== false
+
+  if (!unlocked && !isTeacherViewer && pinRequired) {
     return <PinGate subject={subject} onUnlock={() => setUnlocked(true)} />
   }
 
-  return <MaterialsList subject={subject} />
+  return <MaterialsList subject={subject} isTeacherViewer={isTeacherViewer} />
 }
 
 function PinGate({ subject, onUnlock }: { subject: SubjectMeta; onUnlock: () => void }) {
   const [pin, setPin] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // 과목마다 독립적으로 세도록 subject.id 로 키를 나눈다 — pinThrottle.ts 설명 참고.
+  const { isLocked, isBusy, remainingSeconds, recordFailure, reset } = usePinAttemptThrottle(
+    `materials:${subject.id}`,
+  )
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (isLocked || isBusy) return
     if (pin.trim().length > 0 && pin.trim() === subject.pin) {
+      reset()
       unlockSubject(subject.id)
       onUnlock()
     } else {
+      recordFailure()
       setError('핀번호가 올바르지 않습니다.')
     }
   }
+
+  const disabled = isLocked || isBusy
 
   return (
     <div className="mx-auto flex max-w-sm flex-col items-center gap-4 py-16 text-center">
@@ -95,13 +107,21 @@ function PinGate({ subject, onUnlock }: { subject: SubjectMeta; onUnlock: () => 
           }}
           inputMode="numeric"
           autoFocus
+          disabled={disabled}
           placeholder="핀번호"
-          className="rounded-lg border border-cream-deep bg-white px-3 py-2.5 text-center text-lg tracking-widest text-ink-900 focus:border-cheese-300 focus:outline-none"
+          className="rounded-lg border border-cream-deep bg-white px-3 py-2.5 text-center text-lg tracking-widest text-ink-900 focus:border-cheese-300 focus:outline-none disabled:opacity-50"
         />
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {isLocked ? (
+          <p className="text-sm text-red-700">
+            너무 많이 틀렸어요. {remainingSeconds}초 후 다시 시도해 주세요.
+          </p>
+        ) : (
+          error && <p className="text-sm text-red-700">{error}</p>
+        )}
         <button
           type="submit"
-          className="rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+          disabled={disabled}
+          className="rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
         >
           입장하기
         </button>
@@ -114,7 +134,13 @@ function PinGate({ subject, onUnlock }: { subject: SubjectMeta; onUnlock: () => 
   )
 }
 
-function MaterialsList({ subject }: { subject: SubjectMeta }) {
+function MaterialsList({
+  subject,
+  isTeacherViewer,
+}: {
+  subject: SubjectMeta
+  isTeacherViewer: boolean
+}) {
   const [materials, setMaterials] = useState<MaterialMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<MaterialMeta | null>(null)
@@ -134,6 +160,17 @@ function MaterialsList({ subject }: { subject: SubjectMeta }) {
           </Link>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{subject.name}</h1>
         </div>
+
+        {isTeacherViewer && (
+          // 교사만 보이는 표시 — 수업 중에 핀번호를 불러줄 때 교사 페이지까지
+          // 안 가고 바로 여기서 읽을 수 있게. 학생에게는 절대 안 보인다
+          // (isTeacherViewer 는 Firebase 로그인 상태로만 정해짐).
+          <span className="rounded-lg border border-cheese-300 bg-cheese-50 px-3 py-1.5 text-sm font-semibold text-cheese-700">
+            {subject.pinRequired === false
+              ? '🔓 지금은 핀번호 없이 접속 가능'
+              : `🔑 학생용 핀번호: ${subject.pin}`}
+          </span>
+        )}
 
         {subject.notionUrl && (
           <a

@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthProvider'
 import { getHomeSettings, isLabUnlocked, unlockLab } from '../lib/labs'
+import { usePinAttemptThrottle } from '../lib/pinThrottle'
 
 /**
  * /lab 하위 전체(홈·로드맵·활동·활동 상세)를 감싸는 핀 게이트.
@@ -38,16 +39,24 @@ export default function LabGate() {
 function PinGate({ pin, onUnlock }: { pin: string; onUnlock: () => void }) {
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // SubjectMaterials.tsx 의 과목별 게이트와 별개로 세도록 'lab' 로 키를 나눈다
+  // — pinThrottle.ts 설명 참고.
+  const { isLocked, isBusy, remainingSeconds, recordFailure, reset } = usePinAttemptThrottle('lab')
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (isLocked || isBusy) return
     if (value.trim().length > 0 && value.trim() === pin) {
+      reset()
       unlockLab()
       onUnlock()
     } else {
+      recordFailure()
       setError('핀번호가 올바르지 않습니다.')
     }
   }
+
+  const disabled = isLocked || isBusy
 
   return (
     <div className="mx-auto flex max-w-sm flex-col items-center gap-4 py-16 text-center">
@@ -64,13 +73,21 @@ function PinGate({ pin, onUnlock }: { pin: string; onUnlock: () => void }) {
           }}
           inputMode="numeric"
           autoFocus
+          disabled={disabled}
           placeholder="핀번호"
-          className="rounded-lg border border-cream-deep bg-white px-3 py-2.5 text-center text-lg tracking-widest text-ink-900 focus:border-cheese-300 focus:outline-none"
+          className="rounded-lg border border-cream-deep bg-white px-3 py-2.5 text-center text-lg tracking-widest text-ink-900 focus:border-cheese-300 focus:outline-none disabled:opacity-50"
         />
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {isLocked ? (
+          <p className="text-sm text-red-700">
+            너무 많이 틀렸어요. {remainingSeconds}초 후 다시 시도해 주세요.
+          </p>
+        ) : (
+          error && <p className="text-sm text-red-700">{error}</p>
+        )}
         <button
           type="submit"
-          className="rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+          disabled={disabled}
+          className="rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
         >
           입장하기
         </button>

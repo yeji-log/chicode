@@ -23,23 +23,33 @@ export interface SubjectMeta {
   pin: string
   notionUrl: string
   order: number
+  /** false 면 학생이 핀 없이 바로 열람할 수 있다. 수업 시간에 핀을 잘못
+   *  불러주거나 학생이 오타를 반복해서 시간을 잡아먹는 걸 교사가 그 자리에서
+   *  임시로 풀어줄 수 있게 하는 스위치다(교사 페이지에서 토글). 필드 자체가
+   *  없는 기존 문서(이 기능 이전에 만든 과목)는 undefined인데, 이땐 원래
+   *  동작대로 핀이 필요한 것으로 취급한다 — normalizeSubject 참고. */
+  pinRequired?: boolean
 }
 
 const SUBJECTS = 'subjects'
 
+function normalizeSubject(id: string, data: Record<string, unknown>): SubjectMeta {
+  return { ...(data as Omit<SubjectMeta, 'id' | 'pinRequired'>), id, pinRequired: data.pinRequired !== false }
+}
+
 export async function listSubjects(): Promise<SubjectMeta[]> {
   const snapshot = await getDocs(query(collection(db, SUBJECTS), orderBy('order', 'asc')))
-  return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as SubjectMeta)
+  return snapshot.docs.map((entry) => normalizeSubject(entry.id, entry.data()))
 }
 
 export async function getSubject(id: string): Promise<SubjectMeta | null> {
   const snapshot = await getDoc(doc(db, SUBJECTS, id))
-  return snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as SubjectMeta) : null
+  return snapshot.exists() ? normalizeSubject(snapshot.id, snapshot.data()) : null
 }
 
 export async function updateSubject(
   id: string,
-  patch: Partial<Pick<SubjectMeta, 'name' | 'pin' | 'notionUrl'>>,
+  patch: Partial<Pick<SubjectMeta, 'name' | 'pin' | 'notionUrl' | 'pinRequired'>>,
 ): Promise<void> {
   await updateDoc(doc(db, SUBJECTS, id), patch)
 }
