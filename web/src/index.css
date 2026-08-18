@@ -102,3 +102,14 @@ body {
 .chicode-code .token.punctuation {
   color: color-mix(in srgb, var(--color-cream) 70%, transparent);
 }
+
+/* pptx-preview(PptxSlideViewer.tsx)가 mode: 'slide' 에서 슬라이드 위에
+   자체적으로 그려 넣는 이동 버튼·페이지 표시(회색 원형 버튼, "1/18" 등).
+   PptxSlideViewer 가 이미 자기만의 이전/다음 버튼과 쪽 번호를 따로 그리므로
+   — 라이브러리가 만드는 이 UI 는 항상 중복이고, 두 상태가 서로 어긋날 수도
+   있다. 라이브러리엔 이 UI 를 끄는 옵션이 없어서(mode 를 바꾸면 슬라이드가
+   전부 한 번에 쌓여 그려짐) CSS 로 숨긴다. */
+.pptx-preview-wrapper-next,
+.pptx-preview-wrapper-pagination {
+  display: none !important;
+}
