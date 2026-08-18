@@ -480,7 +480,13 @@ function SeasonsPanel() {
         ) : (
           <ul className="divide-y divide-cream-deep overflow-hidden rounded-2xl border border-cream-deep bg-white/70">
             {seasons.map((season) => (
-              <li key={season.id} className="flex items-center gap-4 px-5 py-3.5">
+              <li
+                key={season.id}
+                className={[
+                  'flex items-center gap-4 px-5 py-3.5',
+                  season.status === '완료' ? 'grayscale opacity-60' : '',
+                ].join(' ')}
+              >
                 <span className="text-2xl">{season.emoji || '🧪'}</span>
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink-900">

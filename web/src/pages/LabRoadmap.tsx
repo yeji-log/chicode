@@ -54,6 +54,9 @@ export default function LabRoadmap() {
               to={`/lab/activities?season=${season.id}`}
               emoji={season.emoji || '🧪'}
               title={`${String(index + 1).padStart(2, '0')} ${season.title}`}
+              // 완료된 시즌은 흑백에 가깝게 덜 튀게 — 지금 진행 중인/준비 중인
+              // 카드와 한눈에 구분되도록.
+              className={season.status === '완료' ? 'grayscale opacity-60 hover:opacity-100' : ''}
             >
               <span
                 className={`mb-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[season.status]}`}
