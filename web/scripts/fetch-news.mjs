@@ -22,7 +22,12 @@
  */
 import { createHash } from 'node:crypto'
 
-import admin from 'firebase-admin'
+// firebase-admin 12+ 는 ESM에서 admin.credential.cert() 같은 옛 네임스페이스 방식이
+// 통하지 않는다(default export에 credential/firestore가 안 얹혀 있음 — 실제로
+// 돌려서 "Cannot read properties of undefined (reading 'cert')" 로 확인했다).
+// 모듈형 API(firebase-admin/app, firebase-admin/firestore)로 써야 한다.
+import { cert, initializeApp } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
 import Parser from 'rss-parser'
 
 const SOURCES = [
@@ -157,8 +162,8 @@ async function main() {
   }
 
   const serviceAccount = JSON.parse(serviceAccountKey)
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
-  const db = admin.firestore()
+  initializeApp({ credential: cert(serviceAccount) })
+  const db = getFirestore()
 
   const parser = new Parser()
   const cutoff = Date.now() - RECENT_HOURS * 60 * 60 * 1000
