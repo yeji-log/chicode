@@ -14,7 +14,13 @@ import {
   formatSize,
   listMaterials,
 } from '../lib/materials'
-import { listSubjects, updateSubject, type SubjectMeta } from '../lib/subjects'
+import {
+  createSubject,
+  deleteSubject,
+  listSubjects,
+  updateSubject,
+  type SubjectMeta,
+} from '../lib/subjects'
 import TeacherLab from './TeacherLab'
 import TeacherNews from './TeacherNews'
 
@@ -159,6 +165,7 @@ function MaterialsSection({ uploaderEmail }: { uploaderEmail: string }) {
   const [subjects, setSubjects] = useState<SubjectMeta[]>([])
   const [loadingSubjects, setLoadingSubjects] = useState(true)
   const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null)
+  const [showAddForm, setShowAddForm] = useState(false)
 
   useEffect(() => {
     listSubjects()
@@ -177,20 +184,27 @@ function MaterialsSection({ uploaderEmail }: { uploaderEmail: string }) {
     )
   }
 
-  if (loadingSubjects) return <p className="text-ink-500">과목을 불러오는 중…</p>
-
-  if (subjects.length === 0) {
-    return (
-      <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
-        아직 등록된 과목이 없습니다. Firebase 콘솔에서 subjects 컬렉션에 과목 문서를 먼저
-        만들어 주세요.
-      </p>
-    )
+  function handleSubjectCreated(subject: SubjectMeta) {
+    setSubjects((list) => [...list, subject])
+    setActiveSubjectId(subject.id)
+    setShowAddForm(false)
   }
+
+  function handleSubjectDeleted(subjectId: string) {
+    setSubjects((list) => {
+      const remaining = list.filter((subject) => subject.id !== subjectId)
+      setActiveSubjectId((current) =>
+        current === subjectId ? (remaining[0]?.id ?? null) : current,
+      )
+      return remaining
+    })
+  }
+
+  if (loadingSubjects) return <p className="text-ink-500">과목을 불러오는 중…</p>
 
   return (
     <div className="flex flex-col gap-6">
-      <nav className="flex flex-wrap gap-2">
+      <nav className="flex flex-wrap items-center gap-2">
         {subjects.map((subject) => (
           <button
             key={subject.id}
@@ -203,9 +217,33 @@ function MaterialsSection({ uploaderEmail }: { uploaderEmail: string }) {
             ].join(' ')}
           >
             {subject.name}
+            {subject.published === false && (
+              <span className="ml-1.5 text-xs font-semibold text-ink-500">🚧 준비중</span>
+            )}
           </button>
         ))}
+        <button
+          onClick={() => setShowAddForm((value) => !value)}
+          className={[
+            'rounded-lg border border-dashed px-4 py-2 text-sm font-bold transition-colors',
+            showAddForm
+              ? 'border-cheese-300 bg-cheese-50 text-cheese-700'
+              : 'border-cream-deep text-ink-500 hover:border-cheese-300 hover:text-ink-700',
+          ].join(' ')}
+        >
+          + 새 과목
+        </button>
       </nav>
+
+      {showAddForm && (
+        <AddSubjectForm onCreated={handleSubjectCreated} onCancel={() => setShowAddForm(false)} />
+      )}
+
+      {subjects.length === 0 && !showAddForm && (
+        <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
+          아직 등록된 과목이 없습니다. 위의 &quot;+ 새 과목&quot;으로 만들어 주세요.
+        </p>
+      )}
 
       {activeSubject && (
         <SubjectPanel
@@ -213,9 +251,125 @@ function MaterialsSection({ uploaderEmail }: { uploaderEmail: string }) {
           subject={activeSubject}
           uploaderEmail={uploaderEmail}
           onSubjectChange={(patch) => handleSubjectUpdate(activeSubject.id, patch)}
+          onSubjectDeleted={() => handleSubjectDeleted(activeSubject.id)}
         />
       )}
     </div>
+  )
+}
+
+function AddSubjectForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (subject: SubjectMeta) => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState('')
+  const [pin, setPin] = useState('')
+  const [notionUrl, setNotionUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    const trimmedName = name.trim()
+    const trimmedPin = pin.trim()
+    if (!trimmedName) {
+      setError('과목 이름을 입력해 주세요.')
+      return
+    }
+    if (!trimmedPin) {
+      setError('핀번호를 입력해 주세요.')
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    try {
+      const subject = await createSubject({ name: trimmedName, pin: trimmedPin, notionUrl })
+      onCreated(subject)
+    } catch (caught) {
+      console.error('과목 만들기 실패', caught)
+      setError('과목을 만들지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-4 rounded-2xl border border-cheese-300 bg-cheese-50/50 p-6"
+    >
+      <h2 className="font-bold text-ink-900">새 과목 만들기</h2>
+      <p className="text-xs text-ink-500">
+        새 과목은 처음엔 <strong className="font-semibold">🚧 준비중(학생에게 비공개)</strong>{' '}
+        상태로 만들어집니다. 자료를 올리고 정리가 끝나면 과목 설정에서 공개로 바꿔 주세요.
+        준비중인 동안에도 학생 화면 과목 목록에는 이름이 보이지만 들어갈 수는 없습니다.
+      </p>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          과목 이름
+          <input
+            value={name}
+            onChange={(event) => {
+              setName(event.target.value)
+              setError(null)
+            }}
+            placeholder="예: 데이터베이스"
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          핀번호
+          <input
+            value={pin}
+            onChange={(event) => {
+              setPin(event.target.value)
+              setError(null)
+            }}
+            placeholder="예: 1234"
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          노션 링크 (선택)
+          <input
+            value={notionUrl}
+            onChange={(event) => setNotionUrl(event.target.value)}
+            placeholder="https://www.notion.so/..."
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+          />
+        </label>
+      </div>
+
+      {error && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={busy}
+          className="self-start rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? '만드는 중…' : '과목 만들기'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-xl border border-cream-deep px-5 py-2.5 font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+        >
+          취소
+        </button>
+      </div>
+    </form>
   )
 }
 
@@ -223,10 +377,12 @@ function SubjectPanel({
   subject,
   uploaderEmail,
   onSubjectChange,
+  onSubjectDeleted,
 }: {
   subject: SubjectMeta
   uploaderEmail: string
   onSubjectChange: (patch: Partial<SubjectMeta>) => void
+  onSubjectDeleted: () => void
 }) {
   const [materials, setMaterials] = useState<MaterialMeta[]>([])
   const [title, setTitle] = useState('')
@@ -234,6 +390,7 @@ function SubjectPanel({
   const [file, setFile] = useState<File | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [deletingSubject, setDeletingSubject] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -275,9 +432,37 @@ function SubjectPanel({
     setMaterials(await listMaterials(subject.id))
   }
 
+  async function handleDeleteSubject() {
+    const countNote = materials.length > 0 ? ` (자료 ${materials.length}개도 함께 삭제됩니다)` : ''
+    if (!confirm(`"${subject.name}" 과목을 삭제할까요?${countNote} 되돌릴 수 없습니다.`)) return
+
+    setDeletingSubject(true)
+    try {
+      // 자료를 먼저 지운다 — 과목 문서가 먼저 사라지면 학생 화면이 "존재하지
+      // 않는 과목"으로 튕기긴 하지만, 지우다 중간에 실패했을 때 고아가 된
+      // 자료가 이미 사라진 과목에 매달려 안 보이는 상태보다는, 과목이 아직
+      // 남아있는 채 일부 자료만 지워진 상태가 다시 시도하기 쉽다.
+      for (const material of materials) {
+        await deleteMaterial(material.id)
+      }
+      await deleteSubject(subject.id)
+      onSubjectDeleted()
+    } catch (caught) {
+      console.error('과목 삭제 실패', caught)
+      alert('과목을 삭제하지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setDeletingSubject(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <SubjectSettings subject={subject} onChange={onSubjectChange} />
+      <SubjectSettings
+        subject={subject}
+        onChange={onSubjectChange}
+        onDelete={handleDeleteSubject}
+        deleting={deletingSubject}
+      />
 
       <form
         onSubmit={handleSubmit}
@@ -377,9 +562,13 @@ function SubjectPanel({
 function SubjectSettings({
   subject,
   onChange,
+  onDelete,
+  deleting,
 }: {
   subject: SubjectMeta
   onChange: (patch: Partial<SubjectMeta>) => void
+  onDelete: () => void
+  deleting: boolean
 }) {
   const [pin, setPin] = useState(subject.pin)
   const [notionUrl, setNotionUrl] = useState(subject.notionUrl ?? '')
@@ -392,10 +581,19 @@ function SubjectSettings({
   // 이유의 낙관적 업데이트).
   const [bypassEnabled, setBypassEnabled] = useState(subject.pinRequired === false)
   const [bypassBusy, setBypassBusy] = useState(false)
+  // 공개 여부도 같은 이유로 즉시 반영 — 준비가 끝나자마자 그 자리에서 켜고
+  // 바로 학생 화면에서 확인해보고 싶을 때 저장 버튼까지 기다리게 하고 싶지
+  // 않았다.
+  const [published, setPublished] = useState(subject.published !== false)
+  const [publishBusy, setPublishBusy] = useState(false)
 
   useEffect(() => {
     setBypassEnabled(subject.pinRequired === false)
   }, [subject.pinRequired])
+
+  useEffect(() => {
+    setPublished(subject.published !== false)
+  }, [subject.published])
 
   async function toggleBypass() {
     const next = !bypassEnabled
@@ -410,6 +608,22 @@ function SubjectSettings({
       alert('설정을 바꾸지 못했습니다. 다시 시도해 주세요.')
     } finally {
       setBypassBusy(false)
+    }
+  }
+
+  async function togglePublished() {
+    const next = !published
+    setPublished(next)
+    setPublishBusy(true)
+    try {
+      await updateSubject(subject.id, { published: next })
+      onChange({ published: next })
+    } catch (caught) {
+      console.error('과목 공개 설정 변경 실패', caught)
+      setPublished(!next)
+      alert('설정을 바꾸지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setPublishBusy(false)
     }
   }
 
@@ -441,7 +655,38 @@ function SubjectSettings({
       onSubmit={handleSave}
       className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
     >
-      <h2 className="font-bold text-ink-900">{subject.name} 설정</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-bold text-ink-900">{subject.name} 설정</h2>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          className="shrink-0 rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {deleting ? '삭제 중…' : '과목 삭제'}
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-cream-deep bg-cream/40 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-ink-900">학생에게 공개</p>
+          <p className="text-xs text-ink-500">
+            꺼두면 학생 과목 목록에 이름은 보이지만 눌러도 들어갈 수 없습니다(🚧 준비중). 자료를
+            올리고 정리를 끝낸 뒤에 켜 주세요.
+            <br />
+            지금 상태:{' '}
+            <strong className="font-semibold text-ink-700">
+              {published ? '✅ 공개됨' : '🚧 준비중 (학생에게 비공개)'}
+            </strong>
+          </p>
+        </div>
+        <ToggleSwitch
+          checked={published}
+          disabled={publishBusy}
+          onChange={togglePublished}
+          label={`${subject.name} 학생 공개 여부`}
+        />
+      </div>
 
       <div className="flex items-center justify-between gap-3 rounded-xl border border-cream-deep bg-cream/40 px-4 py-3">
         <div>

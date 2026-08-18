@@ -13,7 +13,17 @@
  * 플랜 + Cloud Functions 로 올려야 한다 — 지금은 그 범위 밖이다.
  */
 
-import { collection, doc, getDoc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore'
 
 import { db } from './firebase'
 
@@ -29,12 +39,25 @@ export interface SubjectMeta {
    *  없는 기존 문서(이 기능 이전에 만든 과목)는 undefined인데, 이땐 원래
    *  동작대로 핀이 필요한 것으로 취급한다 — normalizeSubject 참고. */
   pinRequired?: boolean
+  /** false 면 아직 학생에게 열지 않은(준비 중인) 과목이다. 학생 화면에는
+   *  이름은 보이지만 들어갈 수는 없다 — 교사가 자료를 미리 올려두고 정리를
+   *  끝낸 뒤에 공개하려고 만든 스위치다(TeacherLab.tsx 의 활동 공개 토글과
+   *  같은 이유). 필드 자체가 없는 기존 문서(정보, 인공지능 기초 — 이 기능
+   *  이전에 만든 과목)는 undefined인데, 이땐 이미 공개된 것으로 취급한다 —
+   *  안 그러면 이 기능을 넣는 순간 기존 과목이 갑자기 학생 눈앞에서
+   *  잠겨버린다. normalizeSubject 참고. */
+  published?: boolean
 }
 
 const SUBJECTS = 'subjects'
 
 function normalizeSubject(id: string, data: Record<string, unknown>): SubjectMeta {
-  return { ...(data as Omit<SubjectMeta, 'id' | 'pinRequired'>), id, pinRequired: data.pinRequired !== false }
+  return {
+    ...(data as Omit<SubjectMeta, 'id' | 'pinRequired' | 'published'>),
+    id,
+    pinRequired: data.pinRequired !== false,
+    published: data.published !== false,
+  }
 }
 
 export async function listSubjects(): Promise<SubjectMeta[]> {
@@ -49,9 +72,47 @@ export async function getSubject(id: string): Promise<SubjectMeta | null> {
 
 export async function updateSubject(
   id: string,
-  patch: Partial<Pick<SubjectMeta, 'name' | 'pin' | 'notionUrl' | 'pinRequired'>>,
+  patch: Partial<Pick<SubjectMeta, 'name' | 'pin' | 'notionUrl' | 'pinRequired' | 'published'>>,
 ): Promise<void> {
   await updateDoc(doc(db, SUBJECTS, id), patch)
+}
+
+/**
+ * 새 과목을 만든다. 기본값은 "준비 중"(published: false) — 교사가 자료를
+ * 올리고 설정을 정리할 시간을 준 다음, 준비가 끝나면 직접 공개 토글을 켜는
+ * 흐름을 기대한다. order 는 기존 과목 중 가장 큰 값 다음으로 잡아 탭 맨
+ * 뒤에 붙게 한다.
+ */
+export async function createSubject(input: {
+  name: string
+  pin: string
+  notionUrl?: string
+}): Promise<SubjectMeta> {
+  const existing = await listSubjects()
+  const nextOrder = existing.reduce((max, subject) => Math.max(max, subject.order ?? 0), -1) + 1
+
+  const id = crypto.randomUUID()
+  const subject: Omit<SubjectMeta, 'id'> = {
+    name: input.name.trim(),
+    pin: input.pin.trim(),
+    notionUrl: input.notionUrl?.trim() ?? '',
+    order: nextOrder,
+    pinRequired: true,
+    published: false,
+  }
+
+  await setDoc(doc(db, SUBJECTS, id), subject)
+  return { ...subject, id }
+}
+
+/**
+ * 과목 문서만 지운다. 그 과목에 속한 자료(materials)는 여기서 지우지 않는다
+ * — materials.ts 와 subjects.ts 를 서로 의존하지 않게 하려는 계층 구분이라,
+ * 자료까지 함께 지우는 건 호출부(Teacher.tsx)가 두 모듈을 순서대로 불러
+ * 처리한다.
+ */
+export async function deleteSubject(id: string): Promise<void> {
+  await deleteDoc(doc(db, SUBJECTS, id))
 }
 
 const UNLOCK_KEY_PREFIX = 'chicode:materials-unlocked:'

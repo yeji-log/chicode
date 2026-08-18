@@ -60,6 +60,13 @@ export default function SubjectMaterials() {
     )
   }
 
+  // 카드를 못 누르게 막아도 URL을 직접 치면 들어올 수 있으므로 여기서도 한 번
+  // 더 막는다 — Materials.tsx 의 비활성 카드는 안내일 뿐, 실제로 막는 곳은
+  // 여기다. 교사는 준비하는 동안에도 계속 들어와서 작업해야 하니 예외.
+  if (!isTeacherViewer && subject.published === false) {
+    return <ComingSoon subject={subject} />
+  }
+
   const pinRequired = subject.pinRequired !== false
 
   if (!unlocked && !isTeacherViewer && pinRequired) {
@@ -67,6 +74,19 @@ export default function SubjectMaterials() {
   }
 
   return <MaterialsList subject={subject} isTeacherViewer={isTeacherViewer} />
+}
+
+function ComingSoon({ subject }: { subject: SubjectMeta }) {
+  return (
+    <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-16 text-center">
+      <span className="text-4xl">🚧</span>
+      <h1 className="text-xl font-extrabold text-ink-900">{subject.name}</h1>
+      <p className="text-sm text-ink-500">아직 준비중인 과목이에요. 조금만 기다려 주세요.</p>
+      <Link to="/materials" className="mt-2 text-sm font-semibold text-cheese-600 underline">
+        다른 과목 선택
+      </Link>
+    </div>
+  )
 }
 
 function PinGate({ subject, onUnlock }: { subject: SubjectMeta; onUnlock: () => void }) {
