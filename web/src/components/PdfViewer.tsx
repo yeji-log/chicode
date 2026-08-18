@@ -159,7 +159,18 @@ export default function PdfViewer({
         const available = container.clientWidth - 32
         const scale = Math.max(available / base.width, 0.1)
         const ratio = Math.min(window.devicePixelRatio || 1, 2)
-        const viewport = target.getViewport({ scale: scale * ratio })
+        let viewport = target.getViewport({ scale: scale * ratio })
+
+        // 일부 모바일 기기(특히 큰 화면 태블릿 + 고배율)는 캔버스 한 변이
+        // 일정 크기를 넘으면 JS 에러 없이 그냥 빈 화면만 남긴다 — GPU 텍스처
+        // 한도를 넘어서인 것으로 보인다. 발표 모드의 전체화면 오버레이처럼
+        // 화면 전체 크기로 그릴 때 특히 이 값이 커진다. 화질 차이가 거의
+        // 안 느껴지는 선에서 최대 변 길이를 안전하게 제한한다.
+        const MAX_CANVAS_SIDE = 2600
+        const longestSide = Math.max(viewport.width, viewport.height)
+        if (longestSide > MAX_CANVAS_SIDE) {
+          viewport = target.getViewport({ scale: (scale * ratio * MAX_CANVAS_SIDE) / longestSide })
+        }
 
         canvas.width = viewport.width
         canvas.height = viewport.height

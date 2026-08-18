@@ -14,8 +14,13 @@ import JSZip from 'jszip'
  * 믿지 않는다. 스펙상 보장되지 않는 관례일 뿐이라, 실제 관계
  * (ppt/presentation.xml 의 슬라이드 순서 → ppt/slides/_rels/*.rels 의
  * notesSlide 관계)를 따라간다.
+ *
+ * File 대신 Blob 을 받는다 — 방금 고른 파일(File)뿐 아니라, 이미 올려둔
+ * pptx를 Firestore에서 다시 읽어온 Blob(getSlidePptxFile)으로도 "노트 다시
+ * 추출"을 할 수 있어야 해서다(이 기능이 생기기 전에 올라간 PPT는 노트가
+ * 비어 있으니).
  */
-export async function extractNotesFromPptx(file: File): Promise<string[]> {
+export async function extractNotesFromPptx(file: Blob): Promise<string[]> {
   const zip = await JSZip.loadAsync(file)
 
   const presentationXml = await readXml(zip, 'ppt/presentation.xml')

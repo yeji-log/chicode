@@ -22,6 +22,7 @@ import {
   SlideValidationError,
   deleteSlidePdf,
   deleteSlidePptx,
+  getSlidePptxFile,
   getSlideSet,
   saveNotes,
   uploadSlidePdf,
@@ -836,6 +837,32 @@ function SlidesPanel({ activityId }: { activityId: string }) {
     setSlides(await getSlideSet(activityId))
   }
 
+  /**
+   * "대본 자동 추출"이 생기기 전에 올라간 PPT는 대본이 비어 있다 — 추출은
+   * 업로드하는 순간에만 일어나기 때문이다. 그런 활동을 다시 채울 수 있도록
+   * 이미 저장된 PPT를 다시 읽어서 추출한다(파일을 다시 고를 필요 없음).
+   */
+  async function handleReextractNotes() {
+    setBusy(true)
+    setError(null)
+    try {
+      const blob = await getSlidePptxFile(activityId)
+      if (!blob) throw new Error('PPT 파일을 찾을 수 없습니다.')
+      const notes = await extractNotesFromPptx(blob)
+      await saveNotes(activityId, notes)
+      alert(
+        notes.some((note) => note.trim())
+          ? '대본을 다시 추출했습니다. 발표 화면에서 확인해 주세요.'
+          : '이 PPT에는 발표자 노트가 없습니다. 발표 화면에서 직접 입력해 주세요.',
+      )
+    } catch (caught) {
+      console.error('대본 재추출 실패', caught)
+      setError('대본을 다시 추출하지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading) return null
 
   return (
@@ -854,6 +881,17 @@ function SlidesPanel({ activityId }: { activityId: string }) {
         <SlideSlot label="PPT 원본 (.pptx)" meta={slides.pptx} onDelete={handleDeletePptx} />
         <SlideSlot label="PDF 버전 (발표 모드에 필수)" meta={slides.pdf} onDelete={handleDeletePdf} />
       </div>
+
+      {slides.pptx && (
+        <button
+          type="button"
+          onClick={handleReextractNotes}
+          disabled={busy}
+          className="self-start text-xs font-semibold text-cheese-600 hover:underline disabled:opacity-50"
+        >
+          대본 다시 추출하기 — PPT를 새로 올리기 전엔 이 기능으로 노트를 채웠는지 확인하세요
+        </button>
+      )}
 
       <form onSubmit={handleUpload} className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">

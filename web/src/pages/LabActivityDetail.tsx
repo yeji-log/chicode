@@ -160,6 +160,14 @@ export default function LabActivityDetail() {
           pdfFile={slideFiles.pdf}
           currentSlide={presentation.currentSlide}
           notes={notes}
+          onNoteSaved={(slideIndex, text) =>
+            setNotes((current) => {
+              const next = [...current]
+              while (next.length < slideIndex) next.push('')
+              next[slideIndex - 1] = text
+              return next
+            })
+          }
           onExit={() => setIsPresenting(false)}
         />
       ) : (

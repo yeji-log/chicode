@@ -10,44 +10,77 @@ import PdfViewer from './PdfViewer'
  * 넘기면 Firestore(labPresentations)에 바로 쓰고, 화면에 보이는 currentSlide
  * 는 그 구독 값을 그대로 받아쓴다 — 이 컴포넌트가 자체적으로 페이지 상태를
  * 들고 있지 않는다. 그래야 "다른 기기에서 이어서 조작하기"가 자연히 된다.
+ *
+ * 대본 저장은 타이핑을 멈추고 600ms 뒤에 이뤄지는데(Firestore 쓰기 아끼기),
+ * 그 전에 슬라이드를 넘기거나 발표를 끝내면 마지막 몇 글자가 그대로 날아갈
+ * 수 있었다 — flushPending 으로 그 시점마다 미저장분을 먼저 흘려보낸다.
  */
 export default function LabPresenter({
   activityId,
   pdfFile,
   currentSlide,
   notes,
+  onNoteSaved,
   onExit,
 }: {
   activityId: string
   pdfFile: Blob
   currentSlide: number
   notes: string[]
+  /** 대본이 저장될 때마다 호출 — 부모(LabActivityDetail)가 notes 배열을
+   *  최신으로 들고 있어야, 발표를 나갔다 다시 들어와도 방금 고친 내용이
+   *  보인다(부모의 notes 는 처음 마운트될 때 한 번만 불러오기 때문). */
+  onNoteSaved: (slideIndex: number, text: string) => void
   onExit: () => void
 }) {
   const [pageCount, setPageCount] = useState(0)
   const [noteDraft, setNoteDraft] = useState(notes[currentSlide - 1] ?? '')
-  const saveTimerRef = useRef<number | undefined>(undefined)
 
-  // 슬라이드가 바뀌면 그 슬라이드의 저장된 대본으로 바꿔 보여준다.
+  const saveTimerRef = useRef<number | undefined>(undefined)
+  const pendingRef = useRef<{ slide: number; text: string } | null>(null)
+  // effect 안에서 최신 notes 를 읽기 위한 것 — notes 를 의존성에 넣으면
+  // 저장이 돌아올 때마다(=notes 배열이 바뀔 때마다) 이 효과가 다시 돌면서
+  // 지금 입력 중인 대본을 덮어써버린다.
+  const notesRef = useRef(notes)
   useEffect(() => {
-    setNoteDraft(notes[currentSlide - 1] ?? '')
-  }, [currentSlide, notes])
+    notesRef.current = notes
+  }, [notes])
+
+  function flushPending() {
+    if (!pendingRef.current) return
+    window.clearTimeout(saveTimerRef.current)
+    const { slide, text } = pendingRef.current
+    pendingRef.current = null
+    void updateNote(activityId, slide, text)
+    onNoteSaved(slide, text)
+  }
+
+  // 슬라이드가 바뀌면: 이전 슬라이드의 미저장 편집을 먼저 흘려보내고,
+  // 새 슬라이드의 저장된 대본으로 바꿔 보여준다.
+  useEffect(() => {
+    flushPending()
+    setNoteDraft(notesRef.current[currentSlide - 1] ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSlide])
+
+  // 컴포넌트가 통째로 사라질 때도(브라우저 탭 닫기 전 등) 마지막으로 한 번.
+  useEffect(() => () => flushPending(), [])
 
   function goTo(page: number) {
+    flushPending()
     const clamped = Math.max(1, Math.min(pageCount || page, page))
     void setCurrentSlide(activityId, clamped)
   }
 
   function handleNoteChange(text: string) {
     setNoteDraft(text)
+    pendingRef.current = { slide: currentSlide, text }
     window.clearTimeout(saveTimerRef.current)
-    // 타이핑마다 쓰지 않고 잠깐 멈췄을 때만 저장한다 — Firestore 쓰기 아끼기.
-    saveTimerRef.current = window.setTimeout(() => {
-      void updateNote(activityId, currentSlide, text)
-    }, 600)
+    saveTimerRef.current = window.setTimeout(flushPending, 600)
   }
 
   async function handleExit() {
+    flushPending()
     await stopPresentation(activityId)
     onExit()
   }
@@ -85,6 +118,7 @@ export default function LabPresenter({
           <textarea
             value={noteDraft}
             onChange={(event) => handleNoteChange(event.target.value)}
+            onBlur={flushPending}
             placeholder="PPT에 발표자 노트가 없으면 여기 바로 적어도 됩니다."
             className="min-h-[60vh] flex-1 rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm leading-relaxed text-ink-900 focus:border-cheese-300 focus:outline-none"
           />
