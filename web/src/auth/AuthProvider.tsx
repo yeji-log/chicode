@@ -7,7 +7,13 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
+import {
+  getRedirectResult,
+  onAuthStateChanged,
+  signInWithRedirect,
+  signOut,
+  type User,
+} from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 
 import { auth, db, googleProvider } from '../lib/firebase'
@@ -40,6 +46,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // signInWithPopup은 accounts.google.com이 자체적으로 거는 Cross-Origin-Opener-Policy
+    // 때문에 팝업↔원래 창 통신이 막혀서 계정 선택 후 팝업만 닫히고 로그인이 실패하는
+    // 현상이 있었다(우리 쪽 헤더 문제가 아니라 Google 페이지 쪽 정책이라 우리가 못 고침).
+    // signInWithRedirect는 페이지 전체가 Google로 이동했다가 돌아오는 방식이라 이 문제를
+    // 구조적으로 피해간다. 로그인 성공은 아래 onAuthStateChanged가 그대로 잡고, 리다이렉트
+    // 도중 발생한 오류만 여기서 잡아서 화면에 드러낸다.
+    getRedirectResult(auth).catch((caught) => {
+      const code = (caught as { code?: string }).code ?? ''
+      setError(explainAuthError(code))
+    })
+
     return onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser)
 
@@ -63,13 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async () => {
     setError(null)
     try {
-      await signInWithPopup(auth, googleProvider)
+      // 이 호출 이후 페이지 전체가 Google 로그인 화면으로 이동한다. 성공/실패 결과는
+      // 돌아온 뒤 위 useEffect의 getRedirectResult에서 처리된다.
+      await signInWithRedirect(auth, googleProvider)
     } catch (caught) {
       const code = (caught as { code?: string }).code ?? ''
-
-      // 사용자가 직접 창을 닫은 경우는 오류가 아니다.
-      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return
-
       setError(explainAuthError(code))
     }
   }, [])
@@ -100,8 +115,6 @@ function explainAuthError(code: string): string {
       return 'Google 로그인이 아직 켜져 있지 않습니다. Firebase 콘솔 → Authentication → Sign-in method → Google → 사용 설정을 해주세요.'
     case 'auth/unauthorized-domain':
       return `이 주소(${location.hostname})가 Firebase 에 등록되지 않았습니다. 콘솔 → Authentication → 설정 → 승인된 도메인에 추가해 주세요.`
-    case 'auth/popup-blocked':
-      return '브라우저가 로그인 창을 막았습니다. 주소창 오른쪽의 팝업 차단 아이콘을 눌러 허용해 주세요.'
     case 'auth/network-request-failed':
       return '네트워크 연결에 실패했습니다. 인터넷 연결을 확인해 주세요.'
     case 'auth/invalid-api-key':
