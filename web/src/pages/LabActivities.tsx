@@ -63,6 +63,9 @@ export default function LabActivities() {
 
   const activeSeason = seasons.find((season) => season.id === activeSeasonId)
   const isPreparingSeason = activeSeason?.status === '준비중'
+  // 완료된 시즌은 잠그진 않는다(계속 들어가서 볼 수 있어야 함) — Roadmap
+  // 카드와 같은 이유로 grayscale 만 덧씌워서 "지난 활동"임을 표시한다.
+  const isCompletedSeason = activeSeason?.status === '완료'
 
   function selectSeason(id: string) {
     setSearchParams({ season: id })
@@ -134,7 +137,10 @@ export default function LabActivities() {
               <li key={activity.id}>
                 <Link
                   to={`/lab/activities/${activity.id}`}
-                  className="flex h-full flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-5 transition-all hover:-translate-y-0.5 hover:border-cheese-300 hover:shadow-md"
+                  className={[
+                    'flex h-full flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-5 transition-all hover:-translate-y-0.5 hover:border-cheese-300 hover:shadow-md',
+                    isCompletedSeason ? 'grayscale opacity-60 hover:opacity-100' : '',
+                  ].join(' ')}
                 >
                   {activity.seasonId && seasonTitle(activity.seasonId) && (
                     <span className="text-xs font-semibold text-cheese-600">
