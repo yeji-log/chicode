@@ -68,6 +68,38 @@ const LAB_TABS = [
 
 type LabTabKey = (typeof LAB_TABS)[number]['key']
 
+/**
+ * 활동을 시즌(로드맵) 순서대로 묶는다 — "활동 목록"과 "강조 활동" 선택 둘 다
+ * 로드맵별로 구분해 달라는 요청으로 추가했다. seasons 는 이미 listSeasons()가
+ * order asc로 정렬해서 주므로 그 순서를 그대로 따르면 된다. seasonId 가
+ * 비어 있는(어느 시즌에도 안 속한) 활동은 "미지정" 그룹으로 모아 맨 끝에 둔다.
+ */
+function groupBySeason<T extends { seasonId: string }>(
+  items: T[],
+  seasons: LabSeason[],
+): { id: string; title: string; items: T[] }[] {
+  const bySeasonId = new Map<string, T[]>()
+  for (const item of items) {
+    const key = item.seasonId || ''
+    const list = bySeasonId.get(key)
+    if (list) list.push(item)
+    else bySeasonId.set(key, [item])
+  }
+
+  const groups = seasons
+    .map((season) => ({
+      id: season.id,
+      title: `${season.emoji ? `${season.emoji} ` : ''}${season.title}`,
+      items: bySeasonId.get(season.id) ?? [],
+    }))
+    .filter((group) => group.items.length > 0)
+
+  const unassigned = bySeasonId.get('') ?? []
+  if (unassigned.length > 0) groups.push({ id: '', title: '미지정', items: unassigned })
+
+  return groups
+}
+
 export default function TeacherLab({ uploaderEmail }: { uploaderEmail: string }) {
   const [tab, setTab] = useState<LabTabKey>('settings')
 
@@ -104,21 +136,34 @@ function HomeSettingsPanel() {
   const [featuredActivityIds, setFeaturedActivityIds] = useState<string[]>([])
   const [pin, setPin] = useState('')
   const [publishedActivities, setPublishedActivities] = useState<LabActivity[]>([])
+  const [seasons, setSeasons] = useState<LabSeason[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
 
   useEffect(() => {
-    Promise.all([getHomeSettings(), listActivities({ publishedOnly: true })])
-      .then(([settings, activities]) => {
+    Promise.all([getHomeSettings(), listActivities({ publishedOnly: true }), listSeasons()])
+      .then(([settings, activities, seasonList]) => {
         setTodayMissionText(settings.todayMissionText)
         setFeaturedActivityIds(settings.featuredActivityIds)
         setPin(settings.pin)
         setPublishedActivities(activities)
+        setSeasons(seasonList)
       })
       .finally(() => setLoading(false))
   }, [])
+
+  // 종료된 시즌(로드맵에서 "완료" 처리한 시즌)의 활동은 강조 활동으로 새로
+  // 고를 이유가 없으니 선택 목록에서 뺀다. 로드맵별로 묶어서 보여주면
+  // 교사가 어떤 시즌의 활동인지 한눈에 파악하기 쉽다는 요청도 함께 반영.
+  const endedSeasonIds = new Set(
+    seasons.filter((season) => season.status === '완료').map((season) => season.id),
+  )
+  const selectableActivities = publishedActivities.filter(
+    (activity) => !endedSeasonIds.has(activity.seasonId),
+  )
+  const groupedSelectableActivities = groupBySeason(selectableActivities, seasons)
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault()
@@ -197,30 +242,35 @@ function HomeSettingsPanel() {
 
       <div className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
         강조 활동 (선택, 여러 개 가능)
-        {publishedActivities.length === 0 ? (
+        {selectableActivities.length === 0 ? (
           <p className="rounded-lg border border-dashed border-cream-deep px-3 py-2 text-xs font-normal text-ink-500">
             아직 공개된 활동이 없습니다.
           </p>
         ) : (
-          <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-lg border border-cream-deep bg-white p-2">
-            {publishedActivities.map((activity) => (
-              <label
-                key={activity.id}
-                className="flex items-center gap-2 rounded px-1.5 py-1 text-sm font-normal text-ink-900 hover:bg-cream"
-              >
-                <input
-                  type="checkbox"
-                  checked={featuredActivityIds.includes(activity.id)}
-                  onChange={() => toggleFeatured(activity.id)}
-                />
-                {activity.title}
-              </label>
+          <div className="flex max-h-64 flex-col gap-3 overflow-y-auto rounded-lg border border-cream-deep bg-white p-2">
+            {groupedSelectableActivities.map((group) => (
+              <div key={group.id || '미지정'} className="flex flex-col gap-1">
+                <p className="px-1.5 text-xs font-bold text-ink-500">{group.title}</p>
+                {group.items.map((activity) => (
+                  <label
+                    key={activity.id}
+                    className="flex items-center gap-2 rounded px-1.5 py-1 text-sm font-normal text-ink-900 hover:bg-cream"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={featuredActivityIds.includes(activity.id)}
+                      onChange={() => toggleFeatured(activity.id)}
+                    />
+                    {activity.title}
+                  </label>
+                ))}
+              </div>
             ))}
           </div>
         )}
         <span className="text-xs font-normal text-ink-500">
-          Lab 홈에 &quot;활동 이어가기&quot; 버튼으로 각각 표시됩니다. 공개된 활동만 고를 수
-          있습니다.
+          Lab 홈에 &quot;활동 이어가기&quot; 버튼으로 각각 표시됩니다. 공개된 활동 중 로드맵이
+          &quot;완료&quot; 상태인 시즌의 활동은 뺐습니다.
         </span>
       </div>
 
@@ -595,9 +645,6 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
     listSeasons().then(setSeasons)
   }, [])
 
-  const seasonTitle = (seasonId: string) =>
-    seasons.find((season) => season.id === seasonId)?.title ?? null
-
   async function refresh() {
     setLoading(true)
     const list = await listActivities()
@@ -819,45 +866,52 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
             아직 만든 활동이 없습니다.
           </p>
         ) : (
-          <ul className="divide-y divide-cream-deep overflow-hidden rounded-2xl border border-cream-deep bg-white/70">
-            {activities.map((activity) => (
-              <li key={activity.id} className="flex items-center gap-4 px-5 py-3.5">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-ink-900">{activity.title}</p>
-                  <p className="truncate text-xs text-ink-500">
-                    {seasonTitle(activity.seasonId) ?? '미지정'} · 난이도 {activity.difficulty}
-                  </p>
-                </div>
-                <div className="ml-auto flex shrink-0 items-center gap-3">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-ink-600">
-                    <ToggleSwitch
-                      checked={activity.published}
-                      disabled={togglingId === activity.id}
-                      onChange={() => togglePublished(activity)}
-                      label={`${activity.title} 공개 여부`}
-                    />
-                    {activity.published ? (
-                      <span className="font-semibold text-cheese-600">공개됨</span>
-                    ) : (
-                      <span>임시저장</span>
-                    )}
-                  </label>
-                  <button
-                    onClick={() => startEdit(activity)}
-                    className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
-                  >
-                    수정
-                  </button>
-                  <button
-                    onClick={() => handleDelete(activity)}
-                    className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
-                  >
-                    삭제
-                  </button>
-                </div>
-              </li>
+          <div className="flex flex-col gap-5">
+            {groupBySeason(activities, seasons).map((group) => (
+              <div key={group.id || '미지정'} className="flex flex-col gap-2">
+                <h3 className="text-sm font-bold text-ink-700">
+                  {group.title} ({group.items.length})
+                </h3>
+                <ul className="divide-y divide-cream-deep overflow-hidden rounded-2xl border border-cream-deep bg-white/70">
+                  {group.items.map((activity) => (
+                    <li key={activity.id} className="flex items-center gap-4 px-5 py-3.5">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-ink-900">{activity.title}</p>
+                        <p className="truncate text-xs text-ink-500">난이도 {activity.difficulty}</p>
+                      </div>
+                      <div className="ml-auto flex shrink-0 items-center gap-3">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-ink-600">
+                          <ToggleSwitch
+                            checked={activity.published}
+                            disabled={togglingId === activity.id}
+                            onChange={() => togglePublished(activity)}
+                            label={`${activity.title} 공개 여부`}
+                          />
+                          {activity.published ? (
+                            <span className="font-semibold text-cheese-600">공개됨</span>
+                          ) : (
+                            <span>임시저장</span>
+                          )}
+                        </label>
+                        <button
+                          onClick={() => startEdit(activity)}
+                          className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+                        >
+                          수정
+                        </button>
+                        <button
+                          onClick={() => handleDelete(activity)}
+                          className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </section>
     </div>
