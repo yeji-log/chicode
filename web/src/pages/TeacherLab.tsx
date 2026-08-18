@@ -262,7 +262,20 @@ function emptySeasonForm(order = 0): SeasonFormState {
   }
 }
 
-const SEASON_STATUSES: LabSeason['status'][] = ['진행중', '준비중', '완료']
+const SEASON_STATUSES: LabSeason['status'][] = ['준비중', '진행중', '완료']
+
+/** 상태 버튼이 선택됐을 때의 색 — 준비중은 원래 쓰던 치즈색 그대로 두고,
+ *  진행중/완료는 한눈에 구분되도록 초록/빨강을 새로 씀. */
+function seasonStatusActiveClass(status: LabSeason['status']): string {
+  switch (status) {
+    case '진행중':
+      return 'bg-green-500 text-white'
+    case '완료':
+      return 'bg-red-500 text-white'
+    default:
+      return 'bg-cheese-400 text-ink-900'
+  }
+}
 
 function SeasonsPanel() {
   const [seasons, setSeasons] = useState<LabSeason[]>([])
@@ -484,7 +497,7 @@ function SeasonsPanel() {
                         className={[
                           'rounded-full px-2.5 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                           season.status === status
-                            ? 'bg-cheese-400 text-ink-900'
+                            ? seasonStatusActiveClass(status)
                             : 'border border-cream-deep text-ink-500 hover:border-cheese-300',
                         ].join(' ')}
                       >
