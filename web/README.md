@@ -109,7 +109,7 @@ Google 로그인 → Firestore teachers/{이메일} 존재? → 교사 페이지
 후보를 추리는 것까지만 하고, 요약·"왜 중요한가"·최종 3~5개 선정은 교사가 직접 한다.
 
 ```
-GitHub Actions (매일 KST 06:00, .github/workflows/daily-news.yml)
+GitHub Actions (매일 KST 05:00, .github/workflows/daily-news.yml)
   → scripts/fetch-news.mjs 가 국내외 공식/기업 블로그 RSS 수집
   → 키워드로 분야 태깅(안 맞으면 버림)
   → 영어 소스만 한글로 번역(국내 소스는 이미 한글이라 건너뜀)
@@ -133,9 +133,12 @@ GitHub Actions (매일 KST 06:00, .github/workflows/daily-news.yml)
 - **RSS 소스는 실제로 curl 로 하나하나 확인한 것만 넣었다** (`scripts/fetch-news.mjs`
   상단 주석 참고). 해외: OpenAI·Google DeepMind·Google AI Blog·NVIDIA·Meta·Amazon
   Science·Hugging Face·GitHub Blog. 국내: 네이버 D2·카카오·우아한형제들·쿠팡·토스·
-  뱅크샐러드·LY Corp(LINE). Anthropic 공식 블로그·Microsoft AI 블로그·SOCAR·컬리는
-  확인 시점에 RSS가 없거나(404) 막혀 있어(403/410) 뺐다 — 나중에 다시 확인해서
-  추가할 수 있다.
+  뱅크샐러드·LY Corp(LINE)·삼성 뉴스룸·SK hynix 뉴스룸·왓챠·무신사 기술블로그·
+  하이퍼커넥트·NHN Cloud Meetup·원티드. Anthropic 공식 블로그·Microsoft AI 블로그·
+  SOCAR·컬리·LG 계열은 확인 시점에 RSS가 없거나(404) 막혀 있거나(403/410) HTML
+  페이지만 나와서 뺐다 — 나중에 다시 확인해서 추가할 수 있다. 우아한형제들은
+  로컬에서는 되는데 GitHub Actions 러너에서만 403이 나는 게 확인돼서, 소스는
+  남겨뒀지만 실제로는 잘 안 잡힐 수 있다.
 - 분야 태깅 키워드 사전(`CATEGORY_KEYWORDS`)은 영어·한글을 함께 담고, 단어 경계를
   로마자·숫자 기준으로만 판단하는 lookaround 매칭을 쓴다 — 처음엔 정규식 `\b` 를
   썼는데 `\b` 는 한글을 "단어 문자"로 인정하지 않아 한글 키워드가 단 하나도 안

@@ -26,7 +26,10 @@
  * RSS가 없거나(404) 막혀 있었다(403/410). 나중에 다시 확인해서 추가할 수 있다.
  *
  * 국내 기업 소스(lang: 'ko')도 같은 방식으로 검증 후 추가했다 — SOCAR(tech.socar.kr,
- * 404)와 컬리(helloworld.kurly.com, 403)는 확인 시점에 없거나 막혀 있어 뺐다.
+ * 404)와 컬리(helloworld.kurly.com, 403)는 확인 시점에 없거나 막혀 있어 뺐다. 이후
+ * 삼성·SK hynix·왓챠·무신사·하이퍼커넥트·NHN Cloud·원티드도 같은 방식으로 추가했다
+ * (LG는 뉴스룸 여러 주소를 시도했지만 RSS가 아니라 HTML 페이지만 나와서 뺐다,
+ * lgcns.com/blog/feed 는 301만 반복돼서 실제 목적지를 못 찾음).
  * 소스마다 lang 을 붙여둔 이유는 아래에서 설명한다(번역·태깅이 언어별로 갈리기
  * 때문).
  *
@@ -65,15 +68,25 @@ const SOURCES = [
   { name: '토스 기술블로그', url: 'https://toss.tech/rss.xml', lang: 'ko' },
   { name: '뱅크샐러드 기술블로그', url: 'https://blog.banksalad.com/rss.xml', lang: 'ko' },
   { name: 'LY Corp(LINE) 기술블로그', url: 'https://techblog.lycorp.co.jp/ko/feed/index.xml', lang: 'ko' },
+  { name: '삼성 뉴스룸', url: 'https://news.samsung.com/kr/feed', lang: 'ko' },
+  { name: 'SK hynix 뉴스룸', url: 'https://news.skhynix.co.kr/feed/', lang: 'ko' },
+  { name: '왓챠', url: 'https://medium.com/feed/watcha', lang: 'ko' },
+  { name: '무신사 기술블로그', url: 'https://medium.com/feed/musinsa-tech', lang: 'ko' },
+  { name: '하이퍼커넥트', url: 'https://hyperconnect.github.io/feed.xml', lang: 'ko' },
+  { name: 'NHN Cloud Meetup', url: 'https://meetup.nhncloud.com/rss', lang: 'ko' },
+  { name: '원티드', url: 'https://medium.com/feed/wantedjobs', lang: 'ko' },
 ]
 
 // 기획서 4번 "뉴스 수집 분야"를 그대로 사전으로 옮긴 것 — 영어·한글 키워드를 같이
 // 넣어 소스 언어에 상관없이 한 사전으로 태깅한다. 이건 LLM 없이 하는 1차 필터라
 // 정교하지 않다 — 교사가 후보를 보고 최종 판단한다는 전제로 "일단 거르는" 역할만
-// 한다. tagCategory 는 단어 경계(\b)로 매칭하므로 "AI"·"IT" 처럼 짧은 키워드를
-// 넣어도 "chair"(ai 포함)나 "it"(대명사) 같은 데서 오탐하지 않는다.
+// 한다. tagCategory 는 단어 경계 lookaround 로 매칭하므로(아래 함수 설명 참고)
+// "ai" 처럼 짧은 키워드를 넣어도 "chair" 안의 ai 같은 데서 오탐하지 않는다 — 단,
+// "it"(대명사)은 여전히 뺐다, 영어 문장 어디에나 나오는 단어라 짧은 키워드로 넣기엔
+// 너무 위험하다.
 const CATEGORY_KEYWORDS = {
   ai: [
+    'ai',
     'generative ai',
     'gpt',
     'llm',

@@ -1,11 +1,12 @@
 name: Fetch daily AI/IT news candidates
 
-# 매일 KST 06:00(=UTC 21:00 전날)에 실행한다. 교사가 07:00에 Teacher 페이지를
-# 열었을 때 이미 후보가 쌓여 있도록, 검토 시각보다 1시간 여유를 둔다 —
-# GitHub Actions의 cron은 정시를 보장하지 않고 몇 분 밀릴 수 있어서다.
+# 매일 KST 05:00(=UTC 20:00 전날)에 실행한다. 교사가 07:00에 Teacher 페이지를
+# 열었을 때 이미 후보가 쌓여 있도록, 검토 시각보다 2시간 여유를 둔다 —
+# GitHub Actions의 cron은 정시를 보장하지 않고 몇 분(때로는 그 이상) 밀릴 수
+# 있어서다(실제로 06:00으로 걸어뒀을 때 06:49에 도는 걸 확인했다).
 on:
   schedule:
-    - cron: '0 21 * * *'
+    - cron: '0 20 * * *'
   workflow_dispatch:
 
 jobs:
