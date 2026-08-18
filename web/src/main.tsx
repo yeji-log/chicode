@@ -7,6 +7,7 @@ import './index.css'
 import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
 import Home from './pages/Home'
+import News from './pages/News'
 import Materials from './pages/Materials'
 import SubjectMaterials from './pages/SubjectMaterials'
 import Practice from './pages/Practice'
@@ -32,6 +33,7 @@ createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route path="/" element={<App />}>
             <Route index element={<Home />} />
+            <Route path="news" element={<News />} />
             <Route path="materials" element={<Materials />} />
             <Route path="materials/:subjectId" element={<SubjectMaterials />} />
             <Route path="practice" element={<Practice />} />

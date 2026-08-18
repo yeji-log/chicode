@@ -32,6 +32,7 @@ npm run dev
 | 경로 | 내용 |
 | --- | --- |
 | `/` | 브랜드 메인 |
+| `/news` | 오늘의 AI·IT 이슈 (학생) |
 | `/materials` | 수업자료 목록·뷰어·다운로드 (학생) |
 | `/practice` | 실습 선택 (Python / C / Pico) |
 | `/practice/python` | Python 에디터 + 실행 결과 |
@@ -96,40 +97,58 @@ Google 로그인 → Firestore teachers/{이메일} 존재? → 교사 페이지
 설정값은 `.env.local` 에 둔다 (`.env.example` 참고). 이 값들은 비밀이 아니며 빌드되면
 브라우저에 노출된다 — 실제 통제는 위의 보안 규칙이 담당한다.
 
-## 오늘의 AI·IT 이슈 (홈 화면)
+## 오늘의 AI·IT 이슈 (`/news`)
 
-홈 화면(`/`)에 학생용 AI·IT 뉴스 카드 섹션이 있다. **자동 수집 + 사람 검토**로
-나눈 2단계 구조다 — LLM(Claude API 등)으로 요약·중요도 판단까지 자동화하는 방법도
-검토했지만, 그러면 "서버 비용 0원" 원칙이 깨지고 확인 안 된 요약이 그대로 학생에게
-노출될 위험도 있어 채택하지 않았다. 대신 자동화는 후보를 추리는 것까지만 하고,
-요약·"왜 중요한가"·최종 3~5개 선정은 교사가 직접 한다.
+홈 화면 히어로의 "🔥 오늘의 AI·IT 이슈" 버튼(수업자료 보기 옆)을 누르면 들어가는
+전용 페이지다. 처음엔 홈 화면 아래에 카드를 바로 그렸는데, 홈 화면은 짧게 유지하고
+뉴스는 보고 싶을 때 들어가서 보게 해달라는 요청으로 전용 페이지로 옮겼다.
+
+**자동 수집 + 사람 검토**로 나눈 2단계 구조다 — LLM(Claude API 등)으로 요약·중요도
+판단까지 자동화하는 방법도 검토했지만, 그러면 "서버 비용 0원" 원칙이 깨지고 확인
+안 된 요약이 그대로 학생에게 노출될 위험도 있어 채택하지 않았다. 대신 자동화는
+후보를 추리는 것까지만 하고, 요약·"왜 중요한가"·최종 3~5개 선정은 교사가 직접 한다.
 
 ```
 GitHub Actions (매일 KST 06:00, .github/workflows/daily-news.yml)
-  → scripts/fetch-news.mjs 가 공식 블로그 RSS 수집
-  → 키워드로 분야 태깅(안 맞으면 버림) + 중복 제거
-  → Firebase Admin SDK로 newsCandidates 에 원문만 기록 (교사만 읽음)
+  → scripts/fetch-news.mjs 가 국내외 공식/기업 블로그 RSS 수집
+  → 키워드로 분야 태깅(안 맞으면 버림)
+  → 영어 소스만 한글로 번역(국내 소스는 이미 한글이라 건너뜀)
+  → 중복 제거(이번 배치 내 + 최근 14일 발행분과 대조)
+  → Firebase Admin SDK로 newsCandidates 에 기록 (교사만 읽음)
         ↓
   교사가 /teacher → "오늘의 뉴스" 탭에서 후보 중 골라 요약 작성 후 승인
         ↓
-  newsIssues 로 이동 (읽기 공개) → 홈 화면 카드로 노출
+  newsIssues 로 이동 (읽기 공개) → /news 페이지에 카드로 노출
 ```
 
-- 데이터 계층: `src/lib/news.ts`. 화면은 `src/components/NewsSection.tsx`(학생 홈)와
-  `src/pages/TeacherNews.tsx`(교사 검토)만 이 파일의 함수를 호출한다.
+- 데이터 계층: `src/lib/news.ts`. 화면은 `src/pages/News.tsx`(학생용, `src/components/NewsCard.tsx`
+  로 카드 UI를 재사용)와 `src/pages/TeacherNews.tsx`(교사 검토)만 이 파일의 함수를 호출한다.
 - `newsCandidates` 는 클라이언트 write 를 항상 막아뒀다(`firestore.rules`) — Admin SDK
   는 규칙을 우회하므로 자동화는 그대로 동작하고, 이건 "가짜 후보를 브라우저에서
   써넣는 것"만 막는 용도다. 교사는 delete(건너뛰기)만 가능하다.
+- **번역은 항상 한글로.** 후보는 교사가 처음 볼 때부터 한글이어야 한다는 요구사항이라,
+  영어 소스는 MyMemory 무료 공개 번역 API로 자동 번역한다(가입·API 키 불필요 — DeepL
+  등 키가 필요한 서비스는 "완전 무료 유지" 결정과 안 맞아 제외). 기계번역이라 완벽하진
+  않지만 교사가 발행 전에 다듬는다는 전제로 초안 용도로는 충분하다.
 - **RSS 소스는 실제로 curl 로 하나하나 확인한 것만 넣었다** (`scripts/fetch-news.mjs`
-  상단 주석 참고). Anthropic 공식 블로그와 Microsoft AI 블로그는 확인 시점에
-  RSS가 없거나(404) 막혀 있어(403/410) 뺐다 — 나중에 다시 확인해서 추가할 수 있다.
+  상단 주석 참고). 해외: OpenAI·Google DeepMind·Google AI Blog·NVIDIA·Meta·Amazon
+  Science·Hugging Face·GitHub Blog. 국내: 네이버 D2·카카오·우아한형제들·쿠팡·토스·
+  뱅크샐러드·LY Corp(LINE). Anthropic 공식 블로그·Microsoft AI 블로그·SOCAR·컬리는
+  확인 시점에 RSS가 없거나(404) 막혀 있어(403/410) 뺐다 — 나중에 다시 확인해서
+  추가할 수 있다.
+- 분야 태깅 키워드 사전(`CATEGORY_KEYWORDS`)은 영어·한글을 함께 담고, 단어 경계를
+  로마자·숫자 기준으로만 판단하는 lookaround 매칭을 쓴다 — 처음엔 정규식 `\b` 를
+  썼는데 `\b` 는 한글을 "단어 문자"로 인정하지 않아 한글 키워드가 단 하나도 안
+  걸리는 버그가 있었다(직접 돌려서 확인).
 - 이 워크플로가 실제로 동작하려면 **GitHub 저장소 Secret**
   `FIREBASE_SERVICE_ACCOUNT_KEY` 를 등록해야 한다. Firebase 콘솔 → 프로젝트 설정 →
   서비스 계정 → "새 비공개 키 생성" 으로 받은 JSON 파일 전체 내용을 그대로 붙여넣는다.
-  등록 전에는 워크플로가 실패하는 게 정상이다.
+  firebase-admin 12+ 는 ESM에서 `admin.credential.cert()` 같은 옛 네임스페이스 API가
+  안 통한다 — `firebase-admin/app`·`firebase-admin/firestore` 모듈형 API를 쓴다
+  (실제로 옛 방식으로 돌려서 오류 확인 후 바꿈).
 - `firestore.rules` 를 고쳤으므로 배포 전이라면 아래 "배포" 절의
   `npx firebase deploy --only firestore:rules` 를 실행해야 실제로 반영된다 — 배포 전엔
-  홈 화면이 `permission-denied` 를 조용히 삼키고 섹션 자체를 안 그린다(의도한 동작).
+  `/news` 가 `permission-denied` 를 조용히 삼키고 빈 상태로 보인다(의도한 동작).
 - 이미지(썸네일)는 없다 — 학교 네트워크가 외부 이미지를 막을 수 있어 텍스트 카드만
   쓰기로 했다. 뉴스 상세 페이지, "관련 개념/프로젝트" 연결은 아직 없다(연결할
   개념 페이지·`/projects` 콘텐츠 자체가 없어서 다음 단계로 미룸).

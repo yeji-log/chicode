@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 
 import FeatureCard from '../components/FeatureCard'
-import NewsSection from '../components/NewsSection'
 import { asset } from '../lib/asset'
 
 export default function Home() {
@@ -67,6 +66,12 @@ export default function Home() {
             >
               수업자료 보기
             </Link>
+            <Link
+              to="/news"
+              className="rounded-xl border border-cream-deep bg-white/60 px-5 py-3 font-bold text-ink-700 transition-colors hover:border-cheese-300"
+            >
+              🔥 오늘의 AI·IT 이슈
+            </Link>
           </div>
         </div>
       </section>
@@ -88,8 +93,6 @@ export default function Home() {
           나만의 작품과 프로젝트를 만들어 보세요.
         </FeatureCard>
       </section>
-
-      <NewsSection />
     </div>
   )
 }
