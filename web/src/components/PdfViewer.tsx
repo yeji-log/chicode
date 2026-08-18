@@ -80,10 +80,16 @@ export default function PdfViewer({
   const isControlled = controlledPage !== undefined
   const page = isControlled ? controlledPage! : internalPage
 
+  // onPageChange 는 "제어"(page prop)와 별개로 "지금 몇 쪽인지 알림" 용도로도
+  // 쓴다 — 제어되지 않는(우연히 그냥 훑어보는) 뷰어에서도 항상 부른다.
+  // 발표 시작 페이지를 "지금 보고 있는 쪽"과 자동으로 맞추려는 쓰임이 있어서다.
   function goToPage(next: number) {
     const clamped = Math.max(1, Math.min(pageCount || 1, next))
     if (isControlled) onPageChange?.(clamped)
-    else setInternalPage(clamped)
+    else {
+      setInternalPage(clamped)
+      onPageChange?.(clamped)
+    }
   }
 
   useEffect(() => {
@@ -116,7 +122,10 @@ export default function PdfViewer({
         documentRef.current = loaded
         setPageCount(loaded.numPages)
         onPageCountChange?.(loaded.numPages)
-        if (!isControlled) setInternalPage(1)
+        if (!isControlled) {
+          setInternalPage(1)
+          onPageChange?.(1)
+        }
         setLoading(false)
       } catch (caught) {
         if (cancelled) return

@@ -23,10 +23,14 @@ export default function PptxSlideViewer({
   pptxFile,
   pdfFile,
   filename,
+  onPageChange,
 }: {
   pptxFile: Blob | null
   pdfFile: Blob | null
   filename: string
+  /** 지금 보고 있는 쪽 번호가 바뀔 때마다 알려준다 — "발표 시작"이 지금
+   *  보고 있는 쪽에서 그대로 이어지게 하려는 용도(LabActivityDetail). */
+  onPageChange?: (page: number) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<PptxPreviewer | null>(null)
@@ -57,6 +61,7 @@ export default function PptxSlideViewer({
         if (!viewer.slideCount) throw new Error('슬라이드를 찾지 못함')
         setSlideCount(viewer.slideCount)
         setSlideIndex(1)
+        onPageChange?.(1)
         setState('pptx-ok')
       } catch (caught) {
         console.error('pptx 렌더링 실패, PDF로 대체합니다', caught)
@@ -74,7 +79,7 @@ export default function PptxSlideViewer({
   }, [pptxFile, pdfFile])
 
   if (state === 'fallback' && pdfFile) {
-    return <PdfViewer file={pdfFile} filename={filename} />
+    return <PdfViewer file={pdfFile} filename={filename} onPageChange={onPageChange} />
   }
 
   if (state === 'failed') {
@@ -103,7 +108,11 @@ export default function PptxSlideViewer({
           <button
             onClick={() => {
               viewerRef.current?.renderPreSlide()
-              setSlideIndex((i) => Math.max(1, i - 1))
+              setSlideIndex((i) => {
+                const next = Math.max(1, i - 1)
+                onPageChange?.(next)
+                return next
+              })
             }}
             disabled={slideIndex <= 1}
             className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:opacity-40"
@@ -116,7 +125,11 @@ export default function PptxSlideViewer({
           <button
             onClick={() => {
               viewerRef.current?.renderNextSlide()
-              setSlideIndex((i) => Math.min(slideCount, i + 1))
+              setSlideIndex((i) => {
+                const next = Math.min(slideCount, i + 1)
+                onPageChange?.(next)
+                return next
+              })
             }}
             disabled={slideIndex >= slideCount}
             className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:opacity-40"
