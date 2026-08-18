@@ -2,7 +2,9 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import CodeBlock from '../components/CodeBlock'
 import { getActivity, getSeason, type LabActivity } from '../lib/labs'
+import { linkify } from '../lib/linkify'
 
 /** /lab/activities/:id — 설계안 5절 활동 페이지 템플릿. */
 export default function LabActivityDetail() {
@@ -67,9 +69,7 @@ export default function LabActivityDetail() {
       <Section title="회로">{activity.circuit}</Section>
       {activity.code && (
         <Section title="코드">
-          <pre className="overflow-x-auto rounded-xl bg-ink-900 p-4 font-mono text-sm whitespace-pre-wrap text-cream">
-            {activity.code}
-          </pre>
+          <CodeBlock code={activity.code} />
         </Section>
       )}
       <Section title="실습">{activity.practice}</Section>
@@ -102,7 +102,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6">
       <h2 className="font-bold text-ink-900">{title}</h2>
-      <div className="text-sm leading-relaxed whitespace-pre-wrap text-ink-700">{children}</div>
+      <div className="text-sm leading-relaxed whitespace-pre-wrap text-ink-700">
+        {typeof children === 'string' ? linkify(children) : children}
+      </div>
     </section>
   )
 }
