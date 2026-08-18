@@ -45,6 +45,7 @@ import {
   uploadSlidePptx,
 } from '../lib/labSlides'
 import { extractNotesFromPptx } from '../lib/pptxNotes'
+import { extractYoutubeId } from '../lib/youtube'
 
 /**
  * 교사 페이지의 Lab 관리 섹션 (Teacher.tsx 에서 불러 쓴다).
@@ -643,6 +644,10 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
           ...section,
           title: section.title.trim() || '이름 없음',
           content: section.isCode ? section.content : section.content.trim(),
+          // Firestore는 필드 값으로 undefined 를 허용하지 않는다(SDK가 던짐) —
+          // 안 쓰면 그냥 빈 문자열로 저장한다(extractYoutubeId('') === null 이라
+          // 렌더링 쪽에서 자동으로 무시됨).
+          videoUrl: (section.videoUrl ?? '').trim(),
         })),
         materialUrl: form.materialUrl.trim(),
         updatedBy: uploaderEmail,
@@ -1161,6 +1166,21 @@ function SortableSectionRow({
       {section.hasAttachment && (
         <SectionAttachmentUploader activityId={activityId} sectionId={section.id} />
       )}
+
+      <label className="flex flex-col gap-1 text-xs font-semibold text-ink-600">
+        유튜브 영상 링크 (선택 — 긴 영상은 파일 첨부 대신 이쪽을 추천합니다)
+        <input
+          value={section.videoUrl ?? ''}
+          onChange={(event) => onChange({ videoUrl: event.target.value })}
+          placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=..."
+          className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-sm font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+        />
+        {section.videoUrl && !extractYoutubeId(section.videoUrl) && (
+          <span className="font-normal text-red-600">
+            유튜브 링크로 인식하지 못했습니다. 링크를 다시 확인해 주세요.
+          </span>
+        )}
+      </label>
     </div>
   )
 }

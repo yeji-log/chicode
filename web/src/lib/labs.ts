@@ -67,6 +67,11 @@ export interface LabActivitySection {
    *  labSectionAttachments.ts 가 activityId+section.id 를 키로 따로
    *  저장한다 — 문자열이 아니라 여기 담을 수가 없어서다. */
   hasAttachment?: boolean
+  /** 유튜브 영상 링크(선택). hasAttachment 의 mp4 업로드와 달리 파일 자체를
+   *  안 갖고 있고 URL 문자열만 여기 저장한다 — lib/youtube.ts 가 이 문자열에서
+   *  영상 ID를 뽑아 iframe으로 스트리밍한다. 긴 영상은 Firestore 조각
+   *  저장(용량 제한·스트리밍 불가)으로 못 올리니 그 대안으로 추가했다. */
+  videoUrl?: string
 }
 
 export interface LabChecklistItem {

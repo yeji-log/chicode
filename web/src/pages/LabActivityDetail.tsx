@@ -28,6 +28,7 @@ import {
 } from '../lib/labs'
 import { getNotes, getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import { linkify } from '../lib/linkify'
+import { extractYoutubeId, youtubeEmbedUrl } from '../lib/youtube'
 
 const IDLE_PRESENTATION: LabPresentationState = { active: false, currentSlide: 1, updatedAt: 0 }
 
@@ -248,11 +249,33 @@ export default function LabActivityDetail() {
         const attachment = section.hasAttachment && (
           <SectionAttachment activityId={activity.id} sectionId={section.id} />
         )
+        // 유튜브 링크 — mp4 첨부와 달리 파일을 안 갖고 있고 URL만 저장하므로
+        // 여기서 바로 영상 ID를 뽑아 iframe으로 그린다(lib/youtube.ts 설명 참고).
+        // 교사가 인식 못 할 링크를 저장해뒀을 수도 있어 못 뽑으면 조용히 숨김
+        // (교사 화면에서는 저장할 때 미리 경고해준다).
+        const youtubeId = section.videoUrl && extractYoutubeId(section.videoUrl)
+        const youtubeEmbed = youtubeId && (
+          <div className="aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-cream-deep">
+            <iframe
+              src={youtubeEmbedUrl(youtubeId)}
+              title={section.title}
+              className="h-full w-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
+        )
+        const footer = (youtubeEmbed || attachment) && (
+          <div className="flex flex-col gap-3">
+            {youtubeEmbed}
+            {attachment}
+          </div>
+        )
 
         if (section.isCode) {
           return (
-            (section.content || attachment) && (
-              <Section key={section.id} title={section.title} footer={attachment}>
+            (section.content || footer) && (
+              <Section key={section.id} title={section.title} footer={footer}>
                 {section.content && <CodeBlock code={section.content} />}
               </Section>
             )
@@ -260,7 +283,7 @@ export default function LabActivityDetail() {
         }
 
         return (
-          <Section key={section.id} title={section.title} footer={attachment}>
+          <Section key={section.id} title={section.title} footer={footer}>
             {section.content}
           </Section>
         )
