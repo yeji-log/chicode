@@ -68,6 +68,7 @@ export default function App() {
       <footer className="border-t border-cream-deep px-5 py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-500">
           <p>CHICODE — 치즈처럼 즐겁게, 코드처럼 단단하게.</p>
+          <p>© CHICODE. All rights reserved.</p>
 
           <div className="ml-auto flex items-center gap-4">
             <button

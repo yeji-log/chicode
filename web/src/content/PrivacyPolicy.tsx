@@ -76,9 +76,16 @@ export default function PrivacyPolicy() {
                 </td>
               </tr>
               <tr className="border-t border-cream-deep align-top">
+                <td className="px-3 py-2">Vercel</td>
+                <td className="px-3 py-2">웹사이트 정적 파일 호스팅 (대표 주소)</td>
+                <td className="px-3 py-2 text-ink-500">Vercel Inc. 글로벌 인프라</td>
+              </tr>
+              <tr className="border-t border-cream-deep align-top">
                 <td className="px-3 py-2">GitHub Pages</td>
-                <td className="px-3 py-2">웹사이트 정적 파일 호스팅</td>
-                <td className="px-3 py-2 text-ink-500">GitHub(Microsoft) 인프라</td>
+                <td className="px-3 py-2">웹사이트 정적 파일 호스팅 (보조 주소)</td>
+                <td className="px-3 py-2 text-ink-500">
+                  GitHub(Microsoft) 인프라. 이 주소에서는 교사 로그인이 지원되지 않습니다.
+                </td>
               </tr>
             </tbody>
           </table>
@@ -98,18 +105,26 @@ export default function PrivacyPolicy() {
             저장소(IndexedDB)에 보관되며, Firebase Authentication이 관리합니다.
           </li>
           <li>
-            <strong>실습 코드 저장</strong> — Python 실습 화면에서 작성한 코드는
-            새로고침해도 남아 있도록 브라우저의 localStorage에 저장됩니다. 이 정보는
-            이용자의 기기에만 저장되며 서버로 전송되지 않습니다.
+            <strong>실습 코드 저장</strong> — Python·C 실습 화면에서 작성한 코드와
+            표준입력 값은 새로고침해도 남아 있도록 브라우저의 localStorage에 저장됩니다.
+            이 정보는 이용자의 기기에만 저장되며 서버로 전송되지 않습니다.
+          </li>
+          <li>
+            <strong>과목 잠금 해제 상태 저장</strong> — 수업자료 과목 선택 화면에서
+            핀번호를 입력해 잠금을 해제하면, 그 상태는 브라우저의 sessionStorage에
+            과목별로 저장됩니다. 탭이나 브라우저를 닫으면 사라지며, 공용 컴퓨터에서는
+            다음 이용자가 다시 핀번호를 입력해야 합니다.
           </li>
         </ul>
       </PolicyArticle>
 
-      <PolicyArticle num="제6조" title="Python 코드 실행에 관한 사항">
+      <PolicyArticle num="제6조" title="Python·C 코드 실행에 관한 사항">
         <p>
-          CHICODE의 Python 실습은 서버가 아니라 이용자의 브라우저 안에서 실행됩니다
-          (Pyodide/WebAssembly). 작성한 코드와 실행 결과는 CHICODE 서버로 전송되지
-          않으며, 별도로 저장·수집되지 않습니다.
+          CHICODE의 Python·C 실습은 서버가 아니라 이용자의 브라우저 안에서 실행됩니다.
+          Python은 Pyodide(WebAssembly로 컴파일된 CPython)를, C는 브라우저에서 직접
+          동작하는 clang.wasm을 이용해 컴파일·링크·실행까지 전부 처리합니다. 작성한
+          코드, 표준입력 값, 실행 결과 모두 CHICODE 서버로 전송되지 않으며, 별도로
+          저장·수집되지 않습니다.
         </p>
       </PolicyArticle>
 

@@ -17,7 +17,7 @@ export default function TermsOfService() {
         <ol>
           <li>
             <strong>서비스</strong> — CHICODE가 웹사이트를 통해 제공하는 수업자료, 실습
-            (Python, 향후 Pico 2 W 등), 프로젝트 관련 기능 일체
+            (Python, C, 향후 Pico 2 W 등), 프로젝트 관련 기능 일체
           </li>
           <li>
             <strong>학생</strong> — 별도의 로그인 없이 서비스를 이용하는 이용자
@@ -48,8 +48,8 @@ export default function TermsOfService() {
           <li>
             서비스는 다음과 같은 기능을 제공합니다.
             <ul>
-              <li>수업자료 열람 및 다운로드</li>
-              <li>브라우저 기반 Python 코드 작성 및 실행</li>
+              <li>수업자료 열람 및 다운로드 (과목별 핀번호 입력 후 열람)</li>
+              <li>브라우저 기반 Python·C 코드 작성 및 컴파일·실행</li>
               <li>향후 제공 예정 — 프로젝트, Pico 2 W 실습, 동아리(Lab) 활동 지원 등</li>
             </ul>
           </li>
@@ -68,6 +68,10 @@ export default function TermsOfService() {
           <li>
             교사는 사전에 서비스 운영자에게 등록된 Google 계정으로만 로그인할 수 있으며,
             등록되지 않은 계정은 교사 기능을 이용할 수 없습니다.
+          </li>
+          <li>
+            수업자료는 과목별로 핀번호를 입력해야 열람할 수 있습니다. 이 핀번호는 수업
+            목적의 가벼운 접근 제한 장치이며, 개인 인증 수단이 아닙니다.
           </li>
         </ol>
       </PolicyArticle>
@@ -116,8 +120,8 @@ export default function TermsOfService() {
             가용성, 정확성, 완전성을 보장하지 않습니다.
           </li>
           <li>
-            서비스 운영자는 천재지변, 서비스 제공업체(Google Firebase, GitHub 등)의 장애
-            등 통제할 수 없는 사유로 인한 서비스 중단에 대해 책임을 지지 않습니다.
+            서비스 운영자는 천재지변, 서비스 제공업체(Google Firebase, Vercel, GitHub 등)의
+            장애 등 통제할 수 없는 사유로 인한 서비스 중단에 대해 책임을 지지 않습니다.
           </li>
           <li>
             서비스 운영자는 이용자가 서비스를 이용하여 얻은 정보나 실습 결과의 정확성에
