@@ -32,7 +32,12 @@ export default function PptxSlideViewer({
    *  보고 있는 쪽에서 그대로 이어지게 하려는 용도(LabActivityDetail). */
   onPageChange?: (page: number) => void
 }) {
+  /** pptx-preview가 실제로 그려넣는 대상. 로딩 중엔 className="hidden"
+   *  (display:none)이라 clientWidth가 0이 된다 — 폭은 반드시 sizingRef에서 잰다. */
   const containerRef = useRef<HTMLDivElement>(null)
+  /** 항상 레이아웃에 남아있는 바깥 wrapper. 실제 렌더 폭(max-w-3xl 등 CSS 제약이
+   *  적용된 값)을 재는 용도로만 쓴다. */
+  const sizingRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<PptxPreviewer | null>(null)
   const [state, setState] = useState<'loading' | 'pptx-ok' | 'fallback' | 'failed'>('loading')
   const [slideIndex, setSlideIndex] = useState(1)
@@ -41,6 +46,7 @@ export default function PptxSlideViewer({
   useEffect(() => {
     let cancelled = false
     const container = containerRef.current
+    const sizing = sizingRef.current
 
     if (!pptxFile || !container) {
       setState(pdfFile ? 'fallback' : 'failed')
@@ -51,7 +57,9 @@ export default function PptxSlideViewer({
       try {
         const { init } = await import('pptx-preview')
         const buf = await pptxFile!.arrayBuffer()
-        const width = container!.clientWidth || 960
+        // container는 로딩 중 display:none이라 clientWidth가 0이다. 항상
+        // 보이는 sizing wrapper에서 실제 렌더 폭을 잰다.
+        const width = sizing?.clientWidth || container!.clientWidth || 960
 
         const viewer = init(container!, { width, height: (width * 9) / 16, mode: 'slide' })
         viewerRef.current = viewer
@@ -95,14 +103,16 @@ export default function PptxSlideViewer({
       {state === 'loading' && (
         <p className="py-8 text-center text-ink-500">발표자료 여는 중…</p>
       )}
-      <div
-        ref={containerRef}
-        className={
-          state === 'pptx-ok'
-            ? 'mx-auto w-full max-w-3xl overflow-hidden rounded-lg border border-cream-deep bg-white'
-            : 'hidden'
-        }
-      />
+      <div ref={sizingRef} className="mx-auto w-full max-w-3xl">
+        <div
+          ref={containerRef}
+          className={
+            state === 'pptx-ok'
+              ? 'overflow-hidden rounded-lg border border-cream-deep bg-white'
+              : 'hidden'
+          }
+        />
+      </div>
       {state === 'pptx-ok' && slideCount > 1 && (
         <div className="flex items-center justify-center gap-4">
           <button
