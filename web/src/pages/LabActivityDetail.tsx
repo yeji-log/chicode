@@ -2,18 +2,40 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthProvider'
 import CodeBlock from '../components/CodeBlock'
+import LabPresentationOverlay from '../components/LabPresentationOverlay'
+import LabPresenter from '../components/LabPresenter'
 import PptxSlideViewer from '../components/PptxSlideViewer'
+import {
+  startPresentation,
+  subscribePresentation,
+  type LabPresentationState,
+} from '../lib/labPresentation'
 import { getActivity, getSeason, type LabActivity } from '../lib/labs'
-import { getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
+import { getNotes, getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import { linkify } from '../lib/linkify'
+
+const IDLE_PRESENTATION: LabPresentationState = { active: false, currentSlide: 1, updatedAt: 0 }
 
 /** /lab/activities/:id — 설계안 5절 활동 페이지 템플릿. */
 export default function LabActivityDetail() {
   const { id } = useParams<{ id: string }>()
+  const { state: authState } = useAuth()
+  const isTeacherViewer = authState === 'teacher'
+
   const [activity, setActivity] = useState<LabActivity | null>(null)
   const [seasonTitle, setSeasonTitle] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const [slideFiles, setSlideFiles] = useState<{ pptx: Blob | null; pdf: Blob | null } | null>(
+    null,
+  )
+  const [notes, setNotes] = useState<string[]>([])
+  const [presentation, setPresentation] = useState<LabPresentationState>(IDLE_PRESENTATION)
+  /** 이 브라우저 탭에서 "발표 시작"을 눌러 지금 직접 조작 중인지. Firestore의
+   *  active 플래그와 별개다 — 다른 기기가 이미 발표 중이면 이 탭은 false다. */
+  const [isPresenting, setIsPresenting] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -27,6 +49,39 @@ export default function LabActivityDetail() {
         }
       })
       .finally(() => setLoading(false))
+  }, [id])
+
+  // 발표자료(PPT/PDF)와 대본 — 대부분의 활동엔 없으므로 메타부터 확인하고,
+  // 있을 때만 실제 파일 조각까지 읽어온다.
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+
+    getSlideSet(id).then(async (meta) => {
+      if (!meta.pptx && !meta.pdf) {
+        if (!cancelled) setSlideFiles(null)
+        return
+      }
+      const [pptx, pdf] = await Promise.all([
+        meta.pptx ? getSlidePptxFile(id) : Promise.resolve(null),
+        meta.pdf ? getSlidePdfFile(id) : Promise.resolve(null),
+      ])
+      if (!cancelled) setSlideFiles({ pptx, pdf })
+    })
+    getNotes(id).then((loaded) => {
+      if (!cancelled) setNotes(loaded)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  // 발표 상태 실시간 구독 — 사이트에서 처음 쓰는 onSnapshot. 교사가 슬라이드를
+  // 넘기면 이 콜백으로 즉시 들어온다.
+  useEffect(() => {
+    if (!id) return
+    return subscribePresentation(id, setPresentation)
   }, [id])
 
   if (loading) return <p className="text-ink-500">불러오는 중…</p>
@@ -48,8 +103,29 @@ export default function LabActivityDetail() {
     )
   }
 
+  // 발표 모드는 PDF가 있어야만 켤 수 있다 — pptx-preview 렌더링이 불안정해서
+  // (PptxSlideViewer 주석 참고) 교사·학생 화면이 정확히 같은 슬라이드 번호로
+  // 맞아떨어지려면 검증된 PdfViewer가 필요하다.
+  const canPresent = isTeacherViewer && !!slideFiles?.pdf
+  const showFollowerOverlay = presentation.active && !isPresenting && !!slideFiles?.pdf
+
+  async function handleStartPresenting() {
+    if (!id) return
+    await startPresentation(id, presentation.currentSlide || 1)
+    setIsPresenting(true)
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      {showFollowerOverlay && slideFiles?.pdf && (
+        <LabPresentationOverlay
+          pdfFile={slideFiles.pdf}
+          currentSlide={presentation.currentSlide}
+          isTeacherViewer={isTeacherViewer}
+          onTakeControl={() => setIsPresenting(true)}
+        />
+      )}
+
       <header className="flex flex-col gap-2">
         <Link to="/lab/activities" className="text-sm font-semibold text-ink-500 underline">
           ← 활동 목록
@@ -78,7 +154,36 @@ export default function LabActivityDetail() {
       <Section title="Mission">{activity.mission}</Section>
       <Section title="Challenge">{activity.challenge}</Section>
 
-      <ActivitySlides activityId={activity.id} />
+      {isPresenting && slideFiles?.pdf && id ? (
+        <LabPresenter
+          activityId={id}
+          pdfFile={slideFiles.pdf}
+          currentSlide={presentation.currentSlide}
+          notes={notes}
+          onExit={() => setIsPresenting(false)}
+        />
+      ) : (
+        slideFiles && (
+          <section className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-bold text-ink-900">발표자료</h2>
+              {canPresent && (
+                <button
+                  onClick={handleStartPresenting}
+                  className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+                >
+                  ▶ {presentation.active ? '발표 제어하기' : '발표 시작'}
+                </button>
+              )}
+            </div>
+            <PptxSlideViewer
+              pptxFile={slideFiles.pptx}
+              pdfFile={slideFiles.pdf}
+              filename="발표자료"
+            />
+          </section>
+        )
+      )}
 
       {activity.materialUrl && (
         <a
@@ -97,49 +202,6 @@ export default function LabActivityDetail() {
 function difficultyStars(difficulty: number): string {
   const filled = Math.max(0, Math.min(5, difficulty))
   return '★'.repeat(filled) + '☆'.repeat(5 - filled)
-}
-
-/**
- * 활동에 첨부된 발표자료(PPT)가 있으면 뷰어로 보여준다. 먼저 메타데이터만
- * 확인해서 아무 것도 없으면(대부분의 활동) 조용히 아무것도 렌더링하지
- * 않는다 — 파일 조각까지 매번 읽어오면 활동 하나 열 때마다 불필요한
- * Firestore 읽기가 늘어난다.
- */
-function ActivitySlides({ activityId }: { activityId: string }) {
-  const [files, setFiles] = useState<{ pptx: Blob | null; pdf: Blob | null } | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    getSlideSet(activityId)
-      .then(async (meta) => {
-        if (!meta.pptx && !meta.pdf) {
-          if (!cancelled) setFiles(null)
-          return
-        }
-        const [pptx, pdf] = await Promise.all([
-          meta.pptx ? getSlidePptxFile(activityId) : Promise.resolve(null),
-          meta.pdf ? getSlidePdfFile(activityId) : Promise.resolve(null),
-        ])
-        if (!cancelled) setFiles({ pptx, pdf })
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [activityId])
-
-  if (loading || !files) return null
-
-  return (
-    <section className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6">
-      <h2 className="font-bold text-ink-900">발표자료</h2>
-      <PptxSlideViewer pptxFile={files.pptx} pdfFile={files.pdf} filename="발표자료" />
-    </section>
-  )
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

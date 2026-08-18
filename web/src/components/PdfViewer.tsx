@@ -32,7 +32,27 @@ type PdfPage = {
   }) => RenderTask
 }
 
-export default function PdfViewer({ file, filename }: { file: Blob; filename: string }) {
+/**
+ * page/onPageChange 를 주면 "제어되는" 뷰어가 된다 — 발표 모드에서 교사의
+ * 조작(또는 실시간으로 받은 슬라이드 번호)을 그대로 반영해야 해서 추가했다.
+ * 안 주면 예전처럼 내부 상태로 알아서 페이지를 넘긴다(SubjectMaterials 등
+ * 기존 쓰임은 그대로 동작).
+ */
+export default function PdfViewer({
+  file,
+  filename,
+  page: controlledPage,
+  onPageChange,
+  onPageCountChange,
+  hideControls,
+}: {
+  file: Blob
+  filename: string
+  page?: number
+  onPageChange?: (page: number) => void
+  onPageCountChange?: (pageCount: number) => void
+  hideControls?: boolean
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const documentRef = useRef<PdfDocument | null>(null)
@@ -43,9 +63,18 @@ export default function PdfViewer({ file, filename }: { file: Blob; filename: st
   const generationRef = useRef(0)
 
   const [pageCount, setPageCount] = useState(0)
-  const [page, setPage] = useState(1)
+  const [internalPage, setInternalPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const isControlled = controlledPage !== undefined
+  const page = isControlled ? controlledPage! : internalPage
+
+  function goToPage(next: number) {
+    const clamped = Math.max(1, Math.min(pageCount || 1, next))
+    if (isControlled) onPageChange?.(clamped)
+    else setInternalPage(clamped)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -71,7 +100,8 @@ export default function PdfViewer({ file, filename }: { file: Blob; filename: st
 
         documentRef.current = loaded
         setPageCount(loaded.numPages)
-        setPage(1)
+        onPageCountChange?.(loaded.numPages)
+        if (!isControlled) setInternalPage(1)
         setLoading(false)
       } catch (caught) {
         if (cancelled) return
@@ -185,10 +215,10 @@ export default function PdfViewer({ file, filename }: { file: Blob; filename: st
         )}
       </div>
 
-      {pageCount > 1 && (
+      {!hideControls && pageCount > 1 && (
         <div className="flex items-center justify-center gap-4 border-t border-cream-deep bg-white px-4 py-2.5">
           <button
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            onClick={() => goToPage(page - 1)}
             disabled={page <= 1}
             className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:opacity-40"
           >
@@ -200,7 +230,7 @@ export default function PdfViewer({ file, filename }: { file: Blob; filename: st
           </span>
 
           <button
-            onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+            onClick={() => goToPage(page + 1)}
             disabled={page >= pageCount}
             className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:opacity-40"
           >

@@ -15,11 +15,17 @@
  * 내려받지 못하게 해야 해서(요구사항) — materials.ts 와 달리 다운로드 링크를
  * 절대 만들지 않는다. Blob 은 화면에 그리는 용도로만 메모리에 올린다.
  *
- *   labSlides/{activityId}/files/pptx   ← PPT 원본 메타 + chunks
- *   labSlides/{activityId}/files/pdf    ← 미리보기용 PDF 메타 + chunks (선택)
+ *   labSlides/{activityId}               ← 발표자 노트(대본), 슬라이드별 배열
+ *   labSlides/{activityId}/files/pptx    ← PPT 원본 메타 + chunks
+ *   labSlides/{activityId}/files/pdf     ← 미리보기용 PDF 메타 + chunks (선택)
+ *
+ * 대본은 PPT의 발표자 노트를 업로드 시점에 자동으로 뽑아온 것이다
+ * (pptxNotes.ts). 교사가 발표 중에 고칠 수 있어야 해서 별도 문서에
+ * 저장하고, PPT를 다시 올리면 새로 추출한 내용으로 덮어쓴다 — 교사가
+ * PPT 자체를 다시 만들어 올렸다면 노트도 새 걸로 보는 게 맞다고 판단했다.
  */
 
-import { doc } from 'firebase/firestore'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 
 import {
   deleteChunkedFile,
@@ -39,6 +45,9 @@ const MAX_SLIDE_FILE_SIZE = 25 * 1024 * 1024
 const LAB_SLIDES = 'labSlides'
 const FILES = 'files'
 
+function slideSetDoc(activityId: string) {
+  return doc(db, LAB_SLIDES, activityId)
+}
 function pptxDoc(activityId: string) {
   return doc(db, LAB_SLIDES, activityId, FILES, 'pptx')
 }
@@ -99,4 +108,23 @@ export function deleteSlidePptx(activityId: string): Promise<void> {
 
 export function deleteSlidePdf(activityId: string): Promise<void> {
   return deleteChunkedFile(pdfDoc(activityId))
+}
+
+/** 슬라이드 순서대로 대본을 돌려준다. 아직 뽑은 적 없으면 빈 배열. */
+export async function getNotes(activityId: string): Promise<string[]> {
+  const snapshot = await getDoc(slideSetDoc(activityId))
+  if (!snapshot.exists()) return []
+  return (snapshot.data().notes as string[] | undefined) ?? []
+}
+
+export async function saveNotes(activityId: string, notes: string[]): Promise<void> {
+  await setDoc(slideSetDoc(activityId), { notes }, { merge: true })
+}
+
+/** 슬라이드 하나의 대본만 고친다 — 발표 중에 실시간으로 손보는 용도. */
+export async function updateNote(activityId: string, slideIndex: number, text: string): Promise<void> {
+  const notes = await getNotes(activityId)
+  while (notes.length < slideIndex) notes.push('')
+  notes[slideIndex - 1] = text
+  await saveNotes(activityId, notes)
 }

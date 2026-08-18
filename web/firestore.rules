@@ -69,14 +69,31 @@ service cloud.firestore {
     // 화면은 뷰어로만 보여주고 다운로드 링크를 만들지 않지만, 그건 프론트엔드
     // 배려일 뿐 — read: true 인 이상 파일 내용 자체는 공개다(subjects/materials
     // 와 같은 "가벼운 잠금" 트레이드오프, 진짜 방지가 필요하면 Blaze 필요).
-    match /labSlides/{activityId}/files/{fileId} {
+    match /labSlides/{activityId} {
+      // 이 문서 자체는 대본(notes 배열)만 담는다. 교사가 발표 중에 실시간으로
+      // 고치므로 학생 읽기는 열어두고, 쓰기는 교사만 허용한다.
       allow read: if true;
       allow create, update, delete: if isTeacher();
 
-      match /chunks/{chunkIndex} {
+      match /files/{fileId} {
         allow read: if true;
         allow create, update, delete: if isTeacher();
+
+        match /chunks/{chunkIndex} {
+          allow read: if true;
+          allow create, update, delete: if isTeacher();
+        }
       }
+    }
+
+    // 발표 모드 실시간 상태(현재 슬라이드 번호). 학생은 로그인이 없어 반/교실을
+    // 구분할 방법이 없으므로 활동 하나당 전역으로 하나만 둔다(labPresentation.ts
+    // 주석 참고 — 사용자가 확인하고 받아들인 트레이드오프). 슬라이드를 넘기는
+    // 건 교사만 할 수 있어야 하므로 쓰기는 isTeacher()로 막는다 — 여기가 실제
+    // 방어선이다, 프론트엔드에서 버튼을 숨기는 건 편의일 뿐.
+    match /labPresentations/{activityId} {
+      allow read: if true;
+      allow create, update, delete: if isTeacher();
     }
   }
 }

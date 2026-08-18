@@ -23,9 +23,11 @@ import {
   deleteSlidePdf,
   deleteSlidePptx,
   getSlideSet,
+  saveNotes,
   uploadSlidePdf,
   uploadSlidePptx,
 } from '../lib/labSlides'
+import { extractNotesFromPptx } from '../lib/pptxNotes'
 
 /**
  * 교사 페이지의 Lab 관리 섹션 (Teacher.tsx 에서 불러 쓴다).
@@ -794,7 +796,17 @@ function SlidesPanel({ activityId }: { activityId: string }) {
     setBusy(true)
     setError(null)
     try {
-      if (pptxFile) await uploadSlidePptx(activityId, pptxFile)
+      if (pptxFile) {
+        await uploadSlidePptx(activityId, pptxFile)
+        // PPT 안의 발표자 노트를 대본으로 자동으로 가져온다 — 교사가 발표
+        // 화면에서 직접 고칠 수 있으니, 여기선 그냥 최초값을 채워두는 것뿐이다.
+        try {
+          const notes = await extractNotesFromPptx(pptxFile)
+          await saveNotes(activityId, notes)
+        } catch (caught) {
+          console.error('발표자 노트 추출 실패 — 대본 없이 진행합니다', caught)
+        }
+      }
       if (pdfFile) await uploadSlidePdf(activityId, pdfFile)
       setSlides(await getSlideSet(activityId))
       setPptxFile(null)
@@ -833,12 +845,14 @@ function SlidesPanel({ activityId }: { activityId: string }) {
         <p className="mt-1 text-xs text-ink-500">
           학생 화면엔 뷰어로만 보이고 다운로드는 안 됩니다. pptx 렌더링이 파일에 따라 깨질 수
           있어서, PDF 버전을 함께 올려두면 pptx가 안 열릴 때 자동으로 PDF를 대신 보여줍니다.
+          PPT의 발표자 노트는 대본으로 자동으로 가져오고, 발표 화면에서 직접 고칠 수 있습니다.
+          <strong className="font-semibold text-ink-700"> "발표 시작"(실시간 진행) 기능은 PDF가 있어야 켤 수 있습니다.</strong>
         </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <SlideSlot label="PPT 원본 (.pptx)" meta={slides.pptx} onDelete={handleDeletePptx} />
-        <SlideSlot label="PDF 버전 (권장, 대체용)" meta={slides.pdf} onDelete={handleDeletePdf} />
+        <SlideSlot label="PDF 버전 (발표 모드에 필수)" meta={slides.pdf} onDelete={handleDeletePdf} />
       </div>
 
       <form onSubmit={handleUpload} className="grid gap-3 sm:grid-cols-2">
