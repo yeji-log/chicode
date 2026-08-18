@@ -10,6 +10,10 @@ import Home from './pages/Home'
 import Materials from './pages/Materials'
 import SubjectMaterials from './pages/SubjectMaterials'
 import Practice from './pages/Practice'
+import LabHome from './pages/LabHome'
+import LabRoadmap from './pages/LabRoadmap'
+import LabActivities from './pages/LabActivities'
+import LabActivityDetail from './pages/LabActivityDetail'
 import Teacher from './pages/Teacher'
 import ComingSoon from './pages/ComingSoon'
 import NotFound from './pages/NotFound'
@@ -69,16 +73,10 @@ createRoot(document.getElementById('root')!).render(
                 />
               }
             />
-            <Route
-              path="lab"
-              element={
-                <ComingSoon
-                  emoji="🧪"
-                  title="Lab"
-                  description="동아리 활동을 위한 공간입니다. 조금만 기다려 주세요!"
-                />
-              }
-            />
+            <Route path="lab" element={<LabHome />} />
+            <Route path="lab/roadmap" element={<LabRoadmap />} />
+            <Route path="lab/activities" element={<LabActivities />} />
+            <Route path="lab/activities/:id" element={<LabActivityDetail />} />
             <Route path="teacher" element={<Teacher />} />
             <Route path="*" element={<NotFound />} />
           </Route>

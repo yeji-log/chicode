@@ -14,6 +14,7 @@ import {
   listMaterials,
 } from '../lib/materials'
 import { listSubjects, updateSubject, type SubjectMeta } from '../lib/subjects'
+import TeacherLab from './TeacherLab'
 
 export default function Teacher() {
   const { user, state, error, signIn, signOutTeacher } = useAuth()
@@ -93,7 +94,59 @@ export default function Teacher() {
 
 function TeacherDashboard() {
   const { user, signOutTeacher } = useAuth()
+  const [section, setSection] = useState<'materials' | 'lab'>('materials')
 
+  return (
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-wrap items-center gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">교사 페이지</h1>
+          <p className="text-sm text-ink-500">수업자료와 Lab 활동을 올리고 관리합니다.</p>
+        </div>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-sm text-ink-700">{user?.email}</span>
+          <button
+            onClick={signOutTeacher}
+            className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+          >
+            로그아웃
+          </button>
+        </div>
+      </header>
+
+      <nav className="flex gap-2 border-b border-cream-deep pb-3">
+        <button
+          onClick={() => setSection('materials')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            section === 'materials'
+              ? 'bg-cheese-400 text-ink-900'
+              : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          📚 수업자료
+        </button>
+        <button
+          onClick={() => setSection('lab')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            section === 'lab' ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          🧪 Lab
+        </button>
+      </nav>
+
+      {section === 'materials' ? (
+        <MaterialsSection uploaderEmail={user?.email ?? ''} />
+      ) : (
+        <TeacherLab uploaderEmail={user?.email ?? ''} />
+      )}
+    </div>
+  )
+}
+
+function MaterialsSection({ uploaderEmail }: { uploaderEmail: string }) {
   const [subjects, setSubjects] = useState<SubjectMeta[]>([])
   const [loadingSubjects, setLoadingSubjects] = useState(true)
   const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null)
@@ -115,59 +168,43 @@ function TeacherDashboard() {
     )
   }
 
+  if (loadingSubjects) return <p className="text-ink-500">과목을 불러오는 중…</p>
+
+  if (subjects.length === 0) {
+    return (
+      <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
+        아직 등록된 과목이 없습니다. Firebase 콘솔에서 subjects 컬렉션에 과목 문서를 먼저
+        만들어 주세요.
+      </p>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-center gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">교사 페이지</h1>
-          <p className="text-sm text-ink-500">과목을 고르고 수업자료를 올리고 관리합니다.</p>
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-ink-700">{user?.email}</span>
+      <nav className="flex flex-wrap gap-2">
+        {subjects.map((subject) => (
           <button
-            onClick={signOutTeacher}
-            className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+            key={subject.id}
+            onClick={() => setActiveSubjectId(subject.id)}
+            className={[
+              'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+              subject.id === activeSubjectId
+                ? 'bg-cheese-400 text-ink-900'
+                : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
+            ].join(' ')}
           >
-            로그아웃
+            {subject.name}
           </button>
-        </div>
-      </header>
+        ))}
+      </nav>
 
-      {loadingSubjects ? (
-        <p className="text-ink-500">과목을 불러오는 중…</p>
-      ) : subjects.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
-          아직 등록된 과목이 없습니다. Firebase 콘솔에서 subjects 컬렉션에 과목 문서를 먼저
-          만들어 주세요.
-        </p>
-      ) : (
-        <>
-          <nav className="flex flex-wrap gap-2">
-            {subjects.map((subject) => (
-              <button
-                key={subject.id}
-                onClick={() => setActiveSubjectId(subject.id)}
-                className={[
-                  'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-                  subject.id === activeSubjectId
-                    ? 'bg-cheese-400 text-ink-900'
-                    : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
-                ].join(' ')}
-              >
-                {subject.name}
-              </button>
-            ))}
-          </nav>
-
-          {activeSubject && (
-            <SubjectPanel
-              key={activeSubject.id}
-              subject={activeSubject}
-              uploaderEmail={user?.email ?? ''}
-              onSubjectChange={(patch) => handleSubjectUpdate(activeSubject.id, patch)}
-            />
-          )}
-        </>
+      {activeSubject && (
+        <SubjectPanel
+          key={activeSubject.id}
+          subject={activeSubject}
+          uploaderEmail={uploaderEmail}
+          onSubjectChange={(patch) => handleSubjectUpdate(activeSubject.id, patch)}
+        />
       )}
     </div>
   )

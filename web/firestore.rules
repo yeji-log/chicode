@@ -44,5 +44,24 @@ service cloud.firestore {
         allow create, update, delete: if isTeacher();
       }
     }
+
+    // CHICODE LAB(동아리 활동) — subjects/materials 와 동일한 패턴이다.
+    // 학생은 로그인이 없으므로 읽기는 열어두고, 쓰기는 교사만 허용한다.
+    match /labs/{labId} {
+      allow read: if true;
+      allow create, update, delete: if isTeacher();
+    }
+
+    // Roadmap 카드(시즌).
+    match /labSeasons/{seasonId} {
+      allow read: if true;
+      allow create, update, delete: if isTeacher();
+    }
+
+    // Lab 홈 화면 설정. 문서 하나("home")만 쓰는 싱글턴이다.
+    match /labSettings/{settingsId} {
+      allow read: if true;
+      allow create, update, delete: if isTeacher();
+    }
   }
 }

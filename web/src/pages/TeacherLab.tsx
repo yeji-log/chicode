@@ -1,0 +1,757 @@
+import { useEffect, useState } from 'react'
+
+import {
+  type LabActivity,
+  type LabActivityInput,
+  type LabSeason,
+  type LabSeasonInput,
+  addActivity,
+  addSeason,
+  deleteActivity,
+  deleteSeason,
+  getHomeSettings,
+  listActivities,
+  listSeasons,
+  updateActivity,
+  updateHomeSettings,
+  updateSeason,
+} from '../lib/labs'
+
+/**
+ * 교사 페이지의 Lab 관리 섹션 (Teacher.tsx 에서 불러 쓴다).
+ *
+ * subjects/materials 의 SubjectPanel 과 같은 톤 — 필드가 많아지는 활동 폼만
+ * 반복을 줄이려고 FormField 로 뺐다. Teacher.tsx 는 이미 430줄이 넘어서,
+ * Lab CMS(홈 설정+로드맵+활동, 세 화면)를 더 얹으면 한 파일로 보기 어려워질
+ * 것 같아 SubjectMaterials.tsx 처럼 별도 파일로 나눴다.
+ */
+
+const inputClass =
+  'rounded-lg border border-cream-deep bg-white px-3 py-2 text-ink-900 focus:border-cheese-300 focus:outline-none'
+
+const LAB_TABS = [
+  { key: 'settings', label: '홈 설정' },
+  { key: 'roadmap', label: '로드맵' },
+  { key: 'activities', label: '활동' },
+] as const
+
+type LabTabKey = (typeof LAB_TABS)[number]['key']
+
+export default function TeacherLab({ uploaderEmail }: { uploaderEmail: string }) {
+  const [tab, setTab] = useState<LabTabKey>('settings')
+
+  return (
+    <div className="flex flex-col gap-6">
+      <nav className="flex flex-wrap gap-2">
+        {LAB_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={[
+              'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+              tab === key
+                ? 'bg-cheese-400 text-ink-900'
+                : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
+            ].join(' ')}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'settings' && <HomeSettingsPanel />}
+      {tab === 'roadmap' && <SeasonsPanel />}
+      {tab === 'activities' && <ActivitiesPanel uploaderEmail={uploaderEmail} />}
+    </div>
+  )
+}
+
+// ── 홈 설정 ───────────────────────────────────────────────────
+
+function HomeSettingsPanel() {
+  const [todayMissionText, setTodayMissionText] = useState('')
+  const [featuredActivityId, setFeaturedActivityId] = useState('')
+  const [publishedActivities, setPublishedActivities] = useState<LabActivity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  useEffect(() => {
+    Promise.all([getHomeSettings(), listActivities({ publishedOnly: true })])
+      .then(([settings, activities]) => {
+        setTodayMissionText(settings.todayMissionText)
+        setFeaturedActivityId(settings.featuredActivityId)
+        setPublishedActivities(activities)
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleSave(event: React.FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await updateHomeSettings({ todayMissionText: todayMissionText.trim(), featuredActivityId })
+      setSavedAt(Date.now())
+    } catch (caught) {
+      console.error('Lab 홈 설정 저장 실패', caught)
+      setError('저장하지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading) return <p className="text-ink-500">불러오는 중…</p>
+
+  return (
+    <form
+      onSubmit={handleSave}
+      className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
+    >
+      <h2 className="font-bold text-ink-900">Lab 홈 설정</h2>
+
+      <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+        오늘의 미션
+        <textarea
+          value={todayMissionText}
+          onChange={(event) => {
+            setTodayMissionText(event.target.value)
+            setError(null)
+          }}
+          rows={3}
+          placeholder="예: 장애물을 감지하고 RC카를 멈춰보세요."
+          className={inputClass}
+        />
+        <span className="text-xs font-normal text-ink-500">
+          비워두면 Lab 홈에서 미션 카드 자체가 보이지 않습니다.
+        </span>
+      </label>
+
+      <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+        강조 활동 (선택)
+        <select
+          value={featuredActivityId}
+          onChange={(event) => setFeaturedActivityId(event.target.value)}
+          className={inputClass}
+        >
+          <option value="">선택 안 함</option>
+          {publishedActivities.map((activity) => (
+            <option key={activity.id} value={activity.id}>
+              {activity.title}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs font-normal text-ink-500">
+          Lab 홈에 &quot;활동 이어가기&quot; 버튼으로 표시됩니다. 공개된 활동만 고를 수 있습니다.
+        </span>
+      </label>
+
+      {error && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={busy}
+          className="self-start rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? '저장 중…' : '저장'}
+        </button>
+        {savedAt && <span className="text-sm text-ink-500">저장했습니다.</span>}
+      </div>
+    </form>
+  )
+}
+
+// ── 로드맵(시즌) ─────────────────────────────────────────────
+
+type SeasonFormState = {
+  title: string
+  emoji: string
+  status: LabSeason['status']
+  order: string
+  description: string
+}
+
+function emptySeasonForm(order = 0): SeasonFormState {
+  return {
+    title: '',
+    emoji: '',
+    status: '준비중',
+    order: String(order),
+    description: '',
+  }
+}
+
+function SeasonsPanel() {
+  const [seasons, setSeasons] = useState<LabSeason[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<SeasonFormState>(emptySeasonForm())
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  async function refresh() {
+    setLoading(true)
+    const list = await listSeasons()
+    setSeasons(list)
+    setLoading(false)
+    return list
+  }
+
+  function startEdit(season: LabSeason) {
+    setEditingId(season.id)
+    setForm({
+      title: season.title,
+      emoji: season.emoji,
+      status: season.status,
+      order: String(season.order),
+      description: season.description,
+    })
+    setError(null)
+  }
+
+  function resetForm(nextOrder: number) {
+    setEditingId(null)
+    setForm(emptySeasonForm(nextOrder))
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    if (!form.title.trim()) {
+      setError('제목을 입력해 주세요.')
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    try {
+      const input: LabSeasonInput = {
+        title: form.title.trim(),
+        emoji: form.emoji.trim(),
+        status: form.status,
+        order: Number(form.order) || 0,
+        description: form.description.trim(),
+      }
+      if (editingId) await updateSeason(editingId, input)
+      else await addSeason(input)
+      const list = await refresh()
+      resetForm(list.length)
+    } catch (caught) {
+      console.error('시즌 저장 실패', caught)
+      setError('저장하지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDelete(season: LabSeason) {
+    if (!confirm(`"${season.title}" 시즌을 삭제할까요?`)) return
+    await deleteSeason(season.id)
+    if (editingId === season.id) resetForm(seasons.length - 1)
+    await refresh()
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
+      >
+        <h2 className="font-bold text-ink-900">{editingId ? '시즌 수정' : '새 시즌 추가'}</h2>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+            제목
+            <input
+              value={form.title}
+              onChange={(event) => setForm({ ...form, title: event.target.value })}
+              placeholder="예: Arduino RC CAR"
+              className={inputClass}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+            이모지
+            <input
+              value={form.emoji}
+              onChange={(event) => setForm({ ...form, emoji: event.target.value })}
+              placeholder="🚗"
+              className={inputClass}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+            상태
+            <select
+              value={form.status}
+              onChange={(event) =>
+                setForm({ ...form, status: event.target.value as LabSeason['status'] })
+              }
+              className={inputClass}
+            >
+              <option value="진행중">진행중</option>
+              <option value="준비중">준비중</option>
+              <option value="완료">완료</option>
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+            순서
+            <input
+              type="number"
+              value={form.order}
+              onChange={(event) => setForm({ ...form, order: event.target.value })}
+              className={inputClass}
+            />
+          </label>
+        </div>
+
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          소개 (선택)
+          <input
+            value={form.description}
+            onChange={(event) => setForm({ ...form, description: event.target.value })}
+            placeholder="카드 안에 들어갈 한 줄 소개"
+            className={inputClass}
+          />
+        </label>
+
+        {error && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={busy}
+            className="self-start rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? '저장 중…' : editingId ? '수정 저장' : '추가'}
+          </button>
+          {editingId && (
+            <button
+              type="button"
+              onClick={() => resetForm(seasons.length)}
+              className="rounded-xl border border-cream-deep px-4 py-2.5 font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+            >
+              취소
+            </button>
+          )}
+        </div>
+      </form>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-bold text-ink-900">시즌 목록 ({seasons.length})</h2>
+
+        {loading ? (
+          <p className="text-ink-500">불러오는 중…</p>
+        ) : seasons.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
+            아직 등록된 시즌이 없습니다.
+          </p>
+        ) : (
+          <ul className="divide-y divide-cream-deep overflow-hidden rounded-2xl border border-cream-deep bg-white/70">
+            {seasons.map((season) => (
+              <li key={season.id} className="flex items-center gap-4 px-5 py-3.5">
+                <span className="text-2xl">{season.emoji || '🧪'}</span>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-ink-900">
+                    {season.order}. {season.title}
+                  </p>
+                  <p className="truncate text-xs text-ink-500">{season.status}</p>
+                </div>
+                <div className="ml-auto flex shrink-0 gap-2">
+                  <button
+                    onClick={() => startEdit(season)}
+                    className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+                  >
+                    수정
+                  </button>
+                  <button
+                    onClick={() => handleDelete(season)}
+                    className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
+                  >
+                    삭제
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ── 활동 ─────────────────────────────────────────────────────
+
+type ActivityFormState = {
+  title: string
+  /** labSeasons/{id}. 비우면 로드맵의 어떤 시즌에도 속하지 않는다. */
+  seasonId: string
+  difficulty: string
+  order: string
+  goal: string
+  learn: string
+  prep: string
+  circuit: string
+  code: string
+  practice: string
+  mission: string
+  challenge: string
+  materialUrl: string
+}
+
+function emptyActivityForm(order = 0): ActivityFormState {
+  return {
+    title: '',
+    seasonId: '',
+    difficulty: '1',
+    order: String(order),
+    goal: '',
+    learn: '',
+    prep: '',
+    circuit: '',
+    code: '',
+    practice: '',
+    mission: '',
+    challenge: '',
+    materialUrl: '',
+  }
+}
+
+function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
+  const [activities, setActivities] = useState<LabActivity[]>([])
+  const [seasons, setSeasons] = useState<LabSeason[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<ActivityFormState>(emptyActivityForm())
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    refresh()
+    listSeasons().then(setSeasons)
+  }, [])
+
+  const seasonTitle = (seasonId: string) =>
+    seasons.find((season) => season.id === seasonId)?.title ?? null
+
+  async function refresh() {
+    setLoading(true)
+    const list = await listActivities()
+    setActivities(list)
+    setLoading(false)
+    return list
+  }
+
+  function startEdit(activity: LabActivity) {
+    setEditingId(activity.id)
+    setForm({
+      title: activity.title,
+      seasonId: activity.seasonId,
+      difficulty: String(activity.difficulty),
+      order: String(activity.order),
+      goal: activity.goal,
+      learn: activity.learn,
+      prep: activity.prep,
+      circuit: activity.circuit,
+      code: activity.code,
+      practice: activity.practice,
+      mission: activity.mission,
+      challenge: activity.challenge,
+      materialUrl: activity.materialUrl,
+    })
+    setError(null)
+  }
+
+  function resetForm(nextOrder: number) {
+    setEditingId(null)
+    setForm(emptyActivityForm(nextOrder))
+  }
+
+  async function save(published: boolean) {
+    if (!form.title.trim()) {
+      setError('제목을 입력해 주세요.')
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    try {
+      const input: LabActivityInput = {
+        title: form.title.trim(),
+        seasonId: form.seasonId,
+        difficulty: Number(form.difficulty) || 1,
+        order: Number(form.order) || 0,
+        published,
+        goal: form.goal.trim(),
+        learn: form.learn.trim(),
+        prep: form.prep.trim(),
+        circuit: form.circuit.trim(),
+        code: form.code,
+        practice: form.practice.trim(),
+        mission: form.mission.trim(),
+        challenge: form.challenge.trim(),
+        materialUrl: form.materialUrl.trim(),
+        updatedBy: uploaderEmail,
+      }
+      if (editingId) await updateActivity(editingId, input)
+      else await addActivity(input)
+      const list = await refresh()
+      resetForm(list.length)
+    } catch (caught) {
+      console.error('활동 저장 실패', caught)
+      setError('저장하지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDelete(activity: LabActivity) {
+    if (!confirm(`"${activity.title}" 활동을 삭제할까요?`)) return
+    await deleteActivity(activity.id)
+    if (editingId === activity.id) resetForm(activities.length - 1)
+    await refresh()
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6">
+        <h2 className="font-bold text-ink-900">{editingId ? '활동 수정' : '새 활동 만들기'}</h2>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700 lg:col-span-2">
+            제목
+            <input
+              value={form.title}
+              onChange={(event) => setForm({ ...form, title: event.target.value })}
+              placeholder="예: RC카 모터 제어"
+              className={inputClass}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+            시즌 (선택)
+            <select
+              value={form.seasonId}
+              onChange={(event) => setForm({ ...form, seasonId: event.target.value })}
+              className={inputClass}
+            >
+              <option value="">미지정</option>
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.title}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs font-normal text-ink-500">
+              고르면 Roadmap 카드를 눌렀을 때 이 활동이 보입니다.
+            </span>
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+            난이도 (1~5)
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={form.difficulty}
+              onChange={(event) => setForm({ ...form, difficulty: event.target.value })}
+              className={inputClass}
+            />
+          </label>
+        </div>
+
+        <label className="flex max-w-[10rem] flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          순서
+          <input
+            type="number"
+            value={form.order}
+            onChange={(event) => setForm({ ...form, order: event.target.value })}
+            className={inputClass}
+          />
+        </label>
+
+        <FormField label="오늘의 목표" value={form.goal} onChange={(v) => setForm({ ...form, goal: v })} />
+        <FormField
+          label="오늘 배울 것"
+          value={form.learn}
+          onChange={(v) => setForm({ ...form, learn: v })}
+          multiline
+        />
+        <FormField
+          label="준비물"
+          value={form.prep}
+          onChange={(v) => setForm({ ...form, prep: v })}
+          multiline
+        />
+        <FormField
+          label="회로"
+          value={form.circuit}
+          onChange={(v) => setForm({ ...form, circuit: v })}
+          multiline
+          placeholder="설명 또는 이미지 URL"
+        />
+        <FormField
+          label="코드"
+          value={form.code}
+          onChange={(v) => setForm({ ...form, code: v })}
+          multiline
+          mono
+        />
+        <FormField
+          label="실습"
+          value={form.practice}
+          onChange={(v) => setForm({ ...form, practice: v })}
+          multiline
+        />
+        <FormField
+          label="Mission"
+          value={form.mission}
+          onChange={(v) => setForm({ ...form, mission: v })}
+          multiline
+        />
+        <FormField
+          label="Challenge"
+          value={form.challenge}
+          onChange={(v) => setForm({ ...form, challenge: v })}
+          multiline
+        />
+        <FormField
+          label="자료 링크 (선택)"
+          value={form.materialUrl}
+          onChange={(v) => setForm({ ...form, materialUrl: v })}
+          placeholder="https://..."
+        />
+
+        {error && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => save(false)}
+            className="rounded-xl border border-cream-deep px-5 py-2.5 font-bold text-ink-700 transition-colors hover:border-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? '저장 중…' : '임시저장'}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => save(true)}
+            className="rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? '저장 중…' : '학생에게 공개'}
+          </button>
+          {editingId && (
+            <button
+              type="button"
+              onClick={() => resetForm(activities.length)}
+              className="rounded-xl px-4 py-2.5 font-semibold text-ink-500 transition-colors hover:text-ink-900"
+            >
+              취소하고 새로 만들기
+            </button>
+          )}
+        </div>
+      </div>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-bold text-ink-900">활동 목록 ({activities.length})</h2>
+
+        {loading ? (
+          <p className="text-ink-500">불러오는 중…</p>
+        ) : activities.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
+            아직 만든 활동이 없습니다.
+          </p>
+        ) : (
+          <ul className="divide-y divide-cream-deep overflow-hidden rounded-2xl border border-cream-deep bg-white/70">
+            {activities.map((activity) => (
+              <li key={activity.id} className="flex items-center gap-4 px-5 py-3.5">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-ink-900">{activity.title}</p>
+                  <p className="truncate text-xs text-ink-500">
+                    {seasonTitle(activity.seasonId) ?? '미지정'} · 난이도 {activity.difficulty} ·{' '}
+                    {activity.published ? (
+                      <span className="font-semibold text-cheese-600">공개됨</span>
+                    ) : (
+                      <span>임시저장</span>
+                    )}
+                  </p>
+                </div>
+                <div className="ml-auto flex shrink-0 gap-2">
+                  <button
+                    onClick={() => startEdit(activity)}
+                    className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+                  >
+                    수정
+                  </button>
+                  <button
+                    onClick={() => handleDelete(activity)}
+                    className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
+                  >
+                    삭제
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function FormField({
+  label,
+  value,
+  onChange,
+  multiline,
+  mono,
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  multiline?: boolean
+  mono?: boolean
+  placeholder?: string
+}) {
+  return (
+    <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+      {label}
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          rows={mono ? 6 : 3}
+          placeholder={placeholder}
+          className={`${inputClass} ${mono ? 'font-mono' : ''}`}
+        />
+      ) : (
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className={inputClass}
+        />
+      )}
+    </label>
+  )
+}
