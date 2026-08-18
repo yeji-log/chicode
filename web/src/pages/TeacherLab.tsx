@@ -1,9 +1,14 @@
+import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useEffect, useRef, useState } from 'react'
 
 import type { ChunkedFileMeta } from '../lib/chunkedFile'
 import {
   type LabActivity,
   type LabActivityInput,
+  type LabActivitySection,
   type LabSeason,
   type LabSeasonInput,
   addActivity,
@@ -443,15 +448,23 @@ type ActivityFormState = {
   seasonId: string
   difficulty: string
   order: string
-  goal: string
-  learn: string
-  prep: string
-  circuit: string
-  code: string
-  practice: string
-  mission: string
-  challenge: string
+  sections: LabActivitySection[]
   materialUrl: string
+}
+
+/** 새 활동은 기존에 쓰던 8개 항목으로 시작한다 — 익숙한 기본값을 주고,
+ *  거기서부터 이름을 바꾸거나 지우거나 새로 추가하게 한다. */
+function defaultSections(): LabActivitySection[] {
+  return [
+    { id: crypto.randomUUID(), title: '오늘의 목표', content: '', isCode: false },
+    { id: crypto.randomUUID(), title: '오늘 배울 것', content: '', isCode: false },
+    { id: crypto.randomUUID(), title: '준비물', content: '', isCode: false },
+    { id: crypto.randomUUID(), title: '회로', content: '', isCode: false },
+    { id: crypto.randomUUID(), title: '코드', content: '', isCode: true },
+    { id: crypto.randomUUID(), title: '실습', content: '', isCode: false },
+    { id: crypto.randomUUID(), title: 'Mission', content: '', isCode: false },
+    { id: crypto.randomUUID(), title: 'Challenge', content: '', isCode: false },
+  ]
 }
 
 function emptyActivityForm(order = 0): ActivityFormState {
@@ -460,14 +473,7 @@ function emptyActivityForm(order = 0): ActivityFormState {
     seasonId: '',
     difficulty: '1',
     order: String(order),
-    goal: '',
-    learn: '',
-    prep: '',
-    circuit: '',
-    code: '',
-    practice: '',
-    mission: '',
-    challenge: '',
+    sections: defaultSections(),
     materialUrl: '',
   }
 }
@@ -504,14 +510,9 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
       seasonId: activity.seasonId,
       difficulty: String(activity.difficulty),
       order: String(activity.order),
-      goal: activity.goal,
-      learn: activity.learn,
-      prep: activity.prep,
-      circuit: activity.circuit,
-      code: activity.code,
-      practice: activity.practice,
-      mission: activity.mission,
-      challenge: activity.challenge,
+      // labs.ts 가 예전 활동(고정 필드만 있던 시절)도 sections 로 채워서
+      // 돌려준다 — 여기서 다시 변환할 필요 없이 그대로 편집기에 넣는다.
+      sections: activity.sections,
       materialUrl: activity.materialUrl,
     })
     setError(null)
@@ -537,14 +538,11 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
         difficulty: Number(form.difficulty) || 1,
         order: Number(form.order) || 0,
         published,
-        goal: form.goal.trim(),
-        learn: form.learn.trim(),
-        prep: form.prep.trim(),
-        circuit: form.circuit.trim(),
-        code: form.code,
-        practice: form.practice.trim(),
-        mission: form.mission.trim(),
-        challenge: form.challenge.trim(),
+        sections: form.sections.map((section) => ({
+          ...section,
+          title: section.title.trim() || '이름 없음',
+          content: section.isCode ? section.content : section.content.trim(),
+        })),
         materialUrl: form.materialUrl.trim(),
         updatedBy: uploaderEmail,
       }
@@ -625,51 +623,11 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
           />
         </label>
 
-        <FormField label="오늘의 목표" value={form.goal} onChange={(v) => setForm({ ...form, goal: v })} />
-        <FormField
-          label="오늘 배울 것"
-          value={form.learn}
-          onChange={(v) => setForm({ ...form, learn: v })}
-          multiline
+        <SectionsEditor
+          sections={form.sections}
+          onChange={(sections) => setForm({ ...form, sections })}
         />
-        <FormField
-          label="준비물"
-          value={form.prep}
-          onChange={(v) => setForm({ ...form, prep: v })}
-          multiline
-        />
-        <FormField
-          label="회로"
-          value={form.circuit}
-          onChange={(v) => setForm({ ...form, circuit: v })}
-          multiline
-          placeholder="설명 또는 이미지 URL"
-        />
-        <FormField
-          label="코드"
-          value={form.code}
-          onChange={(v) => setForm({ ...form, code: v })}
-          multiline
-          mono
-        />
-        <FormField
-          label="실습"
-          value={form.practice}
-          onChange={(v) => setForm({ ...form, practice: v })}
-          multiline
-        />
-        <FormField
-          label="Mission"
-          value={form.mission}
-          onChange={(v) => setForm({ ...form, mission: v })}
-          multiline
-        />
-        <FormField
-          label="Challenge"
-          value={form.challenge}
-          onChange={(v) => setForm({ ...form, challenge: v })}
-          multiline
-        />
+
         <FormField
           label="자료 링크 (선택)"
           value={form.materialUrl}
@@ -763,6 +721,159 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
           </ul>
         )}
       </section>
+    </div>
+  )
+}
+
+/**
+ * 활동 본문(예전의 goal/learn/prep/circuit/... 고정 필드)을 교사가 직접
+ * 이름 짓고, 추가·삭제하고, 드래그로 순서를 바꿀 수 있는 목록 편집기.
+ *
+ * 드래그는 @dnd-kit 을 썼다 — 브라우저 기본 HTML5 드래그(dragstart/dragover)는
+ * 데스크톱에서만 되고 터치(태블릿)에서는 아예 안 먹는다. 이 Lab 화면을
+ * 실제로 갤럭시 탭 브라우저에서 쓰는 걸 이미 확인했기 때문에, 터치까지
+ * 되는 라이브러리가 필수였다. PointerSensor(마우스) + TouchSensor(터치,
+ * 살짝 눌러야 시작되게 delay를 줘서 화면 스크롤과 안 헷갈리게 함) 둘 다 둔다.
+ */
+function SectionsEditor({
+  sections,
+  onChange,
+}: {
+  sections: LabActivitySection[]
+  onChange: (sections: LabActivitySection[]) => void
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = sections.findIndex((section) => section.id === active.id)
+    const newIndex = sections.findIndex((section) => section.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+    onChange(arrayMove(sections, oldIndex, newIndex))
+  }
+
+  function updateSection(id: string, patch: Partial<LabActivitySection>) {
+    onChange(sections.map((section) => (section.id === id ? { ...section, ...patch } : section)))
+  }
+
+  function removeSection(id: string) {
+    if (!confirm('이 항목을 삭제할까요?')) return
+    onChange(sections.filter((section) => section.id !== id))
+  }
+
+  function addSection() {
+    onChange([...sections, { id: crypto.randomUUID(), title: '새 항목', content: '', isCode: false }])
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-ink-900">활동 내용</h3>
+        <span className="text-xs text-ink-500">⠿ 을 눌러서 드래그하면 순서가 바뀝니다</span>
+      </div>
+
+      {sections.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-cream-deep px-4 py-6 text-center text-sm text-ink-500">
+          아직 항목이 없습니다. 아래에서 추가해 주세요.
+        </p>
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext
+            items={sections.map((section) => section.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="flex flex-col gap-3">
+              {sections.map((section) => (
+                <SortableSectionRow
+                  key={section.id}
+                  section={section}
+                  onChange={(patch) => updateSection(section.id, patch)}
+                  onRemove={() => removeSection(section.id)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
+
+      <button
+        type="button"
+        onClick={addSection}
+        className="self-start rounded-lg border border-dashed border-cream-deep px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+      >
+        + 항목 추가
+      </button>
+    </div>
+  )
+}
+
+function SortableSectionRow({
+  section,
+  onChange,
+  onRemove,
+}: {
+  section: LabActivitySection
+  onChange: (patch: Partial<LabActivitySection>) => void
+  onRemove: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: section.id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex flex-col gap-2 rounded-xl border border-cream-deep bg-white p-3"
+    >
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label="순서 변경(드래그)"
+          className="shrink-0 touch-none rounded px-1.5 py-1 text-lg text-ink-400 hover:bg-cream active:cursor-grabbing"
+        >
+          ⠿
+        </button>
+        <input
+          value={section.title}
+          onChange={(event) => onChange({ title: event.target.value })}
+          placeholder="항목 이름 (예: 오늘의 목표)"
+          className="min-w-0 flex-1 rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-sm font-semibold text-ink-900 focus:border-cheese-300 focus:outline-none"
+        />
+        <label className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-ink-600">
+          <input
+            type="checkbox"
+            checked={section.isCode}
+            onChange={(event) => onChange({ isCode: event.target.checked })}
+          />
+          코드로 표시
+        </label>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
+        >
+          삭제
+        </button>
+      </div>
+      <textarea
+        value={section.content}
+        onChange={(event) => onChange({ content: event.target.value })}
+        rows={section.isCode ? 6 : 3}
+        placeholder="내용"
+        className={`rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm text-ink-900 focus:border-cheese-300 focus:outline-none ${section.isCode ? 'font-mono' : ''}`}
+      />
     </div>
   )
 }

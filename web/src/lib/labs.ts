@@ -34,6 +34,21 @@ import {
 
 import { db } from './firebase'
 
+/**
+ * 활동 본문을 이루는 항목 하나(예: "오늘의 목표", "회로"). 예전엔 goal/learn/
+ * prep/circuit/code/practice/mission/challenge 가 고정된 필드였는데, 교사가
+ * 이름을 바꾸고 새로 추가하고 순서를 드래그로 바꿀 수 있어야 해서 배열로
+ * 바꿨다. isCode 만 true 로 켜면 CodeBlock(구문 강조 + 복사 버튼)으로,
+ * 아니면 일반 문단(줄바꿈 유지 + URL 자동 링크)으로 그려진다 — 예전의 "코드"
+ * 필드가 하던 역할을 이 플래그 하나로 옮긴 것뿐이다.
+ */
+export interface LabActivitySection {
+  id: string
+  title: string
+  content: string
+  isCode: boolean
+}
+
 export interface LabActivity {
   id: string
   title: string
@@ -44,14 +59,7 @@ export interface LabActivity {
   order: number
   /** false 면 교사 페이지에서만 보인다("임시저장"). */
   published: boolean
-  goal: string
-  learn: string
-  prep: string
-  circuit: string
-  code: string
-  practice: string
-  mission: string
-  challenge: string
+  sections: LabActivitySection[]
   /** 외부 자료(노션·PDF 등) 링크. 설계안 11절대로 파일 자체는 저장하지 않는다. */
   materialUrl: string
   createdAt: number
@@ -60,6 +68,37 @@ export interface LabActivity {
 }
 
 export type LabActivityInput = Omit<LabActivity, 'id' | 'createdAt' | 'updatedAt'>
+
+/**
+ * sections 이 생기기 전(예: 이미 올라가 있던 "1차시_Pico2W_입문" 등)에 만들어진
+ * 활동은 문서에 goal/learn/prep/circuit/... 고정 필드만 있고 sections 가 없다.
+ * 읽을 때 그 필드들로 sections 를 만들어 채운다 — 교사가 다시 입력할 필요
+ * 없이 바로 드래그로 순서를 바꾸고 이름을 고칠 수 있게 하기 위해서다.
+ * 한 번이라도 저장하면 그 뒤로는 진짜 sections 필드가 생긴다.
+ */
+const LEGACY_SECTION_DEFS: { key: string; title: string; isCode?: boolean }[] = [
+  { key: 'goal', title: '오늘의 목표' },
+  { key: 'learn', title: '오늘 배울 것' },
+  { key: 'prep', title: '준비물' },
+  { key: 'circuit', title: '회로' },
+  { key: 'code', title: '코드', isCode: true },
+  { key: 'practice', title: '실습' },
+  { key: 'mission', title: 'Mission' },
+  { key: 'challenge', title: 'Challenge' },
+]
+
+function normalizeActivity(id: string, data: Record<string, unknown>): LabActivity {
+  const sections = Array.isArray(data.sections)
+    ? (data.sections as LabActivitySection[])
+    : LEGACY_SECTION_DEFS.map((def) => ({
+        id: `legacy-${def.key}`,
+        title: def.title,
+        content: typeof data[def.key] === 'string' ? (data[def.key] as string) : '',
+        isCode: def.isCode ?? false,
+      }))
+
+  return { ...(data as Omit<LabActivity, 'id' | 'sections'>), id, sections }
+}
 
 export interface LabSeason {
   id: string
@@ -101,16 +140,14 @@ export async function listActivities(opts?: {
     ? await getDocs(query(collection(db, LABS), where('seasonId', '==', opts.seasonId)))
     : await getDocs(collection(db, LABS))
 
-  let activities = snapshot.docs.map(
-    (entry) => ({ id: entry.id, ...entry.data() }) as LabActivity,
-  )
+  let activities = snapshot.docs.map((entry) => normalizeActivity(entry.id, entry.data()))
   if (opts?.publishedOnly) activities = activities.filter((activity) => activity.published)
   return activities.sort((a, b) => a.order - b.order || a.createdAt - b.createdAt)
 }
 
 export async function getActivity(id: string): Promise<LabActivity | null> {
   const snapshot = await getDoc(doc(db, LABS, id))
-  return snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as LabActivity) : null
+  return snapshot.exists() ? normalizeActivity(snapshot.id, snapshot.data()) : null
 }
 
 export async function addActivity(input: LabActivityInput): Promise<LabActivity> {

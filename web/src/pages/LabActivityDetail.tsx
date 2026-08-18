@@ -141,18 +141,19 @@ export default function LabActivityDetail() {
         <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{activity.title}</h1>
       </header>
 
-      <Section title="오늘의 목표">{activity.goal}</Section>
-      <Section title="오늘 배울 것">{activity.learn}</Section>
-      <Section title="준비물">{activity.prep}</Section>
-      <Section title="회로">{activity.circuit}</Section>
-      {activity.code && (
-        <Section title="코드">
-          <CodeBlock code={activity.code} />
-        </Section>
+      {activity.sections.map((section) =>
+        section.isCode ? (
+          section.content && (
+            <Section key={section.id} title={section.title}>
+              <CodeBlock code={section.content} />
+            </Section>
+          )
+        ) : (
+          <Section key={section.id} title={section.title}>
+            {section.content}
+          </Section>
+        ),
       )}
-      <Section title="실습">{activity.practice}</Section>
-      <Section title="Mission">{activity.mission}</Section>
-      <Section title="Challenge">{activity.challenge}</Section>
 
       {isPresenting && slideFiles?.pdf && id ? (
         <LabPresenter

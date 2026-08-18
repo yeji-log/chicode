@@ -82,8 +82,12 @@ export default function LabActivities() {
                   </span>
                 )}
                 <h2 className="font-bold text-ink-900">{activity.title}</h2>
-                {activity.goal && (
-                  <p className="line-clamp-2 text-sm text-ink-700">{activity.goal}</p>
+                {/* 미리보기 한 줄 — 예전엔 "오늘의 목표" 필드였는데, 이제 항목
+                    이름은 교사가 자유롭게 바꾸므로 순서상 첫 항목 내용을 쓴다. */}
+                {activity.sections[0]?.content && (
+                  <p className="line-clamp-2 text-sm text-ink-700">
+                    {activity.sections[0].content}
+                  </p>
                 )}
                 <span className="mt-auto pt-2 text-xs text-ink-500">
                   {difficultyStars(activity.difficulty)}
