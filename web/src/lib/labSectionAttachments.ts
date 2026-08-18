@@ -1,5 +1,5 @@
 /**
- * Lab 활동의 각 항목(section)에 붙이는 첨부파일(이미지·PDF·PPT·엑셀).
+ * Lab 활동의 각 항목(section)에 붙이는 첨부파일(이미지·동영상·PDF·PPT·엑셀).
  *
  * labSlides.ts 의 발표자료(PPT/PDF)와는 성격이 다르다 — 그쪽은 "다운로드
  * 금지, 뷰어로만" 이라는 요구사항 때문에 pptx-preview·PdfViewer를 동원한
@@ -31,8 +31,26 @@ import { db } from './firebase'
 export class SectionAttachmentError extends Error {}
 
 const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024
-const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'ppt', 'pptx', 'xls', 'xlsx']
+// 동영상은 다른 첨부보다 용량이 커지기 쉬워서 한도를 따로 둔다. Storage가
+// 아니라 Firestore 문서 조각으로 저장하는 구조라(위 설명 참고) 재생 전에
+// 전체를 한 번에 내려받아야 한다 — 스트리밍이 아니다. 그래서 무한정 늘리지
+// 않고 "짧은 시연 클립" 정도로만 쓸 수 있게 50MB로 제한했다.
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024
+const ALLOWED_EXTENSIONS = [
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'pdf',
+  'ppt',
+  'pptx',
+  'xls',
+  'xlsx',
+  'mp4',
+]
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
+const VIDEO_EXTENSIONS = ['mp4']
 
 const LAB_SECTION_FILES = 'labSectionFiles'
 
@@ -49,18 +67,23 @@ function assertValid(file: File) {
   const ext = extensionOf(file.name)
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
     throw new SectionAttachmentError(
-      `지원하지 않는 형식입니다 (.${ext || '확장자 없음'}). 허용: 이미지·PDF·PPT·엑셀`,
+      `지원하지 않는 형식입니다 (.${ext || '확장자 없음'}). 허용: 이미지·동영상(mp4)·PDF·PPT·엑셀`,
     )
   }
-  if (file.size > MAX_ATTACHMENT_SIZE) {
+  const maxSize = VIDEO_EXTENSIONS.includes(ext) ? MAX_VIDEO_SIZE : MAX_ATTACHMENT_SIZE
+  if (file.size > maxSize) {
     throw new SectionAttachmentError(
-      `파일이 너무 큽니다 (${(file.size / 1024 / 1024).toFixed(1)}MB). 최대 20MB까지 올릴 수 있습니다.`,
+      `파일이 너무 큽니다 (${(file.size / 1024 / 1024).toFixed(1)}MB). 최대 ${maxSize / 1024 / 1024}MB까지 올릴 수 있습니다.`,
     )
   }
 }
 
 export function isImageAttachment(meta: ChunkedFileMeta): boolean {
   return IMAGE_EXTENSIONS.includes(extensionOf(meta.filename))
+}
+
+export function isVideoAttachment(meta: ChunkedFileMeta): boolean {
+  return VIDEO_EXTENSIONS.includes(extensionOf(meta.filename))
 }
 
 export async function uploadSectionAttachment(

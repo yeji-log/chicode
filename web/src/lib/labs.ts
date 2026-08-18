@@ -63,7 +63,7 @@ export interface LabActivitySection {
   kind?: 'slides' | 'checklist'
   /** kind === 'checklist' 일 때만 쓴다. */
   items?: LabChecklistItem[]
-  /** 이 항목에 이미지·PDF·PPT·엑셀 파일을 하나 붙였는지. 실제 파일은
+  /** 이 항목에 이미지·동영상(mp4)·PDF·PPT·엑셀 파일을 하나 붙였는지. 실제 파일은
    *  labSectionAttachments.ts 가 activityId+section.id 를 키로 따로
    *  저장한다 — 문자열이 아니라 여기 담을 수가 없어서다. */
   hasAttachment?: boolean

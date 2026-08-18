@@ -16,8 +16,16 @@ import {
   getSectionAttachmentFile,
   getSectionAttachmentMeta,
   isImageAttachment,
+  isVideoAttachment,
 } from '../lib/labSectionAttachments'
-import { getActivity, getSeason, isChecklistSection, isSlidesSection, type LabActivity } from '../lib/labs'
+import {
+  getActivity,
+  getSeason,
+  isChecklistSection,
+  isSlidesSection,
+  type LabActivity,
+  type LabActivitySection,
+} from '../lib/labs'
 import { getNotes, getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import { linkify } from '../lib/linkify'
 
@@ -231,35 +239,10 @@ export default function LabActivityDetail() {
           )
         }
 
-        // 체크리스트 — 교사가 미리 정해둔 체크 상태를 그대로 보여준다.
-        // 학생이 눌러서 바꿀 수는 없다(labs.ts kind: 'checklist' 설명 참고).
+        // 체크리스트 — 학생이 직접 눌러서 체크할 수 있다(모션만, labs.ts
+        // kind: 'checklist' 설명·아래 ChecklistSection 주석 참고).
         if (isChecklistSection(section)) {
-          const items = section.items ?? []
-          if (items.length === 0) return null
-
-          return (
-            <section
-              key={section.id}
-              className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6"
-            >
-              <h2 className="font-bold text-ink-900">{section.title}</h2>
-              <ul className="flex flex-col gap-1.5">
-                {items.map((item) => (
-                  <li key={item.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={item.checked}
-                      disabled
-                      className="accent-cheese-400"
-                    />
-                    <span className={item.checked ? 'text-ink-500 line-through' : 'text-ink-900'}>
-                      {item.text}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )
+          return <ChecklistSection key={section.id} section={section} />
         }
 
         const attachment = section.hasAttachment && (
@@ -297,6 +280,53 @@ export default function LabActivityDetail() {
   )
 }
 
+/**
+ * 체크리스트 — 교사가 미리 정해둔 체크 상태를 초기값으로 삼되, 학생이 눌러서
+ * 체크를 켜고 끌 수 있다. 서버에는 안 남는다(labs.ts kind: 'checklist' 설명
+ * 참고 — 학생별 로그인/저장소가 없다) — 그냥 지금 이 화면에서 진행 상황을
+ * 스스로 표시해보는 모션이다. 그래서 로컬 state 로만 두고, activity가
+ * 바뀌거나(다른 활동으로 이동) 새로고침하면 교사가 정해둔 초기 상태로
+ * 돌아간다.
+ */
+function ChecklistSection({ section }: { section: LabActivitySection }) {
+  const [items, setItems] = useState(section.items ?? [])
+
+  useEffect(() => {
+    setItems(section.items ?? [])
+  }, [section.items])
+
+  if (items.length === 0) return null
+
+  function toggle(itemId: string) {
+    setItems((current) =>
+      current.map((item) => (item.id === itemId ? { ...item, checked: !item.checked } : item)),
+    )
+  }
+
+  return (
+    <section className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6">
+      <h2 className="font-bold text-ink-900">{section.title}</h2>
+      <ul className="flex flex-col gap-1.5">
+        {items.map((item) => (
+          <li key={item.id}>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={item.checked}
+                onChange={() => toggle(item.id)}
+                className="accent-cheese-400"
+              />
+              <span className={item.checked ? 'text-ink-500 line-through' : 'text-ink-900'}>
+                {item.text}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function difficultyStars(difficulty: number): string {
   const filled = Math.max(0, Math.min(5, difficulty))
   return '★'.repeat(filled) + '☆'.repeat(5 - filled)
@@ -331,13 +361,23 @@ function Section({
   )
 }
 
-/** 항목 하나에 붙은 첨부파일 — 이미지면 바로 보여주고, 아니면(PDF/PPT/엑셀
- *  등) 다운로드 링크 하나만 둔다. 발표자료(PptxSlideViewer)와 달리 다운로드를
- *  막을 이유가 없는 일반 수업자료라서 훨씬 단순하다. */
+/** 항목 하나에 붙은 첨부파일 — 이미지면 바로 보여주고, 동영상(mp4)이면
+ *  플레이어를 띄우고, 그 외(PDF/PPT/엑셀 등)는 다운로드 링크 하나만 둔다.
+ *  발표자료(PptxSlideViewer)와 달리 다운로드를 막을 이유가 없는 일반
+ *  수업자료라서 훨씬 단순하다.
+ *
+ *  동영상은 Storage가 아니라 Firestore 문서 조각으로 저장돼서(위
+ *  labSectionAttachments.ts 설명 참고) 스트리밍이 안 된다 — 아래
+ *  getSectionAttachmentFile 이 전체 파일을 다 받아온 뒤에야 objectUrl이
+ *  생기고 <video> 가 재생 가능해진다. 용량 제한(50MB)을 짧은 시연 클립
+ *  정도로 잡아둔 이유다. */
 function SectionAttachment({ activityId, sectionId }: { activityId: string; sectionId: string }) {
-  const [loaded, setLoaded] = useState<{ filename: string; url: string; isImage: boolean } | null>(
-    null,
-  )
+  const [loaded, setLoaded] = useState<{
+    filename: string
+    url: string
+    isImage: boolean
+    isVideo: boolean
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -348,7 +388,12 @@ function SectionAttachment({ activityId, sectionId }: { activityId: string; sect
       const blob = await getSectionAttachmentFile(activityId, sectionId)
       if (!blob || cancelled) return
       objectUrl = URL.createObjectURL(blob)
-      setLoaded({ filename: meta.filename, url: objectUrl, isImage: isImageAttachment(meta) })
+      setLoaded({
+        filename: meta.filename,
+        url: objectUrl,
+        isImage: isImageAttachment(meta),
+        isVideo: isVideoAttachment(meta),
+      })
     })
 
     return () => {
@@ -359,13 +404,29 @@ function SectionAttachment({ activityId, sectionId }: { activityId: string; sect
 
   if (!loaded) return null
 
-  return loaded.isImage ? (
-    <img
-      src={loaded.url}
-      alt={loaded.filename}
-      className="mt-1 max-h-[32rem] w-auto max-w-full rounded-lg border border-cream-deep object-contain"
-    />
-  ) : (
+  if (loaded.isImage) {
+    return (
+      <img
+        src={loaded.url}
+        alt={loaded.filename}
+        className="mt-1 max-h-[32rem] w-auto max-w-full rounded-lg border border-cream-deep object-contain"
+      />
+    )
+  }
+
+  if (loaded.isVideo) {
+    return (
+      <video
+        src={loaded.url}
+        controls
+        className="mt-1 max-h-[32rem] w-auto max-w-full rounded-lg border border-cream-deep"
+      >
+        {loaded.filename}
+      </video>
+    )
+  }
+
+  return (
     <a
       href={loaded.url}
       download={loaded.filename}
