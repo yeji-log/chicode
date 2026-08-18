@@ -1,0 +1,35 @@
+name: Fetch daily AI/IT news candidates
+
+# 매일 KST 06:00(=UTC 21:00 전날)에 실행한다. 교사가 07:00에 Teacher 페이지를
+# 열었을 때 이미 후보가 쌓여 있도록, 검토 시각보다 1시간 여유를 둔다 —
+# GitHub Actions의 cron은 정시를 보장하지 않고 몇 분 밀릴 수 있어서다.
+on:
+  schedule:
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run fetch:news
+        env:
+          # Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → "새 비공개 키 생성"으로
+          # 받은 JSON 파일의 전체 내용을 그대로 이 이름의 Secret에 넣어야 한다.
+          # (Settings → Secrets and variables → Actions → New repository secret)
+          # 이 값이 없으면 이 워크플로는 실패한다 — 아직 등록 전이라면 정상이다.
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}

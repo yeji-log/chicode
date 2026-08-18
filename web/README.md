@@ -96,6 +96,44 @@ Google 로그인 → Firestore teachers/{이메일} 존재? → 교사 페이지
 설정값은 `.env.local` 에 둔다 (`.env.example` 참고). 이 값들은 비밀이 아니며 빌드되면
 브라우저에 노출된다 — 실제 통제는 위의 보안 규칙이 담당한다.
 
+## 오늘의 AI·IT 이슈 (홈 화면)
+
+홈 화면(`/`)에 학생용 AI·IT 뉴스 카드 섹션이 있다. **자동 수집 + 사람 검토**로
+나눈 2단계 구조다 — LLM(Claude API 등)으로 요약·중요도 판단까지 자동화하는 방법도
+검토했지만, 그러면 "서버 비용 0원" 원칙이 깨지고 확인 안 된 요약이 그대로 학생에게
+노출될 위험도 있어 채택하지 않았다. 대신 자동화는 후보를 추리는 것까지만 하고,
+요약·"왜 중요한가"·최종 3~5개 선정은 교사가 직접 한다.
+
+```
+GitHub Actions (매일 KST 06:00, .github/workflows/daily-news.yml)
+  → scripts/fetch-news.mjs 가 공식 블로그 RSS 수집
+  → 키워드로 분야 태깅(안 맞으면 버림) + 중복 제거
+  → Firebase Admin SDK로 newsCandidates 에 원문만 기록 (교사만 읽음)
+        ↓
+  교사가 /teacher → "오늘의 뉴스" 탭에서 후보 중 골라 요약 작성 후 승인
+        ↓
+  newsIssues 로 이동 (읽기 공개) → 홈 화면 카드로 노출
+```
+
+- 데이터 계층: `src/lib/news.ts`. 화면은 `src/components/NewsSection.tsx`(학생 홈)와
+  `src/pages/TeacherNews.tsx`(교사 검토)만 이 파일의 함수를 호출한다.
+- `newsCandidates` 는 클라이언트 write 를 항상 막아뒀다(`firestore.rules`) — Admin SDK
+  는 규칙을 우회하므로 자동화는 그대로 동작하고, 이건 "가짜 후보를 브라우저에서
+  써넣는 것"만 막는 용도다. 교사는 delete(건너뛰기)만 가능하다.
+- **RSS 소스는 실제로 curl 로 하나하나 확인한 것만 넣었다** (`scripts/fetch-news.mjs`
+  상단 주석 참고). Anthropic 공식 블로그와 Microsoft AI 블로그는 확인 시점에
+  RSS가 없거나(404) 막혀 있어(403/410) 뺐다 — 나중에 다시 확인해서 추가할 수 있다.
+- 이 워크플로가 실제로 동작하려면 **GitHub 저장소 Secret**
+  `FIREBASE_SERVICE_ACCOUNT_KEY` 를 등록해야 한다. Firebase 콘솔 → 프로젝트 설정 →
+  서비스 계정 → "새 비공개 키 생성" 으로 받은 JSON 파일 전체 내용을 그대로 붙여넣는다.
+  등록 전에는 워크플로가 실패하는 게 정상이다.
+- `firestore.rules` 를 고쳤으므로 배포 전이라면 아래 "배포" 절의
+  `npx firebase deploy --only firestore:rules` 를 실행해야 실제로 반영된다 — 배포 전엔
+  홈 화면이 `permission-denied` 를 조용히 삼키고 섹션 자체를 안 그린다(의도한 동작).
+- 이미지(썸네일)는 없다 — 학교 네트워크가 외부 이미지를 막을 수 있어 텍스트 카드만
+  쓰기로 했다. 뉴스 상세 페이지, "관련 개념/프로젝트" 연결은 아직 없다(연결할
+  개념 페이지·`/projects` 콘텐츠 자체가 없어서 다음 단계로 미룸).
+
 ## 배포
 
 **Vercel**(메인, `chicode-psi.vercel.app`)과 **GitHub Pages**(보조,
