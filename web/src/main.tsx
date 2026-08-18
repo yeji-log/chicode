@@ -57,7 +57,7 @@ createRoot(document.getElementById('root')!).render(
                 <ComingSoon
                   emoji="🔌"
                   title="Pico 2 W 시뮬레이터"
-                  description="브라우저에서 가상 Pico 2 W 보드로 GPIO, LED, Button 을 다루는 실습입니다. 다음 단계에서 준비합니다."
+                  description="브라우저에서 가상 Pico 2 W 보드로 GPIO, LED, Button 을 다루는 실습입니다. 곧 열립니다!"
                   secondary={{ to: '/practice/python', label: 'Python 실습 하러 가기' }}
                 />
               }
