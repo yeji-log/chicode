@@ -22,12 +22,22 @@ export default function LabActivities() {
     listSeasons().then(setSeasons)
   }, [])
 
+  // 로드맵에서 "준비중" 시즌 카드를 눌러 여기로 왔을 수도 있다 — 그 경우
+  // includePreparingSeason 을 켜서 활동을 숨기지 않고 미리보기로만 받는다
+  // (아래 렌더링에서 링크를 안 걸어 실제로 들어가지는 못하게 막는다).
   useEffect(() => {
     setLoading(true)
-    listActivities({ publishedOnly: true, seasonId: activeSeasonId || undefined })
+    listActivities({
+      publishedOnly: true,
+      seasonId: activeSeasonId || undefined,
+      includePreparingSeason: true,
+    })
       .then(setActivities)
       .finally(() => setLoading(false))
   }, [activeSeasonId])
+
+  const activeSeason = seasons.find((season) => season.id === activeSeasonId)
+  const isPreparingSeason = activeSeason?.status === '준비중'
 
   function selectSeason(id: string) {
     setSearchParams(id ? { season: id } : {})
@@ -62,6 +72,13 @@ export default function LabActivities() {
         </nav>
       )}
 
+      {isPreparingSeason && !loading && activities.length > 0 && (
+        <p className="rounded-xl bg-cream-deep/60 px-4 py-3 text-sm text-ink-500">
+          🔒 아직 준비 중인 시즌이에요. 어떤 활동이 있는지만 미리 볼 수 있고, 열리면 들어갈 수
+          있습니다.
+        </p>
+      )}
+
       {loading ? (
         <p className="text-ink-500">불러오는 중…</p>
       ) : activities.length === 0 ? (
@@ -70,31 +87,47 @@ export default function LabActivities() {
         </p>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {activities.map((activity) => (
-            <li key={activity.id}>
-              <Link
-                to={`/lab/activities/${activity.id}`}
-                className="flex h-full flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-5 transition-all hover:-translate-y-0.5 hover:border-cheese-300 hover:shadow-md"
+          {activities.map((activity) =>
+            isPreparingSeason ? (
+              // 준비중 시즌 — 어떤 활동이 있는지 제목만 미리 보여주고, 실제
+              // 내용(본문 미리보기)은 공개 전이라 숨긴다. 링크를 아예 안 걸어서
+              // 클릭해도 들어가지지 않는다(들어가더라도 LabActivityDetail이
+              // seasonPreparing 검사로 다시 막는다 — 이중 방어).
+              <li
+                key={activity.id}
+                className="flex h-full cursor-not-allowed flex-col gap-2 rounded-2xl border border-dashed border-cream-deep bg-white/40 p-5 opacity-70"
               >
-                {activity.seasonId && seasonTitle(activity.seasonId) && (
-                  <span className="text-xs font-semibold text-cheese-600">
-                    {seasonTitle(activity.seasonId)}
-                  </span>
-                )}
                 <h2 className="font-bold text-ink-900">{activity.title}</h2>
-                {/* 미리보기 한 줄 — 예전엔 "오늘의 목표" 필드였는데, 이제 항목
-                    이름은 교사가 자유롭게 바꾸므로 순서상 첫 항목 내용을 쓴다. */}
-                {activity.sections[0]?.content && (
-                  <p className="line-clamp-2 text-sm text-ink-700">
-                    {activity.sections[0].content}
-                  </p>
-                )}
-                <span className="mt-auto pt-2 text-xs text-ink-500">
-                  {difficultyStars(activity.difficulty)}
+                <span className="mt-auto pt-2 text-xs font-semibold text-ink-500">
+                  🔒 준비중
                 </span>
-              </Link>
-            </li>
-          ))}
+              </li>
+            ) : (
+              <li key={activity.id}>
+                <Link
+                  to={`/lab/activities/${activity.id}`}
+                  className="flex h-full flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-5 transition-all hover:-translate-y-0.5 hover:border-cheese-300 hover:shadow-md"
+                >
+                  {activity.seasonId && seasonTitle(activity.seasonId) && (
+                    <span className="text-xs font-semibold text-cheese-600">
+                      {seasonTitle(activity.seasonId)}
+                    </span>
+                  )}
+                  <h2 className="font-bold text-ink-900">{activity.title}</h2>
+                  {/* 미리보기 한 줄 — 예전엔 "오늘의 목표" 필드였는데, 이제 항목
+                      이름은 교사가 자유롭게 바꾸므로 순서상 첫 항목 내용을 쓴다. */}
+                  {activity.sections[0]?.content && (
+                    <p className="line-clamp-2 text-sm text-ink-700">
+                      {activity.sections[0].content}
+                    </p>
+                  )}
+                  <span className="mt-auto pt-2 text-xs text-ink-500">
+                    {difficultyStars(activity.difficulty)}
+                  </span>
+                </Link>
+              </li>
+            ),
+          )}
         </ul>
       )}
     </div>

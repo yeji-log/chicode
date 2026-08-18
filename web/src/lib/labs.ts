@@ -161,6 +161,11 @@ const HOME_SETTINGS_ID = 'home'
 export async function listActivities(opts?: {
   seasonId?: string
   publishedOnly?: boolean
+  /** 로드맵에서 "준비중" 시즌 카드를 눌러 그 시즌으로 딱 집어 들어온 경우처럼,
+   *  활동에 들어가지는 못해도 어떤 활동이 있는지 미리보기 목록은 보여주고
+   *  싶을 때 true로 넘긴다. seasonId 를 함께 넘겼을 때만 의미가 있다 —
+   *  seasonId 없이 전체 목록을 볼 때는 준비중 시즌 활동을 계속 숨긴다. */
+  includePreparingSeason?: boolean
 }): Promise<LabActivity[]> {
   const snapshot = opts?.seasonId
     ? await getDocs(query(collection(db, LABS), where('seasonId', '==', opts.seasonId)))
@@ -170,15 +175,18 @@ export async function listActivities(opts?: {
 
   if (opts?.publishedOnly) {
     activities = activities.filter((activity) => activity.published)
-    // 활동 자체는 published여도, 그 활동이 속한 시즌이 로드맵에서 아직
-    // "준비중"이면 학생에게는 같이 숨긴다 — 로드맵에 안 보이는 시즌인데
-    // 활동 목록/직접 링크로는 열리는 건 앞뒤가 안 맞는다는 지적을 받았다.
-    const preparingSeasonIds = new Set(
-      (await listSeasons())
-        .filter((season) => season.status === '준비중')
-        .map((season) => season.id),
-    )
-    activities = activities.filter((activity) => !preparingSeasonIds.has(activity.seasonId))
+
+    if (!(opts.seasonId && opts.includePreparingSeason)) {
+      // 활동 자체는 published여도, 그 활동이 속한 시즌이 로드맵에서 아직
+      // "준비중"이면 학생에게는 같이 숨긴다 — 로드맵에 안 보이는 시즌인데
+      // 활동 목록/직접 링크로는 열리는 건 앞뒤가 안 맞는다는 지적을 받았다.
+      const preparingSeasonIds = new Set(
+        (await listSeasons())
+          .filter((season) => season.status === '준비중')
+          .map((season) => season.id),
+      )
+      activities = activities.filter((activity) => !preparingSeasonIds.has(activity.seasonId))
+    }
   }
 
   return activities.sort((a, b) => a.order - b.order || a.createdAt - b.createdAt)
