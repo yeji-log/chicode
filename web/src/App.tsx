@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 import PolicyModal from './components/PolicyModal'
+import LabRules, { LAB_RULES_EFFECTIVE_DATE } from './content/LabRules'
 import PrivacyPolicy, { PRIVACY_POLICY_EFFECTIVE_DATE } from './content/PrivacyPolicy'
 import TermsOfService, { TERMS_OF_SERVICE_EFFECTIVE_DATE } from './content/TermsOfService'
 import { asset } from './lib/asset'
 
-type OpenPolicy = 'privacy' | 'terms' | null
+type OpenPolicy = 'privacy' | 'terms' | 'labRules' | null
 
 const TABS = [
   { to: '/', label: '홈', end: true },
@@ -88,6 +89,12 @@ export default function App() {
             >
               이용약관
             </button>
+            <button
+              onClick={() => setOpenPolicy('labRules')}
+              className="font-semibold text-ink-500 underline decoration-cream-deep underline-offset-2 transition-colors hover:text-ink-900 hover:decoration-cheese-400"
+            >
+              컴퓨터실 이용규칙
+            </button>
           </div>
         </div>
       </footer>
@@ -108,6 +115,15 @@ export default function App() {
           onClose={() => setOpenPolicy(null)}
         >
           <TermsOfService />
+        </PolicyModal>
+      )}
+      {openPolicy === 'labRules' && (
+        <PolicyModal
+          title="컴퓨터실 이용규칙"
+          effectiveDate={LAB_RULES_EFFECTIVE_DATE}
+          onClose={() => setOpenPolicy(null)}
+        >
+          <LabRules />
         </PolicyModal>
       )}
     </div>

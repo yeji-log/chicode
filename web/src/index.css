@@ -20,6 +20,12 @@
   --color-board: #2e4739;
   --color-board-light: #3d5c4a;
 
+  /* 컴퓨터실 이용규칙(풋터 팝업) 전용 경고색. 사이트 전체가 크림/치즈 톤이라
+     "벌점" 같은 실제 경고는 이 색이 없으면 다른 안내문과 구분되지 않는다. */
+  --color-warn-100: #fbe4de;
+  --color-warn-300: #f2a98f;
+  --color-warn-600: #c1441f;
+
   --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
     'Segoe UI', system-ui, sans-serif;
   --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
