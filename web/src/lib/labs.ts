@@ -55,6 +55,10 @@ export interface LabActivitySection {
   content: string
   isCode: boolean
   kind?: 'slides'
+  /** 이 항목에 이미지·PDF·PPT·엑셀 파일을 하나 붙였는지. 실제 파일은
+   *  labSectionAttachments.ts 가 activityId+section.id 를 키로 따로
+   *  저장한다 — 문자열이 아니라 여기 담을 수가 없어서다. */
+  hasAttachment?: boolean
 }
 
 const SLIDES_SECTION_ID = 'slides'
@@ -163,7 +167,20 @@ export async function listActivities(opts?: {
     : await getDocs(collection(db, LABS))
 
   let activities = snapshot.docs.map((entry) => normalizeActivity(entry.id, entry.data()))
-  if (opts?.publishedOnly) activities = activities.filter((activity) => activity.published)
+
+  if (opts?.publishedOnly) {
+    activities = activities.filter((activity) => activity.published)
+    // 활동 자체는 published여도, 그 활동이 속한 시즌이 로드맵에서 아직
+    // "준비중"이면 학생에게는 같이 숨긴다 — 로드맵에 안 보이는 시즌인데
+    // 활동 목록/직접 링크로는 열리는 건 앞뒤가 안 맞는다는 지적을 받았다.
+    const preparingSeasonIds = new Set(
+      (await listSeasons())
+        .filter((season) => season.status === '준비중')
+        .map((season) => season.id),
+    )
+    activities = activities.filter((activity) => !preparingSeasonIds.has(activity.seasonId))
+  }
+
   return activities.sort((a, b) => a.order - b.order || a.createdAt - b.createdAt)
 }
 

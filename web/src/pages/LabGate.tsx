@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthProvider'
 import { getHomeSettings, isLabUnlocked, unlockLab } from '../lib/labs'
 
 /**
@@ -11,20 +12,24 @@ import { getHomeSettings, isLabUnlocked, unlockLab } from '../lib/labs'
  * main.tsx 에서 이 컴포넌트를 /lab 의 부모 라우트로 두고, 실제 화면들은
  * <Outlet/> 으로 그 아래에 매달린다 — /lab/activities 처럼 자식 경로로 바로
  * 들어와도 핀을 건너뛸 수 없다.
+ *
+ * 로그인한 교사는 핀 없이 바로 들어간다 — SubjectMaterials.tsx 와 같은 이유.
  */
 export default function LabGate() {
+  const { state: authState } = useAuth()
+  const isTeacherViewer = authState === 'teacher'
   const [unlocked, setUnlocked] = useState(() => isLabUnlocked())
   const [pin, setPin] = useState('0000')
   const [loading, setLoading] = useState(() => !isLabUnlocked())
 
   useEffect(() => {
-    if (unlocked) return
+    if (unlocked || isTeacherViewer) return
     getHomeSettings()
       .then((settings) => setPin(settings.pin || '0000'))
       .finally(() => setLoading(false))
-  }, [unlocked])
+  }, [unlocked, isTeacherViewer])
 
-  if (unlocked) return <Outlet />
+  if (unlocked || isTeacherViewer) return <Outlet />
   if (loading) return <p className="text-ink-500">불러오는 중…</p>
 
   return <PinGate pin={pin} onUnlock={() => setUnlocked(true)} />

@@ -25,6 +25,12 @@ import {
   updateSeason,
 } from '../lib/labs'
 import {
+  SectionAttachmentError,
+  deleteSectionAttachment,
+  getSectionAttachmentMeta,
+  uploadSectionAttachment,
+} from '../lib/labSectionAttachments'
+import {
   type LabSlideSet,
   SlideValidationError,
   deleteSlidePdf,
@@ -631,6 +637,7 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
         <SectionsEditor
           sections={form.sections}
           onChange={(sections) => setForm({ ...form, sections })}
+          activityId={editingId}
         />
 
         <FormField
@@ -743,9 +750,13 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
 function SectionsEditor({
   sections,
   onChange,
+  activityId,
 }: {
   sections: LabActivitySection[]
   onChange: (sections: LabActivitySection[]) => void
+  /** 첨부파일 업로드에 필요하다 — 새 활동은 한 번 저장하기 전엔 id가 없어서
+   *  그동안은 각 항목의 첨부 UI에 "먼저 저장해 주세요" 안내만 보여준다. */
+  activityId: string | null
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -798,6 +809,7 @@ function SectionsEditor({
                 <SortableSectionRow
                   key={section.id}
                   section={section}
+                  activityId={activityId}
                   onChange={(patch) => updateSection(section.id, patch)}
                   onRemove={() => removeSection(section.id)}
                 />
@@ -820,10 +832,12 @@ function SectionsEditor({
 
 function SortableSectionRow({
   section,
+  activityId,
   onChange,
   onRemove,
 }: {
   section: LabActivitySection
+  activityId: string | null
   onChange: (patch: Partial<LabActivitySection>) => void
   onRemove: () => void
 }) {
@@ -911,6 +925,111 @@ function SortableSectionRow({
         placeholder="내용"
         className={`rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm text-ink-900 focus:border-cheese-300 focus:outline-none ${section.isCode ? 'font-mono' : ''}`}
       />
+
+      <label className="flex items-center gap-1.5 text-xs font-semibold text-ink-600">
+        <input
+          type="checkbox"
+          checked={section.hasAttachment ?? false}
+          onChange={(event) => onChange({ hasAttachment: event.target.checked })}
+        />
+        이미지·PDF·PPT·엑셀 파일 첨부
+      </label>
+      {section.hasAttachment && (
+        <SectionAttachmentUploader activityId={activityId} sectionId={section.id} />
+      )}
+    </div>
+  )
+}
+
+/** 항목 하나에 딸린 첨부파일 업로드/삭제. "발표자료" SlidesPanel과 같은
+ *  이유로 activityId(첫 저장 전엔 없음)가 있어야 동작한다. */
+function SectionAttachmentUploader({
+  activityId,
+  sectionId,
+}: {
+  activityId: string | null
+  sectionId: string
+}) {
+  const [meta, setMeta] = useState<ChunkedFileMeta | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!activityId) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    getSectionAttachmentMeta(activityId, sectionId)
+      .then(setMeta)
+      .finally(() => setLoading(false))
+  }, [activityId, sectionId])
+
+  if (!activityId) {
+    return (
+      <p className="rounded-lg border border-dashed border-cream-deep bg-cream/40 px-3 py-2 text-xs text-ink-500">
+        활동을 한 번 저장한 뒤에 첨부할 수 있습니다.
+      </p>
+    )
+  }
+
+  async function handleFile(file: File) {
+    if (!activityId) return
+    setBusy(true)
+    setError(null)
+    try {
+      setMeta(await uploadSectionAttachment(activityId, sectionId, file))
+    } catch (caught) {
+      setError(
+        caught instanceof SectionAttachmentError
+          ? caught.message
+          : '업로드에 실패했습니다. 다시 시도해 주세요.',
+      )
+    } finally {
+      setBusy(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  async function handleDelete() {
+    if (!activityId || !confirm('첨부파일을 삭제할까요?')) return
+    await deleteSectionAttachment(activityId, sectionId)
+    setMeta(null)
+  }
+
+  if (loading) return null
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-cream-deep bg-cream/40 p-2.5">
+      {meta ? (
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="truncate text-ink-700">
+            📎 {meta.filename} · {(meta.size / 1024 / 1024).toFixed(1)}MB
+          </span>
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="shrink-0 font-semibold text-red-600 hover:underline"
+          >
+            삭제
+          </button>
+        </div>
+      ) : (
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.ppt,.pptx,.xls,.xlsx"
+          disabled={busy}
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (file) void handleFile(file)
+          }}
+          className="text-xs text-ink-700 file:mr-2 file:rounded-md file:border-0 file:bg-cheese-200 file:px-2.5 file:py-1 file:text-xs file:font-bold file:text-ink-900"
+        />
+      )}
+      {error && <p className="text-xs text-red-700">{error}</p>}
     </div>
   )
 }

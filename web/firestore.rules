@@ -95,5 +95,18 @@ service cloud.firestore {
       allow read: if true;
       allow create, update, delete: if isTeacher();
     }
+
+    // 활동 항목(section) 하나하나에 붙는 첨부파일(이미지·PDF·PPT·엑셀).
+    // labSlides 와 같은 조각 저장 구조지만, 다운로드를 막을 이유가 없는
+    // 일반 수업자료라 성격은 materials 에 더 가깝다.
+    match /labSectionFiles/{activityId}/files/{fileId} {
+      allow read: if true;
+      allow create, update, delete: if isTeacher();
+
+      match /chunks/{chunkIndex} {
+        allow read: if true;
+        allow create, update, delete: if isTeacher();
+      }
+    }
   }
 }

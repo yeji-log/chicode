@@ -12,6 +12,11 @@ import {
   subscribePresentation,
   type LabPresentationState,
 } from '../lib/labPresentation'
+import {
+  getSectionAttachmentFile,
+  getSectionAttachmentMeta,
+  isImageAttachment,
+} from '../lib/labSectionAttachments'
 import { getActivity, getSeason, isSlidesSection, type LabActivity } from '../lib/labs'
 import { getNotes, getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import { linkify } from '../lib/linkify'
@@ -26,6 +31,10 @@ export default function LabActivityDetail() {
 
   const [activity, setActivity] = useState<LabActivity | null>(null)
   const [seasonTitle, setSeasonTitle] = useState<string | null>(null)
+  /** 시즌이 로드맵에서 "준비중"이면 활동도 아직 학생에게 안 보여준다 —
+   *  published 여도 마찬가지다(로드맵엔 안 보이는데 활동은 열리면 앞뒤가
+   *  안 맞는다는 지적을 받았다). seasonId 가 없는 활동(미지정)은 해당 없음. */
+  const [seasonPreparing, setSeasonPreparing] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const [slideFiles, setSlideFiles] = useState<{ pptx: Blob | null; pdf: Blob | null } | null>(
@@ -36,6 +45,10 @@ export default function LabActivityDetail() {
   /** 이 브라우저 탭에서 "발표 시작"을 눌러 지금 직접 조작 중인지. Firestore의
    *  active 플래그와 별개다 — 다른 기기가 이미 발표 중이면 이 탭은 false다. */
   const [isPresenting, setIsPresenting] = useState(false)
+  /** "발표 시작"을 누를 때 몇 페이지부터 시작할지. 예전엔 지난번 멈춘 자리
+   *  (presentation.currentSlide)를 그대로 다시 썼는데, 교사가 매번 직접
+   *  고를 수 있어야 한다는 요청으로 별도 입력칸을 뒀다. */
+  const [startSlideInput, setStartSlideInput] = useState('1')
 
   useEffect(() => {
     if (!id) return
@@ -46,6 +59,7 @@ export default function LabActivityDetail() {
         if (loaded?.seasonId) {
           const season = await getSeason(loaded.seasonId)
           setSeasonTitle(season?.title ?? null)
+          setSeasonPreparing(season?.status === '준비중')
         }
       })
       .finally(() => setLoading(false))
@@ -86,9 +100,10 @@ export default function LabActivityDetail() {
 
   if (loading) return <p className="text-ink-500">불러오는 중…</p>
 
-  // published 가 아닌 활동은 직접 링크로 와도 "존재하지 않음" 취급한다 —
-  // Firestore 규칙상 읽기는 공개라 완전한 차단은 아니지만, 화면은 안 보여준다.
-  if (!activity || !activity.published) {
+  // published 가 아니거나 소속 시즌이 아직 "준비중"이면 직접 링크로 와도
+  // "존재하지 않음" 취급한다 — Firestore 규칙상 읽기는 공개라 완전한 차단은
+  // 아니지만, 화면은 안 보여준다.
+  if (!activity || !activity.published || seasonPreparing) {
     return (
       <div className="rounded-2xl border border-dashed border-cream-deep px-6 py-14 text-center">
         <p className="text-4xl">🤔</p>
@@ -112,7 +127,14 @@ export default function LabActivityDetail() {
 
   async function handleStartPresenting() {
     if (!id) return
-    await startPresentation(id, presentation.currentSlide || 1)
+    const startSlide = Math.max(1, Number(startSlideInput) || 1)
+    await startPresentation(id, startSlide)
+    setIsPresenting(true)
+  }
+
+  /** 이미 다른 기기에서 진행 중인 발표를 이어받을 땐 페이지를 건드리지
+   *  않는다 — "다시 시작"이 아니라 "이어서 조작"이라서. */
+  function handleResumeControl() {
     setIsPresenting(true)
   }
 
@@ -175,16 +197,36 @@ export default function LabActivityDetail() {
               key={section.id}
               className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6"
             >
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-bold text-ink-900">{section.title}</h2>
-                {canPresent && (
-                  <button
-                    onClick={handleStartPresenting}
-                    className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
-                  >
-                    ▶ {presentation.active ? '발표 제어하기' : '발표 시작'}
-                  </button>
-                )}
+                {canPresent &&
+                  (presentation.active ? (
+                    <button
+                      onClick={handleResumeControl}
+                      className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+                    >
+                      ▶ 발표 제어하기
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-ink-600">
+                        시작 페이지
+                        <input
+                          type="number"
+                          min={1}
+                          value={startSlideInput}
+                          onChange={(event) => setStartSlideInput(event.target.value)}
+                          className="w-14 rounded-lg border border-cream-deep bg-white px-2 py-1 text-center text-sm text-ink-900 focus:border-cheese-300 focus:outline-none"
+                        />
+                      </label>
+                      <button
+                        onClick={handleStartPresenting}
+                        className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+                      >
+                        ▶ 발표 시작
+                      </button>
+                    </div>
+                  ))}
               </div>
               <PptxSlideViewer
                 pptxFile={slideFiles.pptx}
@@ -195,18 +237,22 @@ export default function LabActivityDetail() {
           )
         }
 
+        const attachment = section.hasAttachment && (
+          <SectionAttachment activityId={activity.id} sectionId={section.id} />
+        )
+
         if (section.isCode) {
           return (
-            section.content && (
-              <Section key={section.id} title={section.title}>
-                <CodeBlock code={section.content} />
+            (section.content || attachment) && (
+              <Section key={section.id} title={section.title} footer={attachment}>
+                {section.content && <CodeBlock code={section.content} />}
               </Section>
             )
           )
         }
 
         return (
-          <Section key={section.id} title={section.title}>
+          <Section key={section.id} title={section.title} footer={attachment}>
             {section.content}
           </Section>
         )
@@ -231,16 +277,76 @@ function difficultyStars(difficulty: number): string {
   return '★'.repeat(filled) + '☆'.repeat(5 - filled)
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** footer 는 children 이 비어 있어도(예: 첨부파일만 있고 글은 안 쓴 항목)
+ *  항상 그린다 — 그래서 "비어 있으면 통째로 숨기기" 판정에도 footer 유무를
+ *  같이 본다. */
+function Section({
+  title,
+  children,
+  footer,
+}: {
+  title: string
+  children?: ReactNode
+  footer?: ReactNode
+}) {
   const isEmptyText = typeof children === 'string' && children.trim() === ''
-  if (!children || isEmptyText) return null
+  const hasBody = children && !isEmptyText
+  if (!hasBody && !footer) return null
 
   return (
     <section className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6">
       <h2 className="font-bold text-ink-900">{title}</h2>
-      <div className="text-sm leading-relaxed whitespace-pre-wrap text-ink-700">
-        {typeof children === 'string' ? linkify(children) : children}
-      </div>
+      {hasBody && (
+        <div className="text-sm leading-relaxed whitespace-pre-wrap text-ink-700">
+          {typeof children === 'string' ? linkify(children) : children}
+        </div>
+      )}
+      {footer}
     </section>
+  )
+}
+
+/** 항목 하나에 붙은 첨부파일 — 이미지면 바로 보여주고, 아니면(PDF/PPT/엑셀
+ *  등) 다운로드 링크 하나만 둔다. 발표자료(PptxSlideViewer)와 달리 다운로드를
+ *  막을 이유가 없는 일반 수업자료라서 훨씬 단순하다. */
+function SectionAttachment({ activityId, sectionId }: { activityId: string; sectionId: string }) {
+  const [loaded, setLoaded] = useState<{ filename: string; url: string; isImage: boolean } | null>(
+    null,
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    let objectUrl: string | null = null
+
+    getSectionAttachmentMeta(activityId, sectionId).then(async (meta) => {
+      if (!meta) return
+      const blob = await getSectionAttachmentFile(activityId, sectionId)
+      if (!blob || cancelled) return
+      objectUrl = URL.createObjectURL(blob)
+      setLoaded({ filename: meta.filename, url: objectUrl, isImage: isImageAttachment(meta) })
+    })
+
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [activityId, sectionId])
+
+  if (!loaded) return null
+
+  return loaded.isImage ? (
+    <img
+      src={loaded.url}
+      alt={loaded.filename}
+      className="mt-1 max-h-[32rem] w-auto max-w-full rounded-lg border border-cream-deep object-contain"
+    />
+  ) : (
+    <a
+      href={loaded.url}
+      download={loaded.filename}
+      className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+    >
+      📎 {loaded.filename} 다운로드
+    </a>
   )
 }

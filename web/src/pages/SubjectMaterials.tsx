@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthProvider'
 import PdfViewer from '../components/PdfViewer'
 import {
   type MaterialMeta,
@@ -17,9 +18,14 @@ import { getSubject, isSubjectUnlocked, unlockSubject, type SubjectMeta } from '
  *
  * 핀을 통과하기 전에는 목록을 아예 그리지 않는다 — Firestore 규칙상 어차피 읽기가
  * 공개라 완전한 차단은 아니지만, 최소한 이 화면 자체는 핀 없이는 자료를 보여주지 않는다.
+ *
+ * 로그인한 교사는 핀을 몰라서가 아니라 매번 치는 게 번거로워서 건너뛴다 —
+ * 자기 계정으로 이미 Google 로그인했다는 것 자체가 학생보다 강한 확인이다.
  */
 export default function SubjectMaterials() {
   const { subjectId } = useParams<{ subjectId: string }>()
+  const { state: authState } = useAuth()
+  const isTeacherViewer = authState === 'teacher'
   const [subject, setSubject] = useState<SubjectMeta | null>(null)
   const [loadingSubject, setLoadingSubject] = useState(true)
   const [unlocked, setUnlocked] = useState(() => Boolean(subjectId && isSubjectUnlocked(subjectId)))
@@ -53,7 +59,7 @@ export default function SubjectMaterials() {
     )
   }
 
-  if (!unlocked) {
+  if (!unlocked && !isTeacherViewer) {
     return <PinGate subject={subject} onUnlock={() => setUnlocked(true)} />
   }
 
