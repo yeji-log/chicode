@@ -11,15 +11,19 @@ import { getActivity, getHomeSettings, type LabActivity, type LabHomeSettings } 
  */
 export default function LabHome() {
   const [settings, setSettings] = useState<LabHomeSettings | null>(null)
-  const [featured, setFeatured] = useState<LabActivity | null>(null)
+  const [featuredActivities, setFeaturedActivities] = useState<LabActivity[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     getHomeSettings()
       .then(async (loaded) => {
         setSettings(loaded)
-        if (loaded.featuredActivityId) {
-          setFeatured(await getActivity(loaded.featuredActivityId))
+        if (loaded.featuredActivityIds.length > 0) {
+          const activities = await Promise.all(
+            loaded.featuredActivityIds.map((id) => getActivity(id)),
+          )
+          // 강조로 지정된 뒤 삭제된 활동은 조용히 건너뛴다.
+          setFeaturedActivities(activities.filter((activity): activity is LabActivity => !!activity))
         }
       })
       .finally(() => setLoading(false))
@@ -43,13 +47,18 @@ export default function LabHome() {
             TODAY&apos;S MISSION
           </span>
           <p className="whitespace-pre-wrap text-ink-900">{settings.todayMissionText}</p>
-          {featured && (
-            <Link
-              to={`/lab/activities/${featured.id}`}
-              className="mt-1 rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300"
-            >
-              활동 이어가기 →
-            </Link>
+          {featuredActivities.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-2">
+              {featuredActivities.map((activity) => (
+                <Link
+                  key={activity.id}
+                  to={`/lab/activities/${activity.id}`}
+                  className="rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+                >
+                  {activity.title} 이어가기 →
+                </Link>
+              ))}
+            </div>
           )}
         </section>
       )}

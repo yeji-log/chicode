@@ -96,7 +96,7 @@ export default function TeacherLab({ uploaderEmail }: { uploaderEmail: string })
 
 function HomeSettingsPanel() {
   const [todayMissionText, setTodayMissionText] = useState('')
-  const [featuredActivityId, setFeaturedActivityId] = useState('')
+  const [featuredActivityIds, setFeaturedActivityIds] = useState<string[]>([])
   const [pin, setPin] = useState('')
   const [publishedActivities, setPublishedActivities] = useState<LabActivity[]>([])
   const [loading, setLoading] = useState(true)
@@ -108,7 +108,7 @@ function HomeSettingsPanel() {
     Promise.all([getHomeSettings(), listActivities({ publishedOnly: true })])
       .then(([settings, activities]) => {
         setTodayMissionText(settings.todayMissionText)
-        setFeaturedActivityId(settings.featuredActivityId)
+        setFeaturedActivityIds(settings.featuredActivityIds)
         setPin(settings.pin)
         setPublishedActivities(activities)
       })
@@ -128,7 +128,7 @@ function HomeSettingsPanel() {
     try {
       await updateHomeSettings({
         todayMissionText: todayMissionText.trim(),
-        featuredActivityId,
+        featuredActivityIds,
         pin: trimmedPin,
       })
       setSavedAt(Date.now())
@@ -138,6 +138,14 @@ function HomeSettingsPanel() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function toggleFeatured(activityId: string) {
+    setFeaturedActivityIds((current) =>
+      current.includes(activityId)
+        ? current.filter((id) => id !== activityId)
+        : [...current, activityId],
+    )
   }
 
   if (loading) return <p className="text-ink-500">불러오는 중…</p>
@@ -182,24 +190,34 @@ function HomeSettingsPanel() {
         </span>
       </label>
 
-      <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
-        강조 활동 (선택)
-        <select
-          value={featuredActivityId}
-          onChange={(event) => setFeaturedActivityId(event.target.value)}
-          className={inputClass}
-        >
-          <option value="">선택 안 함</option>
-          {publishedActivities.map((activity) => (
-            <option key={activity.id} value={activity.id}>
-              {activity.title}
-            </option>
-          ))}
-        </select>
+      <div className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+        강조 활동 (선택, 여러 개 가능)
+        {publishedActivities.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-cream-deep px-3 py-2 text-xs font-normal text-ink-500">
+            아직 공개된 활동이 없습니다.
+          </p>
+        ) : (
+          <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-lg border border-cream-deep bg-white p-2">
+            {publishedActivities.map((activity) => (
+              <label
+                key={activity.id}
+                className="flex items-center gap-2 rounded px-1.5 py-1 text-sm font-normal text-ink-900 hover:bg-cream"
+              >
+                <input
+                  type="checkbox"
+                  checked={featuredActivityIds.includes(activity.id)}
+                  onChange={() => toggleFeatured(activity.id)}
+                />
+                {activity.title}
+              </label>
+            ))}
+          </div>
+        )}
         <span className="text-xs font-normal text-ink-500">
-          Lab 홈에 &quot;활동 이어가기&quot; 버튼으로 표시됩니다. 공개된 활동만 고를 수 있습니다.
+          Lab 홈에 &quot;활동 이어가기&quot; 버튼으로 각각 표시됩니다. 공개된 활동만 고를 수
+          있습니다.
         </span>
-      </label>
+      </div>
 
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

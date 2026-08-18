@@ -139,8 +139,10 @@ export type LabSeasonInput = Omit<LabSeason, 'id'>
 
 export interface LabHomeSettings {
   todayMissionText: string
-  /** 강조해서 "활동 이어가기" 버튼으로 보여줄 활동. 비어 있으면 버튼을 숨긴다. */
-  featuredActivityId: string
+  /** 강조해서 "활동 이어가기" 버튼으로 보여줄 활동들. 여러 개 고를 수 있다
+   *  (예전엔 하나만 되던 featuredActivityId 단수 필드였다 — 아래
+   *  getHomeSettings 의 마이그레이션 참고). 비어 있으면 버튼 자체를 숨긴다. */
+  featuredActivityIds: string[]
   /** /lab 전체를 잠그는 핀번호. subjects.ts 와 같은 "가벼운 잠금"이다 — 진짜
    *  보안 장치가 아니라 화면 진입을 막는 안내판이다(자세한 설명은 subjects.ts). */
   pin: string
@@ -246,7 +248,7 @@ export async function deleteSeason(id: string): Promise<void> {
 
 const DEFAULT_HOME_SETTINGS: LabHomeSettings = {
   todayMissionText: '',
-  featuredActivityId: '',
+  featuredActivityIds: [],
   pin: '0000',
   updatedAt: 0,
 }
@@ -254,12 +256,24 @@ const DEFAULT_HOME_SETTINGS: LabHomeSettings = {
 export async function getHomeSettings(): Promise<LabHomeSettings> {
   const snapshot = await getDoc(doc(db, SETTINGS, HOME_SETTINGS_ID))
   if (!snapshot.exists()) return DEFAULT_HOME_SETTINGS
+
   // 문서가 pin 필드 추가 이전에 만들어졌을 수도 있으므로 기본값과 합쳐서 채운다.
-  return { ...DEFAULT_HOME_SETTINGS, ...snapshot.data() } as LabHomeSettings
+  const data = snapshot.data()
+  const merged = { ...DEFAULT_HOME_SETTINGS, ...data } as LabHomeSettings & {
+    featuredActivityId?: string
+  }
+
+  // 강조 활동이 하나만 되던 시절(featuredActivityId 단수 문자열) 문서를
+  // 배열 필드로 옮겨 읽는다 — 한 번 저장하면 그 뒤로는 featuredActivityIds만 쓴다.
+  if (!Array.isArray(data.featuredActivityIds) && data.featuredActivityId) {
+    merged.featuredActivityIds = [data.featuredActivityId]
+  }
+
+  return merged
 }
 
 export async function updateHomeSettings(
-  patch: Partial<Pick<LabHomeSettings, 'todayMissionText' | 'featuredActivityId' | 'pin'>>,
+  patch: Partial<Pick<LabHomeSettings, 'todayMissionText' | 'featuredActivityIds' | 'pin'>>,
 ): Promise<void> {
   // 문서가 아직 없을 수 있으므로(최초 저장) merge 로 만들면서 갱신한다.
   await setDoc(
