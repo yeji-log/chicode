@@ -71,6 +71,7 @@ export default function TeacherLab({ uploaderEmail }: { uploaderEmail: string })
 function HomeSettingsPanel() {
   const [todayMissionText, setTodayMissionText] = useState('')
   const [featuredActivityId, setFeaturedActivityId] = useState('')
+  const [pin, setPin] = useState('')
   const [publishedActivities, setPublishedActivities] = useState<LabActivity[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -82,6 +83,7 @@ function HomeSettingsPanel() {
       .then(([settings, activities]) => {
         setTodayMissionText(settings.todayMissionText)
         setFeaturedActivityId(settings.featuredActivityId)
+        setPin(settings.pin)
         setPublishedActivities(activities)
       })
       .finally(() => setLoading(false))
@@ -89,10 +91,20 @@ function HomeSettingsPanel() {
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault()
+    const trimmedPin = pin.trim()
+    if (!trimmedPin) {
+      setError('핀번호는 비워둘 수 없습니다.')
+      return
+    }
+
     setBusy(true)
     setError(null)
     try {
-      await updateHomeSettings({ todayMissionText: todayMissionText.trim(), featuredActivityId })
+      await updateHomeSettings({
+        todayMissionText: todayMissionText.trim(),
+        featuredActivityId,
+        pin: trimmedPin,
+      })
       setSavedAt(Date.now())
     } catch (caught) {
       console.error('Lab 홈 설정 저장 실패', caught)
@@ -110,6 +122,22 @@ function HomeSettingsPanel() {
       className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
     >
       <h2 className="font-bold text-ink-900">Lab 홈 설정</h2>
+
+      <label className="flex max-w-[10rem] flex-col gap-1.5 text-sm font-semibold text-ink-700">
+        핀번호
+        <input
+          value={pin}
+          onChange={(event) => {
+            setPin(event.target.value)
+            setError(null)
+          }}
+          placeholder="예: 0000"
+          className={inputClass}
+        />
+        <span className="text-xs font-normal text-ink-500">
+          학생이 Lab 탭에 들어올 때 입력합니다. 기본값 0000.
+        </span>
+      </label>
 
       <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
         오늘의 미션

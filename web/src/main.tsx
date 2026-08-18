@@ -10,6 +10,7 @@ import Home from './pages/Home'
 import Materials from './pages/Materials'
 import SubjectMaterials from './pages/SubjectMaterials'
 import Practice from './pages/Practice'
+import LabGate from './pages/LabGate'
 import LabHome from './pages/LabHome'
 import LabRoadmap from './pages/LabRoadmap'
 import LabActivities from './pages/LabActivities'
@@ -73,10 +74,13 @@ createRoot(document.getElementById('root')!).render(
                 />
               }
             />
-            <Route path="lab" element={<LabHome />} />
-            <Route path="lab/roadmap" element={<LabRoadmap />} />
-            <Route path="lab/activities" element={<LabActivities />} />
-            <Route path="lab/activities/:id" element={<LabActivityDetail />} />
+            {/* 핀을 통과해야 아래 활동 화면들이 그려진다 — LabGate 가 <Outlet/> 을 연다. */}
+            <Route path="lab" element={<LabGate />}>
+              <Route index element={<LabHome />} />
+              <Route path="roadmap" element={<LabRoadmap />} />
+              <Route path="activities" element={<LabActivities />} />
+              <Route path="activities/:id" element={<LabActivityDetail />} />
+            </Route>
             <Route path="teacher" element={<Teacher />} />
             <Route path="*" element={<NotFound />} />
           </Route>

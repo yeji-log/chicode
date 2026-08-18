@@ -76,6 +76,9 @@ export interface LabHomeSettings {
   todayMissionText: string
   /** 강조해서 "활동 이어가기" 버튼으로 보여줄 활동. 비어 있으면 버튼을 숨긴다. */
   featuredActivityId: string
+  /** /lab 전체를 잠그는 핀번호. subjects.ts 와 같은 "가벼운 잠금"이다 — 진짜
+   *  보안 장치가 아니라 화면 진입을 막는 안내판이다(자세한 설명은 subjects.ts). */
+  pin: string
   updatedAt: number
 }
 
@@ -160,16 +163,19 @@ export async function deleteSeason(id: string): Promise<void> {
 const DEFAULT_HOME_SETTINGS: LabHomeSettings = {
   todayMissionText: '',
   featuredActivityId: '',
+  pin: '0000',
   updatedAt: 0,
 }
 
 export async function getHomeSettings(): Promise<LabHomeSettings> {
   const snapshot = await getDoc(doc(db, SETTINGS, HOME_SETTINGS_ID))
-  return snapshot.exists() ? (snapshot.data() as LabHomeSettings) : DEFAULT_HOME_SETTINGS
+  if (!snapshot.exists()) return DEFAULT_HOME_SETTINGS
+  // 문서가 pin 필드 추가 이전에 만들어졌을 수도 있으므로 기본값과 합쳐서 채운다.
+  return { ...DEFAULT_HOME_SETTINGS, ...snapshot.data() } as LabHomeSettings
 }
 
 export async function updateHomeSettings(
-  patch: Partial<Pick<LabHomeSettings, 'todayMissionText' | 'featuredActivityId'>>,
+  patch: Partial<Pick<LabHomeSettings, 'todayMissionText' | 'featuredActivityId' | 'pin'>>,
 ): Promise<void> {
   // 문서가 아직 없을 수 있으므로(최초 저장) merge 로 만들면서 갱신한다.
   await setDoc(
@@ -177,4 +183,18 @@ export async function updateHomeSettings(
     { ...patch, updatedAt: Date.now() },
     { merge: true },
   )
+}
+
+// ── Lab 전체 잠금 (핀 통과 여부) ──────────────────────────────
+
+const LAB_UNLOCK_KEY = 'chicode:lab-unlocked'
+
+/** subjects.ts 의 isSubjectUnlocked 와 같은 이유로 sessionStorage 를 쓴다 —
+ *  탭/브라우저를 닫으면 사라지므로 공용 컴퓨터에서 다음 학생이 다시 핀을 입력한다. */
+export function isLabUnlocked(): boolean {
+  return sessionStorage.getItem(LAB_UNLOCK_KEY) === '1'
+}
+
+export function unlockLab(): void {
+  sessionStorage.setItem(LAB_UNLOCK_KEY, '1')
 }

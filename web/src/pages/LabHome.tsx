@@ -33,7 +33,7 @@ export default function LabHome() {
           alt=""
           className="size-14 rounded-full ring-2 ring-cheese-300"
         />
-        <h1 className="font-display text-3xl tracking-tight text-ink-900">CHICODE LAB</h1>
+        <h1 className="font-display text-3xl tracking-tight text-ink-900">EMBED-LAB</h1>
         <p className="text-ink-700">배우고, 만들고, 실험하다.</p>
       </section>
 
@@ -56,7 +56,7 @@ export default function LabHome() {
 
       <section className="grid gap-5 sm:grid-cols-2">
         <FeatureCard to="/lab/roadmap" emoji="🗺️" title="Roadmap">
-          Arduino부터 Pico 2 W, IoT, AI까지
+          지금까지 쌓아온 시즌을 순서대로
           <br />
           동아리 활동의 전체 여정을 확인해 보세요.
         </FeatureCard>
