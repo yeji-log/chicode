@@ -13,7 +13,7 @@ export default function PolicyModal({
   children,
 }: {
   title: string
-  effectiveDate: string
+  effectiveDate?: string
   onClose: () => void
   children: ReactNode
 }) {
@@ -35,7 +35,7 @@ export default function PolicyModal({
         <header className="flex items-center gap-3 border-b border-cream-deep px-5 py-3.5">
           <div className="min-w-0">
             <h2 className="font-display text-lg text-ink-900">{title}</h2>
-            <p className="text-xs text-ink-500">{effectiveDate} 시행</p>
+            {effectiveDate && <p className="text-xs text-ink-500">{effectiveDate} 시행</p>}
           </div>
           <button
             onClick={onClose}

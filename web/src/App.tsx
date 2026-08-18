@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 import PolicyModal from './components/PolicyModal'
-import LabRules, { LAB_RULES_EFFECTIVE_DATE } from './content/LabRules'
+import LabRules from './content/LabRules'
 import PrivacyPolicy, { PRIVACY_POLICY_EFFECTIVE_DATE } from './content/PrivacyPolicy'
 import TermsOfService, { TERMS_OF_SERVICE_EFFECTIVE_DATE } from './content/TermsOfService'
 import { asset } from './lib/asset'
@@ -73,7 +73,6 @@ export default function App() {
 
       <footer className="border-t border-cream-deep px-5 py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-500">
-          <p>CHICODE — 치즈처럼 즐겁게, 코드처럼 단단하게.</p>
           <p>© CHICODE. All rights reserved.</p>
 
           <div className="ml-auto flex items-center gap-4">
@@ -118,11 +117,7 @@ export default function App() {
         </PolicyModal>
       )}
       {openPolicy === 'labRules' && (
-        <PolicyModal
-          title="컴퓨터실 이용규칙"
-          effectiveDate={LAB_RULES_EFFECTIVE_DATE}
-          onClose={() => setOpenPolicy(null)}
-        >
+        <PolicyModal title="컴퓨터실 이용규칙" onClose={() => setOpenPolicy(null)}>
           <LabRules />
         </PolicyModal>
       )}

@@ -1,5 +1,3 @@
-export const LAB_RULES_EFFECTIVE_DATE = '2026. 8. 18.'
-
 const RULES = [
   '음식물을 절대 반입하지 않기',
   '교과서와 필기도구 준비하기',
@@ -29,7 +27,7 @@ export default function LabRules() {
   return (
     <>
       <p className="mb-5 text-sm leading-relaxed text-ink-700">
-        아래 수칙은 컴퓨터실 실제 이용 규정입니다. 실습을 시작하기 전에 꼭 확인하세요.
+        아래 수칙은 컴퓨터실 이용 규정입니다. 실습을 시작하기 전에 꼭 확인하세요.
       </p>
 
       <div className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-warn-100 px-3 py-1.5 text-sm font-bold text-warn-600">
@@ -63,10 +61,6 @@ export default function LabRules() {
             </li>
           ))}
         </ul>
-      </div>
-
-      <div className="mt-5 border-t border-cream-deep pt-3 text-xs text-ink-500">
-        {LAB_RULES_EFFECTIVE_DATE}부터 시행됩니다.
       </div>
     </>
   )
