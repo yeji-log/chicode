@@ -262,6 +262,8 @@ function emptySeasonForm(order = 0): SeasonFormState {
   }
 }
 
+const SEASON_STATUSES: LabSeason['status'][] = ['진행중', '준비중', '완료']
+
 function SeasonsPanel() {
   const [seasons, setSeasons] = useState<LabSeason[]>([])
   const [loading, setLoading] = useState(true)
@@ -269,6 +271,9 @@ function SeasonsPanel() {
   const [form, setForm] = useState<SeasonFormState>(emptySeasonForm())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 목록에서 상태 버튼 하나를 누르는 동안만 그 행을 잠근다(활동 목록의
+  // togglingId 와 같은 이유).
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null)
 
   useEffect(() => {
     refresh()
@@ -333,6 +338,30 @@ function SeasonsPanel() {
     await deleteSeason(season.id)
     if (editingId === season.id) resetForm(seasons.length - 1)
     await refresh()
+  }
+
+  /** 목록에서 진행중/준비중/완료 버튼을 눌러 상태만 바로 바꾼다 — 예전엔
+   *  "수정" 폼을 열어야만 바꿀 수 있었다. 활동 목록의 togglePublished 와
+   *  같은 이유로 낙관적으로 먼저 바꾸고 실패하면 되돌린다. */
+  async function changeStatus(season: LabSeason, status: LabSeason['status']) {
+    if (season.status === status) return
+    setStatusUpdatingId(season.id)
+    setSeasons((current) =>
+      current.map((item) => (item.id === season.id ? { ...item, status } : item)),
+    )
+    // 이 시즌을 지금 수정 폼에서 편집 중이었다면 폼 값도 같이 맞춰준다.
+    if (editingId === season.id) setForm((current) => ({ ...current, status }))
+    try {
+      await updateSeason(season.id, { status })
+    } catch (caught) {
+      console.error('시즌 상태 변경 실패', caught)
+      setSeasons((current) =>
+        current.map((item) => (item.id === season.id ? { ...item, status: season.status } : item)),
+      )
+      alert('상태를 바꾸지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setStatusUpdatingId(null)
+    }
   }
 
   return (
@@ -444,7 +473,25 @@ function SeasonsPanel() {
                   <p className="truncate font-semibold text-ink-900">
                     {season.order}. {season.title}
                   </p>
-                  <p className="truncate text-xs text-ink-500">{season.status}</p>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {SEASON_STATUSES.map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        disabled={statusUpdatingId === season.id}
+                        onClick={() => changeStatus(season, status)}
+                        aria-pressed={season.status === status}
+                        className={[
+                          'rounded-full px-2.5 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                          season.status === status
+                            ? 'bg-cheese-400 text-ink-900'
+                            : 'border border-cream-deep text-ink-500 hover:border-cheese-300',
+                        ].join(' ')}
+                      >
+                        {status}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="ml-auto flex shrink-0 gap-2">
                   <button
@@ -518,6 +565,9 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
   const [form, setForm] = useState<ActivityFormState>(emptyActivityForm())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 목록에서 토글 하나를 누르는 동안만 그 행을 잠근다 — 여러 개를 동시에
+  // 눌러도 서로 안 꼬이게.
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   useEffect(() => {
     refresh()
@@ -595,6 +645,29 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
     await deleteActivity(activity.id)
     if (editingId === activity.id) resetForm(activities.length - 1)
     await refresh()
+  }
+
+  /** 목록에서 바로 공개/비공개를 뒤집는다 — 예전엔 "수정" 들어가서 편집 폼
+   *  맨 아래 "임시저장"/"학생에게 공개" 버튼을 눌러야만 바꿀 수 있었다.
+   *  화면은 낙관적으로 먼저 바꾸고, 실패하면 되돌린다(전체 refresh 를
+   *  기다리면 토글 한 번에 깜빡임이 생겨서). */
+  async function togglePublished(activity: LabActivity) {
+    const next = !activity.published
+    setTogglingId(activity.id)
+    setActivities((current) =>
+      current.map((item) => (item.id === activity.id ? { ...item, published: next } : item)),
+    )
+    try {
+      await updateActivity(activity.id, { published: next })
+    } catch (caught) {
+      console.error('공개 상태 변경 실패', caught)
+      setActivities((current) =>
+        current.map((item) => (item.id === activity.id ? { ...item, published: !next } : item)),
+      )
+      alert('공개 상태를 바꾸지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setTogglingId(null)
+    }
   }
 
   return (
@@ -727,15 +800,23 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink-900">{activity.title}</p>
                   <p className="truncate text-xs text-ink-500">
-                    {seasonTitle(activity.seasonId) ?? '미지정'} · 난이도 {activity.difficulty} ·{' '}
+                    {seasonTitle(activity.seasonId) ?? '미지정'} · 난이도 {activity.difficulty}
+                  </p>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-ink-600">
+                    <ToggleSwitch
+                      checked={activity.published}
+                      disabled={togglingId === activity.id}
+                      onChange={() => togglePublished(activity)}
+                      label={`${activity.title} 공개 여부`}
+                    />
                     {activity.published ? (
                       <span className="font-semibold text-cheese-600">공개됨</span>
                     ) : (
                       <span>임시저장</span>
                     )}
-                  </p>
-                </div>
-                <div className="ml-auto flex shrink-0 gap-2">
+                  </label>
                   <button
                     onClick={() => startEdit(activity)}
                     className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
@@ -1353,6 +1434,43 @@ function SlideSlot({
         <p className="mt-1 text-ink-500">아직 없음</p>
       )}
     </div>
+  )
+}
+
+/** 활동 목록의 공개/비공개 토글 스위치. 체크박스 대신 켜고 끄는 상태가 한눈에
+ *  보이도록 스위치 모양으로 만들었다 — 텍스트 라벨("공개됨"/"임시저장")은
+ *  호출부에서 옆에 같이 보여준다. */
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean
+  onChange: () => void
+  disabled?: boolean
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onChange}
+      className={[
+        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        checked ? 'bg-cheese-400' : 'bg-cream-deep',
+      ].join(' ')}
+    >
+      <span
+        className={[
+          'inline-block size-4 transform rounded-full bg-white shadow transition-transform',
+          checked ? 'translate-x-6' : 'translate-x-1',
+        ].join(' ')}
+      />
+    </button>
   )
 }
 
