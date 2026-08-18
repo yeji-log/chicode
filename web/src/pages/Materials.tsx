@@ -58,10 +58,16 @@ export default function Materials() {
                 to={`/materials/${subject.id}`}
                 className="flex h-full flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6 transition-all hover:-translate-y-0.5 hover:border-cheese-300 hover:shadow-md"
               >
-                <span className="text-3xl">{isTeacherViewer ? '📂' : '🔒'}</span>
+                <span className="text-3xl">
+                  {isTeacherViewer ? '📂' : subject.pinRequired === false ? '🔓' : '🔒'}
+                </span>
                 <h2 className="text-lg font-bold text-ink-900">{subject.name}</h2>
                 <p className="text-sm text-ink-500">
-                  {isTeacherViewer ? '바로 열람 가능' : '핀번호를 입력하면 열립니다'}
+                  {isTeacherViewer
+                    ? '바로 열람 가능'
+                    : subject.pinRequired === false
+                      ? '핀번호 없이 바로 열람 가능'
+                      : '핀번호를 입력하면 열립니다'}
                 </p>
               </Link>
             </li>
