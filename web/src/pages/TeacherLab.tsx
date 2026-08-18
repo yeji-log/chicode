@@ -9,6 +9,7 @@ import {
   type LabActivity,
   type LabActivityInput,
   type LabActivitySection,
+  type LabChecklistItem,
   type LabSeason,
   type LabSeasonInput,
   addActivity,
@@ -16,9 +17,11 @@ import {
   deleteActivity,
   deleteSeason,
   getHomeSettings,
+  isChecklistSection,
   isSlidesSection,
   listActivities,
   listSeasons,
+  makeChecklistSection,
   makeSlidesSection,
   updateActivity,
   updateHomeSettings,
@@ -805,6 +808,10 @@ function SectionsEditor({
     onChange([...sections, { id: crypto.randomUUID(), title: '새 항목', content: '', isCode: false }])
   }
 
+  function addChecklistSection() {
+    onChange([...sections, makeChecklistSection()])
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -837,13 +844,22 @@ function SectionsEditor({
         </DndContext>
       )}
 
-      <button
-        type="button"
-        onClick={addSection}
-        className="self-start rounded-lg border border-dashed border-cream-deep px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
-      >
-        + 항목 추가
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={addSection}
+          className="self-start rounded-lg border border-dashed border-cream-deep px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+        >
+          + 항목 추가
+        </button>
+        <button
+          type="button"
+          onClick={addChecklistSection}
+          className="self-start rounded-lg border border-dashed border-cream-deep px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+        >
+          + 체크리스트 추가
+        </button>
+      </div>
     </div>
   )
 }
@@ -894,6 +910,96 @@ function SortableSectionRow({
           className="min-w-0 flex-1 rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-sm font-semibold text-ink-900 focus:border-cheese-300 focus:outline-none"
         />
         <span className="shrink-0 text-xs text-ink-500">📎 발표자료 자리 — 업로드는 아래에서</span>
+      </div>
+    )
+  }
+
+  // 체크리스트 — 항목마다 텍스트 + 체크 여부. 체크 상태는 교사가 여기서
+  // 직접 켜고 끄는 것이고, 학생 화면(LabActivityDetail)에는 그 상태 그대로
+  // 읽기 전용으로 보인다(labs.ts 의 kind: 'checklist' 설명 참고).
+  if (isChecklistSection(section)) {
+    const items = section.items ?? []
+
+    function updateItem(itemId: string, patch: Partial<LabChecklistItem>) {
+      onChange({ items: items.map((item) => (item.id === itemId ? { ...item, ...patch } : item)) })
+    }
+
+    function removeItem(itemId: string) {
+      onChange({ items: items.filter((item) => item.id !== itemId) })
+    }
+
+    function addItem() {
+      onChange({ items: [...items, { id: crypto.randomUUID(), text: '', checked: false }] })
+    }
+
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="flex flex-col gap-2 rounded-xl border border-cream-deep bg-white p-3"
+      >
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            aria-label="순서 변경(드래그)"
+            className="shrink-0 touch-none rounded px-1.5 py-1 text-lg text-ink-400 hover:bg-cream active:cursor-grabbing"
+          >
+            ⠿
+          </button>
+          <input
+            value={section.title}
+            onChange={(event) => onChange({ title: event.target.value })}
+            placeholder="항목 이름 (예: 준비물 체크리스트)"
+            className="min-w-0 flex-1 rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-sm font-semibold text-ink-900 focus:border-cheese-300 focus:outline-none"
+          />
+          <span className="shrink-0 text-xs text-ink-500">✅ 체크리스트</span>
+          <button
+            type="button"
+            onClick={onRemove}
+            className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
+          >
+            삭제
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-1.5 pl-1">
+          {items.length === 0 ? (
+            <p className="text-xs text-ink-500">아직 항목이 없습니다. 아래에서 추가해 주세요.</p>
+          ) : (
+            items.map((item) => (
+              <div key={item.id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={item.checked}
+                  onChange={(event) => updateItem(item.id, { checked: event.target.checked })}
+                />
+                <input
+                  value={item.text}
+                  onChange={(event) => updateItem(item.id, { text: event.target.value })}
+                  placeholder="예: 브레드보드 준비"
+                  className="min-w-0 flex-1 rounded-lg border border-cream-deep bg-white px-2.5 py-1 text-sm text-ink-900 focus:border-cheese-300 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.id)}
+                  className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
+                >
+                  삭제
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={addItem}
+          className="self-start rounded-lg border border-dashed border-cream-deep px-3 py-1.5 text-xs font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+        >
+          + 체크리스트 항목 추가
+        </button>
       </div>
     )
   }

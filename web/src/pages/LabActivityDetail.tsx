@@ -17,7 +17,7 @@ import {
   getSectionAttachmentMeta,
   isImageAttachment,
 } from '../lib/labSectionAttachments'
-import { getActivity, getSeason, isSlidesSection, type LabActivity } from '../lib/labs'
+import { getActivity, getSeason, isChecklistSection, isSlidesSection, type LabActivity } from '../lib/labs'
 import { getNotes, getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import { linkify } from '../lib/linkify'
 
@@ -227,6 +227,37 @@ export default function LabActivityDetail() {
                 filename={section.title}
                 onPageChange={setBrowsePage}
               />
+            </section>
+          )
+        }
+
+        // 체크리스트 — 교사가 미리 정해둔 체크 상태를 그대로 보여준다.
+        // 학생이 눌러서 바꿀 수는 없다(labs.ts kind: 'checklist' 설명 참고).
+        if (isChecklistSection(section)) {
+          const items = section.items ?? []
+          if (items.length === 0) return null
+
+          return (
+            <section
+              key={section.id}
+              className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6"
+            >
+              <h2 className="font-bold text-ink-900">{section.title}</h2>
+              <ul className="flex flex-col gap-1.5">
+                {items.map((item) => (
+                  <li key={item.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      disabled
+                      className="accent-cheese-400"
+                    />
+                    <span className={item.checked ? 'text-ink-500 line-through' : 'text-ink-900'}>
+                      {item.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </section>
           )
         }

@@ -48,17 +48,31 @@ import { db } from './firebase'
  * 위치로 정해진다 — 그래야 드래그로 발표자료 위치도 옮길 수 있다. 활동마다
  * 정확히 하나만 있고(교사가 지울 수 없음), 없으면 normalizeActivity 가
  * 맨 끝에 자동으로 채워 넣는다.
+ *
+ * kind: 'checklist' 는 체크박스 목록 항목이다(예: "준비물 체크리스트").
+ * 체크 상태는 교사가 만들 때 직접 켜고 끄는 것이고 학생은 못 바꾼다 —
+ * 학생마다 다른 체크 상태를 저장할 로그인/서버 저장소가 없어서, 교사가
+ * 미리 정해둔 상태를 그대로 안내판처럼 보여주는 용도다. content 는 안 쓰고
+ * items 배열을 쓴다.
  */
 export interface LabActivitySection {
   id: string
   title: string
   content: string
   isCode: boolean
-  kind?: 'slides'
+  kind?: 'slides' | 'checklist'
+  /** kind === 'checklist' 일 때만 쓴다. */
+  items?: LabChecklistItem[]
   /** 이 항목에 이미지·PDF·PPT·엑셀 파일을 하나 붙였는지. 실제 파일은
    *  labSectionAttachments.ts 가 activityId+section.id 를 키로 따로
    *  저장한다 — 문자열이 아니라 여기 담을 수가 없어서다. */
   hasAttachment?: boolean
+}
+
+export interface LabChecklistItem {
+  id: string
+  text: string
+  checked: boolean
 }
 
 const SLIDES_SECTION_ID = 'slides'
@@ -67,8 +81,23 @@ export function isSlidesSection(section: LabActivitySection): boolean {
   return section.kind === 'slides'
 }
 
+export function isChecklistSection(section: LabActivitySection): boolean {
+  return section.kind === 'checklist'
+}
+
 export function makeSlidesSection(): LabActivitySection {
   return { id: SLIDES_SECTION_ID, title: '수업 자료', content: '', isCode: false, kind: 'slides' }
+}
+
+export function makeChecklistSection(): LabActivitySection {
+  return {
+    id: crypto.randomUUID(),
+    title: '체크리스트',
+    content: '',
+    isCode: false,
+    kind: 'checklist',
+    items: [],
+  }
 }
 
 export interface LabActivity {
