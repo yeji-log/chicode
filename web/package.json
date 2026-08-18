@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "sync:pyodide": "node scripts/sync-pyodide.mjs",
     "postinstall": "node scripts/sync-pyodide.mjs && node scripts/sync-clang.mjs",
-    "sync:clang": "node scripts/sync-clang.mjs"
+    "sync:clang": "node scripts/sync-clang.mjs",
+    "fetch:news": "node scripts/fetch-news.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -37,8 +38,10 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "firebase-admin": "^14.2.0",
     "firebase-tools": "^15.27.0",
     "oxlint": "^1.75.0",
+    "rss-parser": "^3.13.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.0"

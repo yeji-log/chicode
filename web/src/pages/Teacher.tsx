@@ -15,6 +15,7 @@ import {
 } from '../lib/materials'
 import { listSubjects, updateSubject, type SubjectMeta } from '../lib/subjects'
 import TeacherLab from './TeacherLab'
+import TeacherNews from './TeacherNews'
 
 export default function Teacher() {
   const { user, state, error, signIn, signOutTeacher } = useAuth()
@@ -94,7 +95,7 @@ export default function Teacher() {
 
 function TeacherDashboard() {
   const { user, signOutTeacher } = useAuth()
-  const [section, setSection] = useState<'materials' | 'lab'>('materials')
+  const [section, setSection] = useState<'materials' | 'lab' | 'news'>('materials')
 
   return (
     <div className="flex flex-col gap-6">
@@ -135,13 +136,20 @@ function TeacherDashboard() {
         >
           🧪 Lab
         </button>
+        <button
+          onClick={() => setSection('news')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            section === 'news' ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          🔥 오늘의 뉴스
+        </button>
       </nav>
 
-      {section === 'materials' ? (
-        <MaterialsSection uploaderEmail={user?.email ?? ''} />
-      ) : (
-        <TeacherLab uploaderEmail={user?.email ?? ''} />
-      )}
+      {section === 'materials' && <MaterialsSection uploaderEmail={user?.email ?? ''} />}
+      {section === 'lab' && <TeacherLab uploaderEmail={user?.email ?? ''} />}
+      {section === 'news' && <TeacherNews teacherEmail={user?.email ?? ''} />}
     </div>
   )
 }
