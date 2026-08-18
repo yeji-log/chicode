@@ -3,9 +3,10 @@ import PolicyArticle from '../components/PolicyArticle'
 export const PRIVACY_POLICY_EFFECTIVE_DATE = '2026. 8. 18.'
 
 /**
- * chicode 코드베이스(Firebase 인증 · Firestore · Pyodide 실행 방식)를 실제로 확인하고
- * 작성한 개인정보처리방침이다. 법률 자문을 거친 문서는 아니므로, 서비스가 커지거나
- * 학생 개인정보를 다루게 되면 전문가 검토를 받는 것을 권한다.
+ * chicode 코드베이스(Firebase 인증 · Firestore · Pyodide 실행 방식 · 동아리(Lab)
+ * 유튜브 영상 임베드)를 실제로 확인하고 작성한 개인정보처리방침이다. 법률 자문을 거친
+ * 문서는 아니므로, 서비스가 커지거나 학생 개인정보를 다루게 되면 전문가 검토를 받는
+ * 것을 권한다.
  */
 export default function PrivacyPolicy() {
   return (
@@ -68,7 +69,7 @@ export default function PrivacyPolicy() {
               <tr className="border-t border-cream-deep align-top">
                 <td className="px-3 py-2">Google Firebase</td>
                 <td className="px-3 py-2">
-                  로그인 인증(Authentication), 수업자료 저장(Firestore)
+                  로그인 인증(Authentication), 수업자료·동아리(Lab) 활동자료 저장(Firestore)
                 </td>
                 <td className="px-3 py-2 text-ink-500">
                   Firestore는 서울(asia-northeast3) 리전, Authentication은 Google 글로벌
@@ -95,10 +96,24 @@ export default function PrivacyPolicy() {
           표준적인 서버 로그 형태로 자동 수집할 수 있습니다. CHICODE는 이 로그를 별도로
           수집·분석·활용하지 않습니다.
         </p>
+        <p>
+          교사가 동아리(Lab) 활동 항목에 유튜브 영상 링크를 등록한 경우, 그 활동
+          페이지에는 유튜브(운영사: Google LLC)의 임베드 플레이어가 포함됩니다. 이 경우
+          페이지를 여는 것만으로 이용자의 IP 주소, 브라우저 정보 등이 재생 여부와
+          무관하게 유튜브 측에 전달될 수 있습니다. 이는 CHICODE가 이용자 정보를
+          유튜브에 제공하는 것이 아니라, 이용자의 브라우저가 임베드된 콘텐츠를
+          불러오기 위해 유튜브 서버에 직접 접속하면서 발생하는 것이며, 유튜브의
+          개인정보처리방침이 적용됩니다. CHICODE는 추적을 최소화하는
+          youtube-nocookie.com 도메인으로 임베드합니다.
+        </p>
       </PolicyArticle>
 
       <PolicyArticle num="제5조" title="쿠키 및 브라우저 저장소">
-        <p>CHICODE는 이용자를 추적하기 위한 쿠키를 사용하지 않습니다.</p>
+        <p>
+          CHICODE는 이용자를 추적하기 위한 쿠키를 직접 사용하지 않습니다. 다만 제4조에서
+          설명한 것처럼 유튜브 영상이 포함된 활동 페이지에서는 유튜브가 자체 정책에 따라
+          쿠키를 사용할 수 있습니다.
+        </p>
         <ul>
           <li>
             <strong>로그인 유지</strong> — 교사 로그인 상태는 쿠키가 아닌 브라우저
@@ -114,6 +129,16 @@ export default function PrivacyPolicy() {
             핀번호를 입력해 잠금을 해제하면, 그 상태는 브라우저의 sessionStorage에
             과목별로 저장됩니다. 탭이나 브라우저를 닫으면 사라지며, 공용 컴퓨터에서는
             다음 이용자가 다시 핀번호를 입력해야 합니다.
+          </li>
+          <li>
+            <strong>동아리(Lab) 잠금 해제 상태 저장</strong> — Lab 화면 진입 시 핀번호를
+            입력해 잠금을 해제하면, 그 상태도 같은 방식으로 브라우저의 sessionStorage에
+            저장됩니다. 마찬가지로 탭이나 브라우저를 닫으면 사라집니다.
+          </li>
+          <li>
+            <strong>체크리스트 표시 상태</strong> — 동아리(Lab) 활동의 체크리스트 항목을
+            학생이 눌러서 표시해보는 상태는 브라우저에도 저장되지 않고 화면을 벗어나면
+            사라지는, 그 화면 안에서만 유지되는 임시 상태입니다.
           </li>
         </ul>
       </PolicyArticle>
