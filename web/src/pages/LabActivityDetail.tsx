@@ -12,7 +12,7 @@ import {
   subscribePresentation,
   type LabPresentationState,
 } from '../lib/labPresentation'
-import { getActivity, getSeason, type LabActivity } from '../lib/labs'
+import { getActivity, getSeason, isSlidesSection, type LabActivity } from '../lib/labs'
 import { getNotes, getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import { linkify } from '../lib/linkify'
 
@@ -108,6 +108,7 @@ export default function LabActivityDetail() {
   // 맞아떨어지려면 검증된 PdfViewer가 필요하다.
   const canPresent = isTeacherViewer && !!slideFiles?.pdf
   const showFollowerOverlay = presentation.active && !isPresenting && !!slideFiles?.pdf
+  const slidesTitle = activity.sections.find(isSlidesSection)?.title ?? '수업 자료'
 
   async function handleStartPresenting() {
     if (!id) return
@@ -121,6 +122,7 @@ export default function LabActivityDetail() {
         <LabPresentationOverlay
           pdfFile={slideFiles.pdf}
           currentSlide={presentation.currentSlide}
+          filename={slidesTitle}
           isTeacherViewer={isTeacherViewer}
           onTakeControl={() => setIsPresenting(true)}
         />
@@ -141,58 +143,74 @@ export default function LabActivityDetail() {
         <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{activity.title}</h1>
       </header>
 
-      {activity.sections.map((section) =>
-        section.isCode ? (
-          section.content && (
-            <Section key={section.id} title={section.title}>
-              <CodeBlock code={section.content} />
-            </Section>
+      {activity.sections.map((section) => {
+        // 발표자료 자리 — 교사가 드래그로 이 활동 안 어디에든 놓을 수 있어서,
+        // 다른 항목과 같은 위치에서 함께 순회하며 그린다.
+        if (isSlidesSection(section)) {
+          if (!slideFiles) return null
+
+          if (isPresenting && slideFiles.pdf && id) {
+            return (
+              <LabPresenter
+                key={section.id}
+                activityId={id}
+                pdfFile={slideFiles.pdf}
+                currentSlide={presentation.currentSlide}
+                notes={notes}
+                onNoteSaved={(slideIndex, text) =>
+                  setNotes((current) => {
+                    const next = [...current]
+                    while (next.length < slideIndex) next.push('')
+                    next[slideIndex - 1] = text
+                    return next
+                  })
+                }
+                onExit={() => setIsPresenting(false)}
+              />
+            )
+          }
+
+          return (
+            <section
+              key={section.id}
+              className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-bold text-ink-900">{section.title}</h2>
+                {canPresent && (
+                  <button
+                    onClick={handleStartPresenting}
+                    className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+                  >
+                    ▶ {presentation.active ? '발표 제어하기' : '발표 시작'}
+                  </button>
+                )}
+              </div>
+              <PptxSlideViewer
+                pptxFile={slideFiles.pptx}
+                pdfFile={slideFiles.pdf}
+                filename={section.title}
+              />
+            </section>
           )
-        ) : (
+        }
+
+        if (section.isCode) {
+          return (
+            section.content && (
+              <Section key={section.id} title={section.title}>
+                <CodeBlock code={section.content} />
+              </Section>
+            )
+          )
+        }
+
+        return (
           <Section key={section.id} title={section.title}>
             {section.content}
           </Section>
-        ),
-      )}
-
-      {isPresenting && slideFiles?.pdf && id ? (
-        <LabPresenter
-          activityId={id}
-          pdfFile={slideFiles.pdf}
-          currentSlide={presentation.currentSlide}
-          notes={notes}
-          onNoteSaved={(slideIndex, text) =>
-            setNotes((current) => {
-              const next = [...current]
-              while (next.length < slideIndex) next.push('')
-              next[slideIndex - 1] = text
-              return next
-            })
-          }
-          onExit={() => setIsPresenting(false)}
-        />
-      ) : (
-        slideFiles && (
-          <section className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-bold text-ink-900">발표자료</h2>
-              {canPresent && (
-                <button
-                  onClick={handleStartPresenting}
-                  className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
-                >
-                  ▶ {presentation.active ? '발표 제어하기' : '발표 시작'}
-                </button>
-              )}
-            </div>
-            <PptxSlideViewer
-              pptxFile={slideFiles.pptx}
-              pdfFile={slideFiles.pdf}
-              filename="발표자료"
-            />
-          </section>
         )
-      )}
+      })}
 
       {activity.materialUrl && (
         <a

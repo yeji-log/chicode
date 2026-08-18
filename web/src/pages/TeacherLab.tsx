@@ -16,8 +16,10 @@ import {
   deleteActivity,
   deleteSeason,
   getHomeSettings,
+  isSlidesSection,
   listActivities,
   listSeasons,
+  makeSlidesSection,
   updateActivity,
   updateHomeSettings,
   updateSeason,
@@ -453,7 +455,9 @@ type ActivityFormState = {
 }
 
 /** 새 활동은 기존에 쓰던 8개 항목으로 시작한다 — 익숙한 기본값을 주고,
- *  거기서부터 이름을 바꾸거나 지우거나 새로 추가하게 한다. */
+ *  거기서부터 이름을 바꾸거나 지우거나 새로 추가하게 한다. 발표자료 자리는
+ *  맨 끝에 하나 있고(교사가 드래그로 옮길 수 있지만 지울 수는 없다), 그
+ *  실제 업로드는 아래 별도 SlidesPanel 에서 한다. */
 function defaultSections(): LabActivitySection[] {
   return [
     { id: crypto.randomUUID(), title: '오늘의 목표', content: '', isCode: false },
@@ -464,6 +468,7 @@ function defaultSections(): LabActivitySection[] {
     { id: crypto.randomUUID(), title: '실습', content: '', isCode: false },
     { id: crypto.randomUUID(), title: 'Mission', content: '', isCode: false },
     { id: crypto.randomUUID(), title: 'Challenge', content: '', isCode: false },
+    makeSlidesSection(),
   ]
 }
 
@@ -761,6 +766,8 @@ function SectionsEditor({
   }
 
   function removeSection(id: string) {
+    const target = sections.find((section) => section.id === id)
+    if (target && isSlidesSection(target)) return // 방어적 체크 — 버튼 자체를 안 보여주지만 혹시 몰라서.
     if (!confirm('이 항목을 삭제할까요?')) return
     onChange(sections.filter((section) => section.id !== id))
   }
@@ -827,6 +834,36 @@ function SortableSectionRow({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+  }
+
+  // 발표자료 자리는 이름만 바꿀 수 있고(학생 화면에 보일 제목), 내용은 아래
+  // "발표자료" 업로드 영역에서 관리한다 — 여기서 텍스트로 쓸 수 있는 게
+  // 아니라서 내용 칸·코드 체크박스·삭제 버튼을 안 보여준다.
+  if (isSlidesSection(section)) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="flex items-center gap-2 rounded-xl border border-dashed border-cheese-300 bg-cheese-50/60 p-3"
+      >
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label="순서 변경(드래그)"
+          className="shrink-0 touch-none rounded px-1.5 py-1 text-lg text-ink-400 hover:bg-cream active:cursor-grabbing"
+        >
+          ⠿
+        </button>
+        <input
+          value={section.title}
+          onChange={(event) => onChange({ title: event.target.value })}
+          placeholder="예: 수업 자료"
+          className="min-w-0 flex-1 rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-sm font-semibold text-ink-900 focus:border-cheese-300 focus:outline-none"
+        />
+        <span className="shrink-0 text-xs text-ink-500">📎 발표자료 자리 — 업로드는 아래에서</span>
+      </div>
+    )
   }
 
   return (

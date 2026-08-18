@@ -41,12 +41,30 @@ import { db } from './firebase'
  * 바꿨다. isCode 만 true 로 켜면 CodeBlock(구문 강조 + 복사 버튼)으로,
  * 아니면 일반 문단(줄바꿈 유지 + URL 자동 링크)으로 그려진다 — 예전의 "코드"
  * 필드가 하던 역할을 이 플래그 하나로 옮긴 것뿐이다.
+ *
+ * kind: 'slides' 는 발표자료(PPT/PDF) 자리를 표시하는 특수 항목이다. 내용은
+ * 여기 content 가 아니라 labSlides.ts 에 따로 저장되지만(업로드 파일이라
+ * 문자열이 아님), "몇 번째 순서에 보일지"는 다른 항목과 똑같이 이 배열 안
+ * 위치로 정해진다 — 그래야 드래그로 발표자료 위치도 옮길 수 있다. 활동마다
+ * 정확히 하나만 있고(교사가 지울 수 없음), 없으면 normalizeActivity 가
+ * 맨 끝에 자동으로 채워 넣는다.
  */
 export interface LabActivitySection {
   id: string
   title: string
   content: string
   isCode: boolean
+  kind?: 'slides'
+}
+
+const SLIDES_SECTION_ID = 'slides'
+
+export function isSlidesSection(section: LabActivitySection): boolean {
+  return section.kind === 'slides'
+}
+
+export function makeSlidesSection(): LabActivitySection {
+  return { id: SLIDES_SECTION_ID, title: '수업 자료', content: '', isCode: false, kind: 'slides' }
 }
 
 export interface LabActivity {
@@ -97,7 +115,11 @@ function normalizeActivity(id: string, data: Record<string, unknown>): LabActivi
         isCode: def.isCode ?? false,
       }))
 
-  return { ...(data as Omit<LabActivity, 'id' | 'sections'>), id, sections }
+  // 발표자료 자리가 sections 안에 아예 없는 활동(이 기능이 생기기 전 활동)은
+  // 맨 끝에 하나 채워 넣는다 — 예전에도 항상 맨 아래에 있었으니 위치도 그대로.
+  const withSlides = sections.some(isSlidesSection) ? sections : [...sections, makeSlidesSection()]
+
+  return { ...(data as Omit<LabActivity, 'id' | 'sections'>), id, sections: withSlides }
 }
 
 export interface LabSeason {

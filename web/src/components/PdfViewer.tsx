@@ -32,6 +32,16 @@ type PdfPage = {
   }) => RenderTask
 }
 
+const LOAD_TIMEOUT_MS = 15_000
+const RENDER_TIMEOUT_MS = 15_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ])
+}
+
 /**
  * page/onPageChange 를 주면 "제어되는" 뷰어가 된다 — 발표 모드에서 교사의
  * 조작(또는 실시간으로 받은 슬라이드 번호)을 그대로 반영해야 해서 추가했다.
@@ -91,7 +101,12 @@ export default function PdfViewer({
         const task = pdfjs.getDocument({ data }) as unknown as PdfLoadingTask
         loadingTaskRef.current = task
 
-        const loaded = await task.promise
+        // 일부 기기(모듈 워커를 못 돌리는 구형 브라우저 등)는 여기서 에러를
+        // 던지지 않고 그냥 영영 응답이 없다 — 화면엔 옅은 "여는 중…" 글자만
+        // 남아서 "그냥 흰 화면"으로 보인다는 실사용 보고를 받았다. 일정
+        // 시간 안에 안 끝나면 명확한 에러로 바꿔서 최소한 무엇이 문제인지
+        // 알 수 있게 한다.
+        const loaded = await withTimeout(task.promise, LOAD_TIMEOUT_MS, '문서를 여는 데 시간이 너무 오래 걸립니다')
 
         if (cancelled) {
           void task.destroy()
@@ -106,7 +121,9 @@ export default function PdfViewer({
       } catch (caught) {
         if (cancelled) return
         console.error('PDF 열기 실패', caught)
-        setError('이 PDF 를 화면에 표시하지 못했습니다. 다운로드해서 열어주세요.')
+        setError(
+          '이 PDF 를 화면에 표시하지 못했습니다. 이 기기·브라우저와 호환되지 않을 수 있습니다. 다른 브라우저로 다시 시도해 주세요.',
+        )
         setLoading(false)
       }
     }
@@ -181,11 +198,18 @@ export default function PdfViewer({
         renderTaskRef.current = task
 
         try {
-          await task.promise
+          // getDocument() 는 성공했는데 실제 캔버스 그리기만 멈추는 기기도
+          // 있을 수 있어서(GPU 드라이버 관련 등) 여기도 타임아웃을 건다.
+          await withTimeout(task.promise, RENDER_TIMEOUT_MS, '쪽을 그리는 데 시간이 너무 오래 걸립니다')
         } catch (caught) {
           // 취소는 정상적인 흐름이다 (쪽 이동이나 창 크기 변경).
           if ((caught as { name?: string }).name !== 'RenderingCancelledException') {
             console.error('PDF 쪽 그리기 실패', caught)
+            if (generation === generationRef.current) {
+              setError(
+                '이 화면을 그리지 못했습니다. 이 기기·브라우저와 호환되지 않을 수 있습니다. 다른 브라우저로 다시 시도해 주세요.',
+              )
+            }
           }
         } finally {
           if (renderTaskRef.current === task) renderTaskRef.current = null
@@ -213,14 +237,18 @@ export default function PdfViewer({
   }, [loading, error, renderPage])
 
   if (error) {
-    return <p className="p-8 text-center text-ink-500">{error}</p>
+    return <p className="p-8 text-center font-semibold text-ink-700">⚠️ {error}</p>
   }
 
   return (
     <div className="flex h-full flex-col">
       <div ref={containerRef} className="flex-1 overflow-auto bg-ink-900/5 p-4">
         {loading ? (
-          <p className="py-8 text-center text-ink-500">{filename} 여는 중…</p>
+          // 옅은 글자만 있으면 "그냥 빈 화면"처럼 보인다는 실사용 보고가
+          // 있어서, 로딩 중이라는 게 눈에 확실히 띄도록 굵게·크게 바꿨다.
+          <p className="animate-pulse py-8 text-center text-base font-semibold text-ink-700">
+            ⏳ {filename} 여는 중…
+          </p>
         ) : (
           <canvas ref={canvasRef} className="mx-auto block bg-white shadow-md" />
         )}
