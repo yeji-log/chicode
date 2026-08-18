@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import CodeBlock from '../components/CodeBlock'
+import PptxSlideViewer from '../components/PptxSlideViewer'
 import { getActivity, getSeason, type LabActivity } from '../lib/labs'
+import { getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import { linkify } from '../lib/linkify'
 
 /** /lab/activities/:id — 설계안 5절 활동 페이지 템플릿. */
@@ -76,6 +78,8 @@ export default function LabActivityDetail() {
       <Section title="Mission">{activity.mission}</Section>
       <Section title="Challenge">{activity.challenge}</Section>
 
+      <ActivitySlides activityId={activity.id} />
+
       {activity.materialUrl && (
         <a
           href={activity.materialUrl}
@@ -93,6 +97,49 @@ export default function LabActivityDetail() {
 function difficultyStars(difficulty: number): string {
   const filled = Math.max(0, Math.min(5, difficulty))
   return '★'.repeat(filled) + '☆'.repeat(5 - filled)
+}
+
+/**
+ * 활동에 첨부된 발표자료(PPT)가 있으면 뷰어로 보여준다. 먼저 메타데이터만
+ * 확인해서 아무 것도 없으면(대부분의 활동) 조용히 아무것도 렌더링하지
+ * 않는다 — 파일 조각까지 매번 읽어오면 활동 하나 열 때마다 불필요한
+ * Firestore 읽기가 늘어난다.
+ */
+function ActivitySlides({ activityId }: { activityId: string }) {
+  const [files, setFiles] = useState<{ pptx: Blob | null; pdf: Blob | null } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    getSlideSet(activityId)
+      .then(async (meta) => {
+        if (!meta.pptx && !meta.pdf) {
+          if (!cancelled) setFiles(null)
+          return
+        }
+        const [pptx, pdf] = await Promise.all([
+          meta.pptx ? getSlidePptxFile(activityId) : Promise.resolve(null),
+          meta.pdf ? getSlidePdfFile(activityId) : Promise.resolve(null),
+        ])
+        if (!cancelled) setFiles({ pptx, pdf })
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activityId])
+
+  if (loading || !files) return null
+
+  return (
+    <section className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6">
+      <h2 className="font-bold text-ink-900">발표자료</h2>
+      <PptxSlideViewer pptxFile={files.pptx} pdfFile={files.pdf} filename="발표자료" />
+    </section>
+  )
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+import type { ChunkedFileMeta } from '../lib/chunkedFile'
 import {
   type LabActivity,
   type LabActivityInput,
@@ -16,6 +17,15 @@ import {
   updateHomeSettings,
   updateSeason,
 } from '../lib/labs'
+import {
+  type LabSlideSet,
+  SlideValidationError,
+  deleteSlidePdf,
+  deleteSlidePptx,
+  getSlideSet,
+  uploadSlidePdf,
+  uploadSlidePptx,
+} from '../lib/labSlides'
 
 /**
  * 교사 페이지의 Lab 관리 섹션 (Teacher.tsx 에서 불러 쓴다).
@@ -664,6 +674,14 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
           placeholder="https://..."
         />
 
+        {editingId ? (
+          <SlidesPanel activityId={editingId} />
+        ) : (
+          <p className="text-xs text-ink-500">
+            발표자료(PPT)는 활동을 한 번 저장한 뒤에 첨부할 수 있습니다.
+          </p>
+        )}
+
         {error && (
           <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
@@ -742,6 +760,155 @@ function ActivitiesPanel({ uploaderEmail }: { uploaderEmail: string }) {
           </ul>
         )}
       </section>
+    </div>
+  )
+}
+
+/**
+ * 활동에 딸린 발표자료(PPT) 업로드/삭제. 활동 본문 폼과 저장 버튼이 분리된
+ * 이유는 Materials 의 SubjectPanel과 같다 — 파일은 activityId 가 있어야
+ * 붙일 수 있는데(chunk 경로가 activityId 기준), 새 활동은 첫 저장 전엔
+ * id 가 없다.
+ */
+function SlidesPanel({ activityId }: { activityId: string }) {
+  const [slides, setSlides] = useState<LabSlideSet>({ pptx: null, pdf: null })
+  const [pptxFile, setPptxFile] = useState<File | null>(null)
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const pptxInputRef = useRef<HTMLInputElement>(null)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    getSlideSet(activityId)
+      .then(setSlides)
+      .finally(() => setLoading(false))
+  }, [activityId])
+
+  async function handleUpload(event: React.FormEvent) {
+    event.preventDefault()
+    if (!pptxFile && !pdfFile) return
+
+    setBusy(true)
+    setError(null)
+    try {
+      if (pptxFile) await uploadSlidePptx(activityId, pptxFile)
+      if (pdfFile) await uploadSlidePdf(activityId, pdfFile)
+      setSlides(await getSlideSet(activityId))
+      setPptxFile(null)
+      setPdfFile(null)
+      if (pptxInputRef.current) pptxInputRef.current.value = ''
+      if (pdfInputRef.current) pdfInputRef.current.value = ''
+    } catch (caught) {
+      setError(
+        caught instanceof SlideValidationError
+          ? caught.message
+          : '업로드에 실패했습니다. 다시 시도해 주세요.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeletePptx() {
+    if (!confirm('PPT 원본을 삭제할까요?')) return
+    await deleteSlidePptx(activityId)
+    setSlides(await getSlideSet(activityId))
+  }
+
+  async function handleDeletePdf() {
+    if (!confirm('PDF 버전을 삭제할까요?')) return
+    await deleteSlidePdf(activityId)
+    setSlides(await getSlideSet(activityId))
+  }
+
+  if (loading) return null
+
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-cream-deep bg-cream/40 p-4">
+      <div>
+        <h3 className="font-bold text-ink-900">발표자료 (PPT)</h3>
+        <p className="mt-1 text-xs text-ink-500">
+          학생 화면엔 뷰어로만 보이고 다운로드는 안 됩니다. pptx 렌더링이 파일에 따라 깨질 수
+          있어서, PDF 버전을 함께 올려두면 pptx가 안 열릴 때 자동으로 PDF를 대신 보여줍니다.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SlideSlot label="PPT 원본 (.pptx)" meta={slides.pptx} onDelete={handleDeletePptx} />
+        <SlideSlot label="PDF 버전 (권장, 대체용)" meta={slides.pdf} onDelete={handleDeletePdf} />
+      </div>
+
+      <form onSubmit={handleUpload} className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          {slides.pptx ? 'PPT 새로 올리기' : 'PPT 올리기'}
+          <input
+            ref={pptxInputRef}
+            type="file"
+            accept=".pptx"
+            onChange={(event) => setPptxFile(event.target.files?.[0] ?? null)}
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 file:mr-3 file:rounded-md file:border-0 file:bg-cheese-200 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-ink-900"
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          {slides.pdf ? 'PDF 새로 올리기' : 'PDF 올리기 (권장)'}
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept=".pdf"
+            onChange={(event) => setPdfFile(event.target.files?.[0] ?? null)}
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 file:mr-3 file:rounded-md file:border-0 file:bg-cheese-200 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-ink-900"
+          />
+        </label>
+
+        {error && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={busy || (!pptxFile && !pdfFile)}
+          className="self-start rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-2"
+        >
+          {busy ? '올리는 중…' : '업로드'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+function SlideSlot({
+  label,
+  meta,
+  onDelete,
+}: {
+  label: string
+  meta: ChunkedFileMeta | null
+  onDelete: () => void
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-cream-deep bg-white/70 p-3 text-sm">
+      <p className="font-semibold text-ink-700">{label}</p>
+      {meta ? (
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <span className="truncate text-ink-900">
+            {meta.filename} · {(meta.size / 1024 / 1024).toFixed(1)}MB
+          </span>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="shrink-0 text-xs font-semibold text-red-600 hover:underline"
+          >
+            삭제
+          </button>
+        </div>
+      ) : (
+        <p className="mt-1 text-ink-500">아직 없음</p>
+      )}
     </div>
   )
 }
