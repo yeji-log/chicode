@@ -16,6 +16,7 @@
  */
 
 import {
+  type QueryConstraint,
   collection,
   deleteDoc,
   doc,
@@ -23,6 +24,7 @@ import {
   limit,
   orderBy,
   query,
+  where,
   writeBatch,
 } from 'firebase/firestore'
 
@@ -87,13 +89,29 @@ export async function listCandidates(): Promise<NewsCandidate[]> {
   return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as NewsCandidate)
 }
 
-/** 학생 홈 화면 · 교사 페이지 관리 목록에서 공통으로 쓰는 발행본 조회. */
-export async function listPublishedNews(limitCount = 5): Promise<NewsIssue[]> {
-  const snapshot = await getDocs(
-    query(collection(db, ISSUES), orderBy('issuedAt', 'desc'), limit(limitCount)),
-  )
+/**
+ * 학생 페이지(/news) · 교사 페이지 관리 목록에서 공통으로 쓰는 발행본 조회.
+ *
+ * sinceDays 를 주면 그보다 오래된 카드는 DB에서 안 지우고(교사가 나중에 다시
+ * 찾을 수 있게) 조회에서만 뺀다 — "오늘의 이슈"인데 몇 주 전 카드가 계속 떠
+ * 있으면 안 되니까. 학생 화면(News.tsx)은 이 값을 주고, 교사 관리 화면
+ * (TeacherNews.tsx)은 최근에 지운 게 맞는지 확인해야 하니 기간 제한 없이 부른다.
+ */
+export async function listPublishedNews(
+  limitCount = 5,
+  options?: { sinceDays?: number },
+): Promise<NewsIssue[]> {
+  const constraints: QueryConstraint[] = [orderBy('issuedAt', 'desc'), limit(limitCount)]
+  if (options?.sinceDays) {
+    const cutoff = Date.now() - options.sinceDays * 24 * 60 * 60 * 1000
+    constraints.unshift(where('issuedAt', '>=', cutoff))
+  }
+  const snapshot = await getDocs(query(collection(db, ISSUES), ...constraints))
   return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as NewsIssue)
 }
+
+/** 학생 화면에 발행된 카드가 남아있는 기간. News.tsx 에서만 쓴다. */
+export const STUDENT_VISIBLE_DAYS = 3
 
 /**
  * 후보를 교사가 쓴 내용으로 발행한다. newsIssues에 쓰기 + newsCandidates에서

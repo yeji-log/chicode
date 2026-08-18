@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 import NewsCard from '../components/NewsCard'
 import { isFirebaseConfigured } from '../lib/firebase'
-import { listPublishedNews, type NewsIssue } from '../lib/news'
+import { STUDENT_VISIBLE_DAYS, listPublishedNews, type NewsIssue } from '../lib/news'
 
 /**
  * 홈 화면 히어로의 "오늘의 AI·IT 이슈" 버튼을 누르면 오는 전용 페이지.
@@ -19,7 +19,7 @@ export default function News() {
       setNews([])
       return
     }
-    listPublishedNews(20)
+    listPublishedNews(20, { sinceDays: STUDENT_VISIBLE_DAYS })
       .then(setNews)
       .catch((caught) => {
         console.error('오늘의 이슈를 불러오지 못했습니다', caught)
@@ -33,9 +33,7 @@ export default function News() {
         <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">
           🔥 오늘의 AI·IT 이슈
         </h1>
-        <p className="text-sm text-ink-500">
-          AI·IT·과학·공학 분야에서 화제가 되는 소식을 교사가 골라 학생 눈높이로 정리했습니다.
-        </p>
+        <p className="text-sm text-ink-500">AI·IT·과학·공학 분야에서 화제가 되는 소식입니다.</p>
       </header>
 
       {news === null ? (
