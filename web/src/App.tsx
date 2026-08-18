@@ -22,7 +22,7 @@ export default function App() {
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-20 border-b border-cream-deep bg-cream/85 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-6 px-5">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-5 sm:gap-6">
           <NavLink to="/" className="flex shrink-0 items-center gap-2.5">
             <img
               src={asset("chicode-mark.png")}
@@ -32,7 +32,11 @@ export default function App() {
             <span className="text-lg font-bold tracking-tight text-ink-900">CHICODE</span>
           </NavLink>
 
-          <nav className="flex items-center gap-1">
+          {/* 좁은 화면에서는 탭이 줄바꿈되는 대신 가로 스크롤되도록 한다 — 한글은
+              단어 사이 공백이 없어 flex item이 좁아지면 글자 단위로 줄바꿈되어
+              버린다(수/업/자/료 처럼 세로로 쌓임). min-w-0 + overflow-x-auto +
+              각 탭 whitespace-nowrap 조합으로 막는다. */}
+          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {TABS.map((tab) => (
               <NavLink
                 key={tab.to}
@@ -40,7 +44,7 @@ export default function App() {
                 end={tab.end}
                 className={({ isActive }) =>
                   [
-                    'rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
+                    'shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
                     isActive
                       ? 'bg-cheese-200 text-ink-900'
                       : 'text-ink-700 hover:bg-cheese-100 hover:text-ink-900',
@@ -54,9 +58,10 @@ export default function App() {
 
           <NavLink
             to="/teacher"
-            className="ml-auto rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 hover:text-ink-900"
+            className="shrink-0 whitespace-nowrap rounded-lg border border-cream-deep px-2.5 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 hover:text-ink-900 sm:px-3"
           >
-            교사 페이지
+            <span className="sm:hidden">교사</span>
+            <span className="hidden sm:inline">교사 페이지</span>
           </NavLink>
         </div>
       </header>
