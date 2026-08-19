@@ -85,6 +85,14 @@ service cloud.firestore {
       allow create, update, delete: if isTeacher();
     }
 
+    // 실습(Pico 2 W) 공개 여부. 문서 하나("pico2w")만 쓰는 싱글턴 —
+    // labSettings 와 같은 패턴이다. 학생은 로그인이 없으므로 읽기는 열어두고
+    // (닫혀 있으면 프론트엔드가 ComingSoon 을 보여준다), 여닫는 건 교사만.
+    match /practiceSettings/{settingsId} {
+      allow read: if true;
+      allow create, update, delete: if isTeacher();
+    }
+
     // Lab 활동에 첨부하는 발표자료(PPT 원본 + 대체용 PDF). materials 와 같은
     // 조각 저장 구조(chunkedFile.ts)를 쓰므로 규칙도 같은 모양이다. 학생
     // 화면은 뷰어로만 보여주고 다운로드 링크를 만들지 않지만, 그건 프론트엔드

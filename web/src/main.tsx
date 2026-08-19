@@ -18,10 +18,12 @@ import LabActivities from './pages/LabActivities'
 import LabActivityDetail from './pages/LabActivityDetail'
 import Teacher from './pages/Teacher'
 import ComingSoon from './pages/ComingSoon'
+import PicoGate from './pages/PicoGate'
 import NotFound from './pages/NotFound'
 
 // Monaco 에디터는 무겁다(2MB 남짓). 홈과 수업자료 화면까지 느려지지 않도록
-// Python 실습에 들어갈 때만 내려받는다.
+// Python 실습에 들어갈 때만 내려받는다. Pico 는 PicoGate.tsx 가 자체적으로
+// lazy import 한다(교사/공개 여부를 먼저 가린 뒤에만 받아오도록).
 const PythonLab = lazy(() => import('./pages/PythonLab'))
 const CLab = lazy(() => import('./pages/CLab'))
 
@@ -66,24 +68,9 @@ createRoot(document.getElementById('root')!).render(
                 </Suspense>
               }
             />
-            <Route
-              path="practice/pico"
-              element={
-                <ComingSoon
-                  emoji="🔌"
-                  title="Pico 2 W 시뮬레이터"
-                  backTo={{ to: '/practice', label: '실습' }}
-                  description={
-                    <>
-                      브라우저에서 가상 Pico 2 W 보드로
-                      <br />
-                      GPIO, LED, 버튼을 직접 다뤄보세요.
-                    </>
-                  }
-                  secondary={{ to: '/practice/python', label: 'Python 실습 하러 가기' }}
-                />
-              }
-            />
+            {/* 교사는 항상 들어간다. 학생은 practiceSettings/pico2w 가 열려있어야
+                한다 — 아직 준비 중일 땐 ComingSoon(PicoGate.tsx 참고). */}
+            <Route path="practice/pico" element={<PicoGate />} />
             {/* 예전 주소로 온 링크·북마크가 끊기지 않도록 새 위치로 보낸다. */}
             <Route path="python" element={<Navigate to="/practice/python" replace />} />
             <Route

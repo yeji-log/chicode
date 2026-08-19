@@ -1,11 +1,6 @@
 import FeatureCard from '../components/FeatureCard'
 
-/**
- * 실습 탭의 첫 화면. Python 과 Pico 2 W 중 무엇을 할지 고른다.
- *
- * Pico 는 아직 만들지 않았다 — 카드를 아예 숨기는 대신, 눌러도 되는 카드로 두고
- * 눌렀을 때 "준비 중"임을 솔직히 알려준다(/practice/pico, ComingSoon).
- */
+/** 실습 탭의 첫 화면. Python / C언어 / Pico 2 W 중 무엇을 할지 고른다. */
 export default function Practice() {
   return (
     <div className="flex flex-col gap-8 py-4">
@@ -26,9 +21,9 @@ export default function Practice() {
           작성하고 컴파일하여 실행해 보세요.
         </FeatureCard>
         <FeatureCard to="/practice/pico" emoji="🔌" title="Pico 2 W">
-          가상 보드로 GPIO, LED, 버튼을 직접 다뤄보세요.
+          가상 Pico 2 W 보드에 LED와 버튼을 연결하고
           <br />
-          곧 만나볼 수 있어요.
+          코드로 직접 동작을 확인해 보세요.
         </FeatureCard>
       </div>
     </div>
