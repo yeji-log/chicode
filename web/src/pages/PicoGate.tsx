@@ -59,9 +59,9 @@ export default function PicoGate() {
         backTo={{ to: '/practice', label: '실습' }}
         description={
           <>
-            선생님이 아직 준비 중이에요.
+            브라우저에서 가상 Pico 2 W 보드로
             <br />
-            곧 만나볼 수 있어요.
+            GPIO, LED, 버튼을 직접 다뤄보세요.
           </>
         }
         secondary={{ to: '/practice/python', label: 'Python 실습 하러 가기' }}
