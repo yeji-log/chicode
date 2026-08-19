@@ -72,6 +72,7 @@ createRoot(document.getElementById('root')!).render(
                 <ComingSoon
                   emoji="🔌"
                   title="Pico 2 W 시뮬레이터"
+                  backTo={{ to: '/practice', label: '실습' }}
                   description={
                     <>
                       브라우저에서 가상 Pico 2 W 보드로

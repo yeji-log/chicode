@@ -14,15 +14,25 @@ export default function ComingSoon({
   title,
   description,
   secondary,
+  backTo,
 }: {
   emoji: string
   title: string
   description: ReactNode
   /** 지금 당장 해볼 수 있는 다른 곳으로 안내할 때만 넣는다 (예: Pico 대신 Python). */
   secondary?: { to: string; label: string }
+  /** 상위 목록 화면으로 돌아가는 링크 (예: 실습 목록). CLab/PythonLab의
+   *  "← 실습" 링크와 같은 자리 — 이 화면이 그 목록에서 들어온 하위
+   *  페이지일 때만 넣는다. */
+  backTo?: { to: string; label: string }
 }) {
   return (
     <div className="flex flex-col items-center gap-4 py-20 text-center">
+      {backTo && (
+        <Link to={backTo.to} className="-mb-2 text-sm font-semibold text-ink-500 hover:text-ink-900">
+          ← {backTo.label}
+        </Link>
+      )}
       <img src={asset('chicode.png')} alt="" className="size-20 rounded-full ring-2 ring-cheese-300" />
       <span className="text-4xl">{emoji}</span>
       <h1 className="font-display text-2xl tracking-tight text-ink-900">{title}</h1>
