@@ -23,6 +23,7 @@ import {
   query,
   setDoc,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore'
 
 import { db } from './firebase'
@@ -103,6 +104,21 @@ export async function createSubject(input: {
 
   await setDoc(doc(db, SUBJECTS, id), subject)
   return { ...subject, id }
+}
+
+/**
+ * 교사가 과목 탭을 드래그로 옮긴 뒤 새 순서를 통째로 저장한다. orderedIds는
+ * 드래그 후 화면에 보이는 순서 그대로(과목 전체) 넘겨받는다 — order 필드를
+ * 배열 인덱스로 다시 매긴다. writeBatch로 한 번에 커밋해서 중간에 실패해도
+ * 일부만 바뀐 순서가 저장되지 않게 한다(labs.ts의 SectionsEditor 드래그
+ * 정렬과 달리 여기는 즉시 서버에 반영해야 다른 교사도 새 순서를 본다).
+ */
+export async function reorderSubjects(orderedIds: string[]): Promise<void> {
+  const batch = writeBatch(db)
+  orderedIds.forEach((id, index) => {
+    batch.update(doc(db, SUBJECTS, id), { order: index })
+  })
+  await batch.commit()
 }
 
 /**

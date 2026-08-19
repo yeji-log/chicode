@@ -1,3 +1,7 @@
+import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -19,6 +23,7 @@ import {
   createSubject,
   deleteSubject,
   listSubjects,
+  reorderSubjects,
   updateSubject,
   type SubjectMeta,
 } from '../lib/subjects'
@@ -206,28 +211,56 @@ function MaterialsSection({ uploaderEmail }: { uploaderEmail: string }) {
     })
   }
 
+  // 과목 탭도 LabBoardEditor.tsx 의 섹션 드래그 정렬과 같은 @dnd-kit 조합을
+  // 쓴다 — PointerSensor 에 activationConstraint(distance 4)를 줘서 살짝만
+  // 눌렀다 떼는 보통의 "탭 클릭"과 실제 드래그를 구분한다(그래서 버튼 자체를
+  // 그대로 드래그 핸들로 써도 클릭 선택이 안 깨진다).
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    setSubjects((current) => {
+      const oldIndex = current.findIndex((subject) => subject.id === active.id)
+      const newIndex = current.findIndex((subject) => subject.id === over.id)
+      if (oldIndex === -1 || newIndex === -1) return current
+      const reordered = arrayMove(current, oldIndex, newIndex)
+      // 낙관적으로 화면 순서부터 바꾸고, 서버 저장은 뒤에서 조용히 진행한다 —
+      // 실패해도 다음에 페이지를 새로고침하면 저장된(예전) 순서로 돌아오니
+      // 별도 롤백 처리는 안 했다(드래그 정렬 실패는 거의 없고, 있어도 다시
+      // 드래그하면 되는 가벼운 조작이라).
+      reorderSubjects(reordered.map((subject) => subject.id)).catch((caught) => {
+        console.error('과목 순서 저장 실패', caught)
+        alert('과목 순서를 저장하지 못했습니다. 새로고침 후 다시 시도해 주세요.')
+      })
+      return reordered
+    })
+  }
+
   if (loadingSubjects) return <p className="text-ink-500">과목을 불러오는 중…</p>
 
   return (
     <div className="flex flex-col gap-6">
       <nav className="flex flex-wrap items-center gap-2">
-        {subjects.map((subject) => (
-          <button
-            key={subject.id}
-            onClick={() => setActiveSubjectId(subject.id)}
-            className={[
-              'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-              subject.id === activeSubjectId
-                ? 'bg-cheese-400 text-ink-900'
-                : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
-            ].join(' ')}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext
+            items={subjects.map((subject) => subject.id)}
+            strategy={horizontalListSortingStrategy}
           >
-            {subject.name}
-            {subject.published === false && (
-              <span className="ml-1.5 text-xs font-semibold text-ink-500">🚧 준비중</span>
-            )}
-          </button>
-        ))}
+            {subjects.map((subject) => (
+              <SortableSubjectTab
+                key={subject.id}
+                subject={subject}
+                active={subject.id === activeSubjectId}
+                onSelect={() => setActiveSubjectId(subject.id)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
         <button
           onClick={() => setShowAddForm((value) => !value)}
           className={[
@@ -261,6 +294,47 @@ function MaterialsSection({ uploaderEmail }: { uploaderEmail: string }) {
         />
       )}
     </div>
+  )
+}
+
+/** 드래그로 순서를 바꿀 수 있는 과목 탭 하나. 버튼 자체가 드래그 핸들이다 —
+ *  섹션 편집기(SortableSectionRow)처럼 안에 다른 입력 요소가 없는 단순한
+ *  탭이라 별도 손잡이(⠿)를 둘 필요가 없다. */
+function SortableSubjectTab({
+  subject,
+  active,
+  onSelect,
+}: {
+  subject: SubjectMeta
+  active: boolean
+  onSelect: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: subject.id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <button
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={onSelect}
+      className={[
+        'touch-none rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+        active ? 'bg-cheese-400 text-ink-900' : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
+      ].join(' ')}
+    >
+      {subject.name}
+      {subject.published === false && (
+        <span className="ml-1.5 text-xs font-semibold text-ink-500">🚧 준비중</span>
+      )}
+    </button>
   )
 }
 
