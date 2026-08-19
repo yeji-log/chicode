@@ -29,7 +29,12 @@ export default function ComingSoon({
   return (
     <div className="flex flex-col items-center gap-4 py-20 text-center">
       {backTo && (
-        <Link to={backTo.to} className="-mb-2 text-sm font-semibold text-ink-500 hover:text-ink-900">
+        // CLab/PythonLab의 "← 실습" 링크와 같은 자리(왼쪽 정렬)를 맞추려고
+        // 이 요소만 부모의 text-center를 깨고 w-full + text-left를 쓴다.
+        <Link
+          to={backTo.to}
+          className="-mb-2 w-full text-left text-sm font-semibold text-ink-500 hover:text-ink-900"
+        >
           ← {backTo.label}
         </Link>
       )}
