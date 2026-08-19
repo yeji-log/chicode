@@ -3,10 +3,15 @@ import { Link, Outlet, useLocation, useOutletContext, useParams } from 'react-ro
 
 import { useAuth } from '../auth/AuthProvider'
 import LabPresentationOverlay from '../components/LabPresentationOverlay'
+import LabPresenter from '../components/LabPresenter'
 import PdfViewer from '../components/PdfViewer'
 import PptxSlideViewer from '../components/PptxSlideViewer'
-import { subscribePresentation, type LabPresentationState } from '../lib/labPresentation'
-import { getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
+import {
+  startPresentation,
+  subscribePresentation,
+  type LabPresentationState,
+} from '../lib/labPresentation'
+import { getNotes, getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import {
   type MaterialMeta,
   formatDate,
@@ -300,13 +305,14 @@ export function OtFrame({ subject }: { subject: SubjectMeta }) {
  *  요청이라 iframe(OtFrame)을 그대로 쓴다. otUrl이 비어 있으면 nav에서 OT 탭
  *  자체가 안 보이지만, 링크를 직접 쳐서 들어오는 경우를 대비해 OtFrame이 안내
  *  문구를 대신 보여준다. 그 아래에 교사가 첨부한 OT 자료(OtMaterialsList)를
- *  이어서 보여준다. */
+ *  이어서 보여준다 — 교사 로그인 상태로 이 화면에 들어오면 여기서 바로
+ *  "발표 시작"까지 할 수 있다(아래 OtMaterialItem 주석 참고). */
 export function SubjectOt() {
-  const { subject } = useSubjectContext()
+  const { subject, isTeacherViewer } = useSubjectContext()
   return (
     <div className="flex flex-col gap-6">
       <OtFrame subject={subject} />
-      <OtMaterialsList subject={subject} />
+      <OtMaterialsList subject={subject} isTeacherViewer={isTeacherViewer} />
     </div>
   )
 }
@@ -318,69 +324,158 @@ const IDLE_PRESENTATION: LabPresentationState = { active: false, currentSlide: 1
  * 학생 화면에 그대로 보여준다. 항목이 없으면(아직 아무것도 안 올렸으면)
  * 아무것도 안 그린다 — "그냥 첨부하면 보이도록"이 요청이었으므로 빈 상태
  * 안내문 없이 조용히 생략한다.
- *
- * 대본(교사용 발표 노트)은 여기서 절대 안 불러온다 — getNotes를 아예 호출하지
- * 않는다. 슬라이드 열람은 PptxSlideViewer(원본 다운로드 불가, 컴포넌트 자체
- * 정책)로만 하고, 교사가 OtPresentationPanel에서 "발표 시작"을 누르면
- * labPresentation.ts 실시간 구독으로 이 화면도 같은 슬라이드로 자동 전환된다
- * (LabActivityDetail.tsx의 학생 팔로우 화면과 같은 구조).
  */
-function OtMaterialsList({ subject }: { subject: SubjectMeta }) {
+function OtMaterialsList({
+  subject,
+  isTeacherViewer,
+}: {
+  subject: SubjectMeta
+  isTeacherViewer: boolean
+}) {
   const items = subject.otPresentations ?? []
   if (items.length === 0) return null
 
   return (
     <div className="flex flex-col gap-4">
       {items.map((entry) => (
-        <OtMaterialItem key={entry.id} entry={entry} />
+        <OtMaterialItem key={entry.id} entry={entry} isTeacherViewer={isTeacherViewer} />
       ))}
     </div>
   )
 }
 
-function OtMaterialItem({ entry }: { entry: OtPresentationMeta }) {
+/**
+ * OT 자료 하나 — 기본은 슬라이드 열람(PptxSlideViewer, 원본 다운로드 불가)
+ * 뿐이고, 교사 로그인 상태(isTeacherViewer)일 때만 "발표 시작" 버튼과 발표
+ * 모드(LabPresenter, 슬라이드+대본 나란히)가 나타난다 — Lab 활동 학생 화면
+ * (LabActivityDetail.tsx)과 정확히 같은 구조를 재사용한다. 이렇게 하면 첨부
+ * 화면(교사 페이지)과 발표 화면이 분리되지 않고, 교사가 지금 학생이 보는 것과
+ * 똑같은 화면에서 발표를 시작하게 된다.
+ *
+ * 대본(교사용 발표 노트)은 isTeacherViewer일 때만 불러온다 — 학생 브라우저로는
+ * getNotes 호출 자체가 안 나간다. 다른 기기(학생 화면이든, 교사의 다른 기기든)
+ * 에서 발표가 시작되면 LabPresentationOverlay로 같은 슬라이드를 그대로
+ * 따라간다.
+ */
+function OtMaterialItem({
+  entry,
+  isTeacherViewer,
+}: {
+  entry: OtPresentationMeta
+  isTeacherViewer: boolean
+}) {
+  const slideId = entry.id
   const [slideFiles, setSlideFiles] = useState<{ pptx: Blob | null; pdf: Blob | null } | null>(
     null,
   )
+  const [notes, setNotes] = useState<string[]>([])
   const [presentation, setPresentation] = useState<LabPresentationState>(IDLE_PRESENTATION)
+  const [isPresenting, setIsPresenting] = useState(false)
+  const [browsePage, setBrowsePage] = useState(1)
 
   useEffect(() => {
     let cancelled = false
-    getSlideSet(entry.id).then(async (meta) => {
+    getSlideSet(slideId).then(async (meta) => {
       if (!meta.pptx && !meta.pdf) {
         if (!cancelled) setSlideFiles(null)
         return
       }
       const [pptx, pdf] = await Promise.all([
-        meta.pptx ? getSlidePptxFile(entry.id) : Promise.resolve(null),
-        meta.pdf ? getSlidePdfFile(entry.id) : Promise.resolve(null),
+        meta.pptx ? getSlidePptxFile(slideId) : Promise.resolve(null),
+        meta.pdf ? getSlidePdfFile(slideId) : Promise.resolve(null),
       ])
       if (!cancelled) setSlideFiles({ pptx, pdf })
     })
+    if (isTeacherViewer) {
+      getNotes(slideId).then((loaded) => {
+        if (!cancelled) setNotes(loaded)
+      })
+    }
     return () => {
       cancelled = true
     }
-  }, [entry.id])
+  }, [slideId, isTeacherViewer])
 
-  useEffect(() => subscribePresentation(entry.id, setPresentation), [entry.id])
+  useEffect(() => subscribePresentation(slideId, setPresentation), [slideId])
 
   // 아직 PPT/PDF를 안 올린 항목(제목만 추가해둔 상태)은 조용히 생략한다 —
   // 교사가 실제로 파일을 첨부해야만 학생 화면에 나타난다.
   if (!slideFiles || (!slideFiles.pptx && !slideFiles.pdf)) return null
 
+  const canPresent = isTeacherViewer && !!slideFiles.pdf
+  const showFollowerOverlay = presentation.active && !isPresenting && !!slideFiles.pdf
+
+  async function handleStartPresenting() {
+    await startPresentation(slideId, browsePage)
+    setIsPresenting(true)
+  }
+
+  /** 다른 기기에서 이미 진행 중인 발표를 이어받을 땐 페이지를 건드리지
+   *  않는다 — "다시 시작"이 아니라 "이어서 조작"이라서(LabActivityDetail과
+   *  같은 이유). */
+  function handleResumeControl() {
+    setIsPresenting(true)
+  }
+
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-cream-deep bg-white/70 p-6">
-      <h2 className="font-bold text-ink-900">{entry.title}</h2>
-      <PptxSlideViewer pptxFile={slideFiles.pptx} pdfFile={slideFiles.pdf} filename={entry.title} />
-
-      {presentation.active && slideFiles.pdf && (
+      {showFollowerOverlay && slideFiles.pdf && (
         <LabPresentationOverlay
           pdfFile={slideFiles.pdf}
           currentSlide={presentation.currentSlide}
           filename={entry.title}
-          isTeacherViewer={false}
-          onTakeControl={() => {}}
+          isTeacherViewer={isTeacherViewer}
+          onTakeControl={() => setIsPresenting(true)}
         />
+      )}
+
+      {isPresenting && slideFiles.pdf ? (
+        <LabPresenter
+          activityId={slideId}
+          pdfFile={slideFiles.pdf}
+          currentSlide={presentation.currentSlide}
+          notes={notes}
+          onNoteSaved={(slideIndex, text) =>
+            setNotes((current) => {
+              const next = [...current]
+              while (next.length < slideIndex) next.push('')
+              next[slideIndex - 1] = text
+              return next
+            })
+          }
+          onExit={() => setIsPresenting(false)}
+        />
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-bold text-ink-900">{entry.title}</h2>
+            {canPresent &&
+              (presentation.active ? (
+                <button
+                  onClick={handleResumeControl}
+                  className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+                >
+                  ▶ 발표 제어하기
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-ink-500">지금 보는 {browsePage}쪽부터</span>
+                  <button
+                    onClick={handleStartPresenting}
+                    className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+                  >
+                    ▶ 발표 시작
+                  </button>
+                </div>
+              ))}
+          </div>
+          <PptxSlideViewer
+            pptxFile={slideFiles.pptx}
+            pdfFile={slideFiles.pdf}
+            filename={entry.title}
+            onPageChange={setBrowsePage}
+          />
+        </>
       )}
     </div>
   )

@@ -8,42 +8,24 @@ import {
   type SubjectMeta,
 } from '../lib/subjects'
 import { SlidesPanel } from '../pages/LabBoardEditor'
-import {
-  startPresentation,
-  subscribePresentation,
-  type LabPresentationState,
-} from '../lib/labPresentation'
-import {
-  deleteSlidePdf,
-  deleteSlidePptx,
-  getNotes,
-  getSlidePdfFile,
-  getSlidePptxFile,
-  getSlideSet,
-  type LabSlideSet,
-} from '../lib/labSlides'
-import LabPresentationOverlay from './LabPresentationOverlay'
-import LabPresenter from './LabPresenter'
-import PptxSlideViewer from './PptxSlideViewer'
-
-const IDLE_PRESENTATION: LabPresentationState = { active: false, currentSlide: 1, updatedAt: 0 }
+import { deleteSlidePdf, deleteSlidePptx } from '../lib/labSlides'
 
 /**
  * 교사 페이지 OT 탭 전용 "OT 자료" 목록 — 항목을 여러 개 추가할 수 있고
- * (예: 1차시/2차시 자료를 따로 두는 식), 항목마다 독립적으로 PPT 업로드 +
- * 발표(슬라이드+대본 나란히) 기능을 쓴다. Lab 활동의 발표 기능(LabPresenter/
- * PptxSlideViewer/labPresentation.ts/labSlides.ts)을 그대로 재사용한다 — 전부
- * activityId 문자열 하나로만 동작해서 "활동" 데이터 모델 없이도 그대로 붙는다.
+ * (예: 1차시/2차시 자료를 따로 두는 식), 항목마다 독립적으로 PPT/PDF를
+ * 첨부·교체·삭제할 수 있다. 실제 업로드·저장 로직은 SlidesPanel(Lab 활동
+ * 편집기와 공용)을 그대로 재사용한다 — activityId 문자열 하나로만 동작해서
+ * "활동" 데이터 모델 없이도 그대로 붙는다.
  *
  * 목록 자체(제목)는 subjects/{subjectId}.otPresentations 배열에 있고, 항목별
- * 실제 PPT/PDF·대본은 각자 자기 id로 된 labSlides/labPresentations 문서에
- * 있다(id는 crypto.randomUUID() — 다른 곳의 활동 id와 겹칠 일이 없다).
+ * 실제 PPT/PDF는 각자 자기 id로 된 labSlides 문서에 있다(id는
+ * crypto.randomUUID() — 다른 곳의 활동 id와 겹칠 일이 없다).
  *
- * 여기서 업로드한 슬라이드는 학생 화면 OT 탭(SubjectMaterials.tsx의
- * OtMaterialsList)에도 그대로 보인다 — "발표 시작"을 누르면 학생 화면도 같은
- * 슬라이드로 자동으로 넘어간다(labPresentation.ts 실시간 구독). 대본(교사용
- * 발표 노트)만은 학생 화면에 절대 안 보낸다 — getNotes를 OtMaterialsList가
- * 아예 호출하지 않는다.
+ * 미리보기·"발표 시작"은 여기 없다 — 첨부만 담당하고, 실제 보여주기/발표는
+ * 수업자료 OT 페이지(SubjectMaterials.tsx의 OtMaterialsList)에서 교사
+ * 로그인 상태로만 할 수 있게 옮겼다(그래야 첨부 화면과 발표 화면이 같은
+ * "학생이 실제로 보는 화면"을 공유해서, 교사가 여기서 미리 보던 것과 실제
+ * 발표 때 학생이 보는 게 서로 달라질 일이 없다).
  */
 export default function OtPresentationPanel({
   subject,
@@ -101,10 +83,9 @@ export default function OtPresentationPanel({
       <div>
         <h2 className="font-bold text-ink-900">🎤 OT 자료</h2>
         <p className="mt-1 text-xs text-ink-500">
-          여기 올린 PPT는 학생 화면 OT 탭에도 그대로 보입니다(대본은 안 보여요). OT 자료를 여러 개
-          추가해서(예: 1차시/2차시) 각각 따로 관리할 수 있어요. "발표 시작"을 누르면 슬라이드와
-          대본을 나란히 보면서 프로젝터로 진행할 수 있고, 학생 화면도 같은 슬라이드로 자동으로
-          넘어갑니다.
+          여기 올린 PPT는 학생 화면 OT 탭에도 그대로 보입니다. OT 자료를 여러 개 추가해서(예:
+          1차시/2차시) 각각 따로 관리할 수 있어요. 발표(슬라이드+대본 나란히, 실시간 진행)는 여기가
+          아니라 학생과 같은 화면인 수업자료 OT 페이지에서 교사 로그인 상태로 시작할 수 있습니다.
         </p>
       </div>
 
@@ -136,8 +117,9 @@ export default function OtPresentationPanel({
   )
 }
 
-/** OT 자료 하나 — 제목 인라인 수정 + 업로드(SlidesPanel) + 미리보기/발표
- *  모드. entry.id 를 그대로 labSlides/labPresentations 문서 id로 쓴다. */
+/** OT 자료 하나 — 제목 인라인 수정 + 첨부(SlidesPanel)만 담당한다. 미리보기·
+ *  발표 기능은 없다(위 OtPresentationPanel 주석 참고). entry.id 를 그대로
+ *  labSlides 문서 id로 쓴다. */
 function OtPresentationItem({
   entry,
   onRename,
@@ -147,69 +129,11 @@ function OtPresentationItem({
   onRename: (title: string) => void
   onRemove: () => void
 }) {
-  const slideId = entry.id
-
   const [titleDraft, setTitleDraft] = useState(entry.title)
-  const [slideFiles, setSlideFiles] = useState<{ pptx: Blob | null; pdf: Blob | null } | null>(
-    null,
-  )
-  const [notes, setNotes] = useState<string[]>([])
-  const [presentation, setPresentation] = useState<LabPresentationState>(IDLE_PRESENTATION)
-  const [isPresenting, setIsPresenting] = useState(false)
-  const [browsePage, setBrowsePage] = useState(1)
-  // SlidesPanel이 업로드/삭제를 마칠 때마다 값이 바뀌어, 아래 slideFiles/notes
-  // 재조회 effect를 다시 돌게 만드는 트리거. 값 자체엔 의미 없다.
-  const [refreshToken, setRefreshToken] = useState(0)
 
   useEffect(() => {
     setTitleDraft(entry.title)
   }, [entry.title])
-
-  useEffect(() => {
-    let cancelled = false
-    setBrowsePage(1)
-
-    getSlideSet(slideId).then(async (meta) => {
-      if (!meta.pptx && !meta.pdf) {
-        if (!cancelled) setSlideFiles(null)
-        return
-      }
-      const [pptx, pdf] = await Promise.all([
-        meta.pptx ? getSlidePptxFile(slideId) : Promise.resolve(null),
-        meta.pdf ? getSlidePdfFile(slideId) : Promise.resolve(null),
-      ])
-      if (!cancelled) setSlideFiles({ pptx, pdf })
-    })
-    getNotes(slideId).then((loaded) => {
-      if (!cancelled) setNotes(loaded)
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [slideId, refreshToken])
-
-  useEffect(() => subscribePresentation(slideId, setPresentation), [slideId])
-
-  const canPresent = !!slideFiles?.pdf
-  const showFollowerOverlay = presentation.active && !isPresenting && !!slideFiles?.pdf
-
-  async function handleStartPresenting() {
-    await startPresentation(slideId, browsePage)
-    setIsPresenting(true)
-  }
-
-  function handleResumeControl() {
-    setIsPresenting(true)
-  }
-
-  function handleSlidesChange(next: LabSlideSet) {
-    if (!next.pptx && !next.pdf) {
-      setSlideFiles(null)
-      return
-    }
-    setRefreshToken((token) => token + 1)
-  }
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-cream-deep bg-cream/40 p-4">
@@ -232,69 +156,7 @@ function OtPresentationItem({
         </button>
       </div>
 
-      <SlidesPanel activityId={slideId} onChange={handleSlidesChange} />
-
-      {showFollowerOverlay && slideFiles?.pdf && (
-        <LabPresentationOverlay
-          pdfFile={slideFiles.pdf}
-          currentSlide={presentation.currentSlide}
-          filename={entry.title}
-          isTeacherViewer
-          onTakeControl={() => setIsPresenting(true)}
-        />
-      )}
-
-      {isPresenting && slideFiles?.pdf ? (
-        <LabPresenter
-          activityId={slideId}
-          pdfFile={slideFiles.pdf}
-          currentSlide={presentation.currentSlide}
-          notes={notes}
-          onNoteSaved={(slideIndex, text) =>
-            setNotes((current) => {
-              const next = [...current]
-              while (next.length < slideIndex) next.push('')
-              next[slideIndex - 1] = text
-              return next
-            })
-          }
-          onExit={() => setIsPresenting(false)}
-        />
-      ) : (
-        slideFiles &&
-        (slideFiles.pptx || slideFiles.pdf) && (
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="font-semibold text-ink-900">미리보기</h3>
-              {canPresent &&
-                (presentation.active ? (
-                  <button
-                    onClick={handleResumeControl}
-                    className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
-                  >
-                    ▶ 발표 제어하기
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-ink-500">지금 보는 {browsePage}쪽부터</span>
-                    <button
-                      onClick={handleStartPresenting}
-                      className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
-                    >
-                      ▶ 발표 시작
-                    </button>
-                  </div>
-                ))}
-            </div>
-            <PptxSlideViewer
-              pptxFile={slideFiles.pptx}
-              pdfFile={slideFiles.pdf}
-              filename={entry.title}
-              onPageChange={setBrowsePage}
-            />
-          </div>
-        )
-      )}
+      <SlidesPanel activityId={entry.id} />
     </div>
   )
 }
