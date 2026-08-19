@@ -9,6 +9,7 @@ import {
   listCandidates,
   listPublishedNews,
   publishNews,
+  updateNewsIssue,
   type NewsCandidate,
   type NewsCategory,
   type NewsIssue,
@@ -27,6 +28,7 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
   const [published, setPublished] = useState<NewsIssue[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingPublishedId, setEditingPublishedId] = useState<string | null>(null)
 
   async function refresh() {
     const [nextCandidates, nextPublished] = await Promise.all([
@@ -69,6 +71,18 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
     if (!confirm('이 이슈를 학생 화면에서 내릴까요?')) return
     await deleteNewsIssue(issueId)
     setPublished((list) => list.filter((issue) => issue.id !== issueId))
+  }
+
+  async function handleUpdate(issueId: string, fields: PublishFormValues) {
+    await updateNewsIssue(issueId, {
+      title: fields.title,
+      summary: fields.summary,
+      whyImportant: fields.whyImportant,
+      category: fields.category,
+      keywords: fields.keywords,
+    })
+    setEditingPublishedId(null)
+    await refresh()
   }
 
   if (loading) return <p className="text-ink-500">뉴스 후보를 불러오는 중…</p>
@@ -134,7 +148,15 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
 
                 {editingId === candidate.id && (
                   <PublishForm
-                    candidate={candidate}
+                    initial={{
+                      title: candidate.title,
+                      summary: candidate.excerpt,
+                      whyImportant: '',
+                      category: candidate.category,
+                      keywords: candidate.keywords,
+                    }}
+                    submitLabel="발행"
+                    busyLabel="발행 중…"
                     onCancel={() => setEditingId(null)}
                     onSubmit={(fields) => handlePublish(candidate, fields)}
                   />
@@ -155,19 +177,47 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
         ) : (
           <ul className="divide-y divide-cream-deep overflow-hidden rounded-2xl border border-cream-deep bg-white/70">
             {published.map((issue) => (
-              <li key={issue.id} className="flex items-center gap-4 px-5 py-3.5">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-ink-900">{issue.title}</p>
-                  <p className="truncate text-xs text-ink-500">
-                    {CATEGORY_LABELS[issue.category]} · {formatRelativeTime(issue.issuedAt)}
-                  </p>
+              <li key={issue.id} className="px-5 py-3.5">
+                <div className="flex items-center gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-ink-900">{issue.title}</p>
+                    <p className="truncate text-xs text-ink-500">
+                      {CATEGORY_LABELS[issue.category]} · {formatRelativeTime(issue.issuedAt)}
+                    </p>
+                  </div>
+                  <div className="ml-auto flex shrink-0 gap-2">
+                    <button
+                      onClick={() =>
+                        setEditingPublishedId(editingPublishedId === issue.id ? null : issue.id)
+                      }
+                      className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+                    >
+                      {editingPublishedId === issue.id ? '접기' : '수정하기'}
+                    </button>
+                    <button
+                      onClick={() => handleUnpublish(issue.id)}
+                      className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
+                    >
+                      내리기
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => handleUnpublish(issue.id)}
-                  className="ml-auto shrink-0 rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
-                >
-                  내리기
-                </button>
+
+                {editingPublishedId === issue.id && (
+                  <PublishForm
+                    initial={{
+                      title: issue.title,
+                      summary: issue.summary,
+                      whyImportant: issue.whyImportant,
+                      category: issue.category,
+                      keywords: issue.keywords,
+                    }}
+                    submitLabel="수정 저장"
+                    busyLabel="저장 중…"
+                    onCancel={() => setEditingPublishedId(null)}
+                    onSubmit={(fields) => handleUpdate(issue.id, fields)}
+                  />
+                )}
               </li>
             ))}
           </ul>
@@ -186,19 +236,23 @@ interface PublishFormValues {
 }
 
 function PublishForm({
-  candidate,
+  initial,
+  submitLabel,
+  busyLabel,
   onCancel,
   onSubmit,
 }: {
-  candidate: NewsCandidate
+  initial: PublishFormValues
+  submitLabel: string
+  busyLabel: string
   onCancel: () => void
   onSubmit: (fields: PublishFormValues) => Promise<void>
 }) {
-  const [title, setTitle] = useState(candidate.title)
-  const [summary, setSummary] = useState(candidate.excerpt)
-  const [whyImportant, setWhyImportant] = useState('')
-  const [category, setCategory] = useState<NewsCategory>(candidate.category)
-  const [keywordsInput, setKeywordsInput] = useState(candidate.keywords.join(', '))
+  const [title, setTitle] = useState(initial.title)
+  const [summary, setSummary] = useState(initial.summary)
+  const [whyImportant, setWhyImportant] = useState(initial.whyImportant)
+  const [category, setCategory] = useState<NewsCategory>(initial.category)
+  const [keywordsInput, setKeywordsInput] = useState(initial.keywords.join(', '))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -223,8 +277,8 @@ function PublishForm({
           .filter(Boolean),
       })
     } catch (caught) {
-      console.error('뉴스 발행 실패', caught)
-      setError('발행하지 못했습니다. 다시 시도해 주세요.')
+      console.error('뉴스 카드 저장 실패', caught)
+      setError('저장하지 못했습니다. 다시 시도해 주세요.')
     } finally {
       setBusy(false)
     }
@@ -304,7 +358,7 @@ function PublishForm({
           disabled={busy}
           className="rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {busy ? '발행 중…' : '발행'}
+          {busy ? busyLabel : submitLabel}
         </button>
         <button
           type="button"

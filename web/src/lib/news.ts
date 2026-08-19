@@ -24,6 +24,7 @@ import {
   limit,
   orderBy,
   query,
+  updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore'
@@ -140,6 +141,14 @@ export async function discardCandidate(candidateId: string): Promise<void> {
 /** 이미 발행한 카드를 내린다 — 오탈자·잘못된 판단을 바로잡을 때. */
 export async function deleteNewsIssue(issueId: string): Promise<void> {
   await deleteDoc(doc(db, ISSUES, issueId))
+}
+
+/** 이미 발행한 카드의 내용을 고친다 — 내렸다 다시 발행할 필요 없이 제자리에서 수정. */
+export async function updateNewsIssue(
+  issueId: string,
+  fields: Pick<NewsIssue, 'title' | 'summary' | 'whyImportant' | 'category' | 'keywords'>,
+): Promise<void> {
+  await updateDoc(doc(db, ISSUES, issueId), { ...fields })
 }
 
 /** "6시간 전" 처럼 짧게. 하루가 넘어가면 날짜로 바꿔 보여준다. */
