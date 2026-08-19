@@ -121,6 +121,12 @@ export interface LabActivity {
   createdAt: number
   updatedAt: number
   updatedBy: string
+  /** 이 활동이 Lab이 아니라 수업자료의 특정 과목(subjects/{id})에 속한 "내용"일 때만
+   *  있는 필드. 없으면(undefined) Lab 전역 활동이다 — subjects.ts 의 pinRequired/
+   *  published 와 같은 "필드 없으면 기존 동작" 패턴. listActivities 의 subjectId
+   *  스코프 필터링 기준이 된다. Firestore 는 undefined 필드 값을 거부하므로 쓸 때는
+   *  항상 조건부로 스프레드해야 한다(절대 subjectId: undefined 로 넣지 말 것). */
+  subjectId?: string
 }
 
 export type LabActivityInput = Omit<LabActivity, 'id' | 'createdAt' | 'updatedAt'>
@@ -167,6 +173,8 @@ export interface LabSeason {
   status: '진행중' | '준비중' | '완료'
   order: number
   description: string
+  /** LabActivity.subjectId 와 같은 이유·같은 규칙 — 없으면 Lab 전역 시즌. */
+  subjectId?: string
 }
 
 export type LabSeasonInput = Omit<LabSeason, 'id'>
@@ -202,12 +210,26 @@ export async function listActivities(opts?: {
    *  싶을 때 true로 넘긴다. seasonId 를 함께 넘겼을 때만 의미가 있다 —
    *  seasonId 없이 전체 목록을 볼 때는 준비중 시즌 활동을 계속 숨긴다. */
   includePreparingSeason?: boolean
+  /** 수업자료의 특정 과목으로 스코프를 좁힌다. seasonId 가 이미 주어졌으면
+   *  그 시즌 하나로 충분히 스코프되므로 이 필드는 무시한다(where 를 두 개
+   *  AND 하면 복합 색인이 필요해지는 걸 피하려는 것). seasonId 없이
+   *  subjectId 도 없으면 Lab 전역 활동만(subjectId 없는 문서만) 돌려준다. */
+  subjectId?: string
 }): Promise<LabActivity[]> {
   const snapshot = opts?.seasonId
     ? await getDocs(query(collection(db, LABS), where('seasonId', '==', opts.seasonId)))
-    : await getDocs(collection(db, LABS))
+    : opts?.subjectId
+      ? await getDocs(query(collection(db, LABS), where('subjectId', '==', opts.subjectId)))
+      : await getDocs(collection(db, LABS))
 
   let activities = snapshot.docs.map((entry) => normalizeActivity(entry.id, entry.data()))
+
+  // seasonId/subjectId 둘 다 없는 "전체 조회"는 Lab 전역 컬렉션 전체를 그대로
+  // 받아오므로, 과목에 속한 활동이 섞여 들어오지 않도록 여기서 걸러낸다 —
+  // subjectId 를 스코프로 준 경우엔 이미 쿼리로 걸러졌으니 다시 거를 필요 없다.
+  if (!opts?.seasonId && !opts?.subjectId) {
+    activities = activities.filter((activity) => !activity.subjectId)
+  }
 
   if (opts?.publishedOnly) {
     activities = activities.filter((activity) => activity.published)
@@ -216,8 +238,10 @@ export async function listActivities(opts?: {
       // 활동 자체는 published여도, 그 활동이 속한 시즌이 로드맵에서 아직
       // "준비중"이면 학생에게는 같이 숨긴다 — 로드맵에 안 보이는 시즌인데
       // 활동 목록/직접 링크로는 열리는 건 앞뒤가 안 맞는다는 지적을 받았다.
+      // listSeasons 도 같은 스코프(subjectId)로 불러야 한다 — 안 그러면
+      // 과목 스코프에서 이 필터가 Lab 전역 시즌만 보고 조용히 무력화된다.
       const preparingSeasonIds = new Set(
-        (await listSeasons())
+        (await listSeasons(opts.subjectId ? { subjectId: opts.subjectId } : undefined))
           .filter((season) => season.status === '준비중')
           .map((season) => season.id),
       )
@@ -254,9 +278,25 @@ export async function deleteActivity(id: string): Promise<void> {
 
 // ── Roadmap 시즌 ─────────────────────────────────────────────
 
-export async function listSeasons(): Promise<LabSeason[]> {
+/**
+ * subjectId 를 주면 그 과목의 시즌(수업자료에서는 "수업목차")만 가져온다 —
+ * listActivities 의 subjectId 스코프와 같은 이유·같은 방식(단일 where + 클라이언트
+ * 정렬, 복합 색인 회피). 안 주면 Lab 전역 시즌만(subjectId 없는 문서만) 돌려준다 —
+ * 과목 시즌이 같은 컬렉션에 함께 저장되므로 이 필터가 없으면 Lab 쪽에도 섞여 보인다.
+ */
+export async function listSeasons(opts?: { subjectId?: string }): Promise<LabSeason[]> {
+  if (opts?.subjectId) {
+    const snapshot = await getDocs(
+      query(collection(db, SEASONS), where('subjectId', '==', opts.subjectId)),
+    )
+    const seasons = snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as LabSeason)
+    return seasons.sort((a, b) => a.order - b.order)
+  }
+
   const snapshot = await getDocs(query(collection(db, SEASONS), orderBy('order', 'asc')))
-  return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as LabSeason)
+  return snapshot.docs
+    .map((entry) => ({ id: entry.id, ...entry.data() }) as LabSeason)
+    .filter((season) => !season.subjectId)
 }
 
 export async function getSeason(id: string): Promise<LabSeason | null> {

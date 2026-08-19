@@ -7,6 +7,7 @@ import CodeBlock from '../components/CodeBlock'
 import LabPresentationOverlay from '../components/LabPresentationOverlay'
 import LabPresenter from '../components/LabPresenter'
 import PptxSlideViewer from '../components/PptxSlideViewer'
+import { useLabScope } from '../lib/labScope'
 import {
   startPresentation,
   subscribePresentation,
@@ -32,8 +33,14 @@ import { extractYoutubeId, youtubeEmbedUrl } from '../lib/youtube'
 
 const IDLE_PRESENTATION: LabPresentationState = { active: false, currentSlide: 1, updatedAt: 0 }
 
-/** /lab/activities/:id — 설계안 5절 활동 페이지 템플릿. */
+/**
+ * /lab/activities/:id — 설계안 5절 활동 페이지 템플릿.
+ * `/materials/:subjectId/content/:id` 아래에도 마운트되어 과목별 "내용" 상세
+ * 화면으로 재사용된다(useLabScope 참고) — activityId 로만 동작해서 subjectId
+ * 자체는 데이터 조회에 안 쓰이고, 뒤로가기 링크/문구에만 쓰인다.
+ */
 export default function LabActivityDetail() {
+  const scope = useLabScope()
   const { id } = useParams<{ id: string }>()
   const { state: authState } = useAuth()
   const isTeacherViewer = authState === 'teacher'
@@ -119,12 +126,12 @@ export default function LabActivityDetail() {
     return (
       <div className="rounded-2xl border border-dashed border-cream-deep px-6 py-14 text-center">
         <p className="text-4xl">🤔</p>
-        <p className="mt-3 font-bold text-ink-900">존재하지 않는 활동입니다.</p>
+        <p className="mt-3 font-bold text-ink-900">존재하지 않는 {scope.activityNoun}입니다.</p>
         <Link
-          to="/lab/activities"
+          to={scope.activitiesPath}
           className="mt-2 inline-block text-sm font-semibold text-cheese-600 underline"
         >
-          활동 목록으로 돌아가기
+          {scope.activityNoun} 목록으로 돌아가기
         </Link>
       </div>
     )
@@ -162,8 +169,8 @@ export default function LabActivityDetail() {
       )}
 
       <header className="flex flex-col gap-2">
-        <Link to="/lab/activities" className="text-sm font-semibold text-ink-500 underline">
-          ← 활동 목록
+        <Link to={scope.activitiesPath} className="text-sm font-semibold text-ink-500 underline">
+          ← {scope.activityNoun} 목록
         </Link>
         <div className="flex items-center gap-2">
           {seasonTitle && (

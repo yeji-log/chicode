@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
+import { useLabScope } from '../lib/labScope'
 import { listActivities, listSeasons, type LabActivity, type LabSeason } from '../lib/labs'
 
 /**
- * /lab/activities — 활동 목록.
+ * /lab/activities — 활동 목록. `/materials/:subjectId/content` 아래에도
+ * 마운트되어 과목별 "내용" 화면으로 재사용된다(useLabScope 참고).
  *
  * 탭은 고정 카테고리가 아니라 교사가 만든 시즌 목록을 그대로 불러와서 만든다
  * (lib/labs.ts 상단 설명 참고 — 로드맵이 곧 이 탭의 출처다).
@@ -16,6 +18,7 @@ import { listActivities, listSeasons, type LabActivity, type LabSeason } from '.
  * 수밖에 없어서, 그 사이엔 activities 를 불러오지 않고 기다린다.
  */
 export default function LabActivities() {
+  const scope = useLabScope()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedSeasonId = searchParams.get('season') ?? ''
 
@@ -25,10 +28,10 @@ export default function LabActivities() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    listSeasons()
+    listSeasons(scope.subjectId ? { subjectId: scope.subjectId } : undefined)
       .then(setSeasons)
       .finally(() => setSeasonsLoaded(true))
-  }, [])
+  }, [scope.subjectId])
 
   // season 파라미터 없이 들어온 경우, 시즌 목록이 로드되는 대로 첫 시즌으로
   // 보정한다. (예: 시즌이 아예 없으면 그대로 둔다 — 아래에서 안내 문구만 보임.)
@@ -56,10 +59,10 @@ export default function LabActivities() {
       return
     }
     setLoading(true)
-    listActivities({ seasonId: activeSeasonId })
+    listActivities({ seasonId: activeSeasonId, subjectId: scope.subjectId })
       .then(setActivities)
       .finally(() => setLoading(false))
-  }, [activeSeasonId, seasonsLoaded])
+  }, [activeSeasonId, seasonsLoaded, scope.subjectId])
 
   const activeSeason = seasons.find((season) => season.id === activeSeasonId)
   const isPreparingSeason = activeSeason?.status === '준비중'
@@ -77,10 +80,15 @@ export default function LabActivities() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link to="/lab" className="text-sm font-semibold text-ink-500 underline">
-          ← Lab 홈
+        {/* 과목 스코프에서는 Lab 홈 대신 수업목차(로드맵)로 돌아가는 게 더
+            쓸모 있다 — 여기가 이미 특정 과목 안이라 Lab 홈으로 튈 이유가 없다. */}
+        <Link
+          to={scope.subjectId ? scope.roadmapPath : '/lab'}
+          className="text-sm font-semibold text-ink-500 underline"
+        >
+          {scope.subjectId ? `← ${scope.seasonNoun}` : '← Lab 홈'}
         </Link>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">활동</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{scope.activityNoun}</h1>
       </header>
 
       {seasons.length > 0 && (
@@ -99,8 +107,8 @@ export default function LabActivities() {
 
       {isPreparingSeason && !loading && activities.length > 0 && (
         <p className="rounded-xl bg-cream-deep/60 px-4 py-3 text-sm text-ink-500">
-          🔒 아직 준비 중인 시즌이에요. 어떤 활동이 있는지만 미리 볼 수 있고, 열리면 들어갈 수
-          있습니다.
+          🔒 아직 준비 중인 {scope.seasonNoun}예요. 어떤 {scope.activityNoun}이 있는지만 미리 볼
+          수 있고, 열리면 들어갈 수 있습니다.
         </p>
       )}
 
@@ -108,11 +116,11 @@ export default function LabActivities() {
         <p className="text-ink-500">불러오는 중…</p>
       ) : seasonsLoaded && seasons.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-14 text-center text-sm text-ink-500">
-          아직 등록된 로드맵(시즌)이 없습니다.
+          아직 등록된 {scope.seasonNoun}가 없습니다.
         </p>
       ) : activities.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-14 text-center text-sm text-ink-500">
-          아직 등록된 활동이 없습니다.
+          아직 등록된 {scope.activityNoun}이 없습니다.
         </p>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -136,7 +144,7 @@ export default function LabActivities() {
             ) : (
               <li key={activity.id}>
                 <Link
-                  to={`/lab/activities/${activity.id}`}
+                  to={scope.activityDetailPath(activity.id)}
                   className={[
                     'flex h-full flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-5 transition-all hover:-translate-y-0.5 hover:border-cheese-300 hover:shadow-md',
                     isCompletedSeason ? 'grayscale opacity-60 hover:opacity-100' : '',

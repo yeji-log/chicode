@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthProvider'
 import ToggleSwitch from '../components/ToggleSwitch'
 import { asset } from '../lib/asset'
 import { isFirebaseConfigured } from '../lib/firebase'
+import { deleteActivity, listActivities, listSeasons, deleteSeason } from '../lib/labs'
 import {
   type MaterialMeta,
   MaterialValidationError,
@@ -21,8 +22,13 @@ import {
   updateSubject,
   type SubjectMeta,
 } from '../lib/subjects'
+import { ActivitiesPanel, SeasonsPanel } from './LabBoardEditor'
 import TeacherLab from './TeacherLab'
 import TeacherNews from './TeacherNews'
+
+/** SubjectPanel의 "수업목차" 탭에서 쓰는 명사 — Lab의 시즌/활동에 대응하되
+ *  수업자료 맥락에 맞게 이름만 바꿨다(사용자 요청). */
+const SUBJECT_OUTLINE_LABELS = { seasonNoun: '수업목차', activityNoun: '내용' }
 
 export default function Teacher() {
   const { user, state, error, signIn, signOutTeacher } = useAuth()
@@ -392,6 +398,9 @@ function SubjectPanel({
   const [busy, setBusy] = useState(false)
   const [deletingSubject, setDeletingSubject] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // "자료"(기존 파일 업로드) / "수업목차"(Lab과 같은 시즌+활동 에디터, 이름만
+  // 수업자료용으로 바꿈) 두 탭 — TeacherDashboard의 최상위 section 탭과 같은 자리 원칙.
+  const [panelTab, setPanelTab] = useState<'materials' | 'outline'>('materials')
 
   useEffect(() => {
     listMaterials(subject.id).then(setMaterials)
@@ -434,16 +443,33 @@ function SubjectPanel({
 
   async function handleDeleteSubject() {
     const countNote = materials.length > 0 ? ` (자료 ${materials.length}개도 함께 삭제됩니다)` : ''
-    if (!confirm(`"${subject.name}" 과목을 삭제할까요?${countNote} 되돌릴 수 없습니다.`)) return
+    if (
+      !confirm(
+        `"${subject.name}" 과목을 삭제할까요?${countNote} 수업목차·내용도 함께 삭제됩니다. 되돌릴 수 없습니다.`,
+      )
+    )
+      return
 
     setDeletingSubject(true)
     try {
-      // 자료를 먼저 지운다 — 과목 문서가 먼저 사라지면 학생 화면이 "존재하지
-      // 않는 과목"으로 튕기긴 하지만, 지우다 중간에 실패했을 때 고아가 된
-      // 자료가 이미 사라진 과목에 매달려 안 보이는 상태보다는, 과목이 아직
-      // 남아있는 채 일부 자료만 지워진 상태가 다시 시도하기 쉽다.
+      // 자료 → 내용(활동) → 수업목차(시즌) → 과목 문서 순으로 지운다 —
+      // 과목 문서가 먼저 사라지면 학생 화면이 "존재하지 않는 과목"으로
+      // 튕기긴 하지만, 지우다 중간에 실패했을 때 고아가 된 자료/내용이 이미
+      // 사라진 과목에 매달려 안 보이는 상태보다는, 과목이 아직 남아있는 채
+      // 일부만 지워진 상태가 다시 시도하기 쉽다. labSlides/labSectionFiles/
+      // labPresentations 하위 문서까지는 안 지운다 — Lab 자체의
+      // deleteActivity 도 그건 안 지우는 기존 한계라 여기서 새로 만드는
+      // 문제가 아니다(labs.ts 참고).
       for (const material of materials) {
         await deleteMaterial(material.id)
+      }
+      const activities = await listActivities({ subjectId: subject.id })
+      for (const activity of activities) {
+        await deleteActivity(activity.id)
+      }
+      const seasons = await listSeasons({ subjectId: subject.id })
+      for (const season of seasons) {
+        await deleteSeason(season.id)
       }
       await deleteSubject(subject.id)
       onSubjectDeleted()
@@ -464,97 +490,183 @@ function SubjectPanel({
         deleting={deletingSubject}
       />
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
-      >
-        <h2 className="font-bold text-ink-900">{subject.name} 자료 올리기</h2>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
-            제목
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="비워두면 파일 이름을 사용합니다"
-              className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
-            설명 (선택)
-            <input
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="예: 3차시 반복문 수업자료"
-              className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
-            />
-          </label>
-        </div>
-
-        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
-          파일
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.py,.zip"
-            onChange={(event) => {
-              setFile(event.target.files?.[0] ?? null)
-              setUploadError(null)
-            }}
-            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 file:mr-3 file:rounded-md file:border-0 file:bg-cheese-200 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-ink-900"
-          />
-          <span className="text-xs font-normal text-ink-500">
-            PDF, 이미지, 텍스트, ZIP · 최대 10MB
-          </span>
-        </label>
-
-        {uploadError && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {uploadError}
-          </p>
-        )}
-
+      <nav className="flex gap-2 border-b border-cream-deep pb-3">
         <button
-          type="submit"
-          disabled={!file || busy}
-          className="self-start rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => setPanelTab('materials')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            panelTab === 'materials'
+              ? 'bg-cheese-400 text-ink-900'
+              : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
         >
-          {busy ? '올리는 중…' : '올리기'}
+          📎 자료
         </button>
-      </form>
+        <button
+          onClick={() => setPanelTab('outline')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            panelTab === 'outline'
+              ? 'bg-cheese-400 text-ink-900'
+              : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          🗺️ 수업목차
+        </button>
+      </nav>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="font-bold text-ink-900">
-          {subject.name} 자료 ({materials.length})
-        </h2>
+      {panelTab === 'materials' && (
+        <>
+          <form
+            onSubmit={handleSubmit}
+            className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
+          >
+            <h2 className="font-bold text-ink-900">{subject.name} 자료 올리기</h2>
 
-        {materials.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
-            아직 올린 자료가 없습니다.
-          </p>
-        ) : (
-          <ul className="divide-y divide-cream-deep overflow-hidden rounded-2xl border border-cream-deep bg-white/70">
-            {materials.map((material) => (
-              <li key={material.id} className="flex items-center gap-4 px-5 py-3.5">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-ink-900">{material.title}</p>
-                  <p className="truncate text-xs text-ink-500">
-                    {material.filename} · {formatSize(material.size)} ·{' '}
-                    {formatDate(material.createdAt)}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleDelete(material)}
-                  className="ml-auto shrink-0 rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
-                >
-                  삭제
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+                제목
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="비워두면 파일 이름을 사용합니다"
+                  className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+                설명 (선택)
+                <input
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="예: 3차시 반복문 수업자료"
+                  className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+                />
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+              파일
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.py,.zip"
+                onChange={(event) => {
+                  setFile(event.target.files?.[0] ?? null)
+                  setUploadError(null)
+                }}
+                className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 file:mr-3 file:rounded-md file:border-0 file:bg-cheese-200 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-ink-900"
+              />
+              <span className="text-xs font-normal text-ink-500">
+                PDF, 이미지, 텍스트, ZIP · 최대 10MB
+              </span>
+            </label>
+
+            {uploadError && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {uploadError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={!file || busy}
+              className="self-start rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? '올리는 중…' : '올리기'}
+            </button>
+          </form>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="font-bold text-ink-900">
+              {subject.name} 자료 ({materials.length})
+            </h2>
+
+            {materials.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
+                아직 올린 자료가 없습니다.
+              </p>
+            ) : (
+              <ul className="divide-y divide-cream-deep overflow-hidden rounded-2xl border border-cream-deep bg-white/70">
+                {materials.map((material) => (
+                  <li key={material.id} className="flex items-center gap-4 px-5 py-3.5">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-ink-900">{material.title}</p>
+                      <p className="truncate text-xs text-ink-500">
+                        {material.filename} · {formatSize(material.size)} ·{' '}
+                        {formatDate(material.createdAt)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(material)}
+                      className="ml-auto shrink-0 rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
+                    >
+                      삭제
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
+
+      {panelTab === 'outline' && (
+        <SubjectOutlineEditor subjectId={subject.id} uploaderEmail={uploaderEmail} />
+      )}
+    </div>
+  )
+}
+
+/**
+ * 과목의 "수업목차"(Lab의 시즌/로드맵에 대응) + "내용"(Lab의 활동에 대응)
+ * 에디터 — LabBoardEditor.tsx 의 SeasonsPanel/ActivitiesPanel 을 subjectId 만
+ * 넘겨서 그대로 재사용한다. TeacherLab.tsx 의 LAB_TABS 와 같은 서브탭 패턴.
+ */
+function SubjectOutlineEditor({
+  subjectId,
+  uploaderEmail,
+}: {
+  subjectId: string
+  uploaderEmail: string
+}) {
+  const [tab, setTab] = useState<'season' | 'activity'>('season')
+
+  return (
+    <div className="flex flex-col gap-6">
+      <nav className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setTab('season')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            tab === 'season'
+              ? 'bg-cheese-400 text-ink-900'
+              : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
+          ].join(' ')}
+        >
+          수업목차
+        </button>
+        <button
+          onClick={() => setTab('activity')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            tab === 'activity'
+              ? 'bg-cheese-400 text-ink-900'
+              : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
+          ].join(' ')}
+        >
+          내용
+        </button>
+      </nav>
+
+      {tab === 'season' && <SeasonsPanel subjectId={subjectId} labels={SUBJECT_OUTLINE_LABELS} />}
+      {tab === 'activity' && (
+        <ActivitiesPanel
+          subjectId={subjectId}
+          labels={SUBJECT_OUTLINE_LABELS}
+          uploaderEmail={uploaderEmail}
+        />
+      )}
     </div>
   )
 }

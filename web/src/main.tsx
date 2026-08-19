@@ -9,7 +9,7 @@ import { AuthProvider } from './auth/AuthProvider'
 import Home from './pages/Home'
 import News from './pages/News'
 import Materials from './pages/Materials'
-import SubjectMaterials from './pages/SubjectMaterials'
+import SubjectMaterials, { MaterialsList } from './pages/SubjectMaterials'
 import Practice from './pages/Practice'
 import LabGate from './pages/LabGate'
 import LabHome from './pages/LabHome'
@@ -35,7 +35,17 @@ createRoot(document.getElementById('root')!).render(
             <Route index element={<Home />} />
             <Route path="news" element={<News />} />
             <Route path="materials" element={<Materials />} />
-            <Route path="materials/:subjectId" element={<SubjectMaterials />} />
+            {/* 과목별 핀 게이트가 <Outlet/> 을 연다(lab의 LabGate 와 같은 패턴) —
+                자료/수업목차 탭을 오가도 핀을 다시 묻지 않는다. LabRoadmap/
+                LabActivities/LabActivityDetail 을 여기 두 번째로 마운트해서
+                과목별 "수업목차"/"내용" 화면으로 재사용한다(useLabScope 참고,
+                페이지를 복제하지 않았다). */}
+            <Route path="materials/:subjectId" element={<SubjectMaterials />}>
+              <Route index element={<MaterialsList />} />
+              <Route path="outline" element={<LabRoadmap />} />
+              <Route path="content" element={<LabActivities />} />
+              <Route path="content/:id" element={<LabActivityDetail />} />
+            </Route>
             <Route path="practice" element={<Practice />} />
             <Route
               path="practice/python"

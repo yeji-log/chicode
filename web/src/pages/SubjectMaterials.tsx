@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Outlet, useLocation, useOutletContext, useParams } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthProvider'
 import PdfViewer from '../components/PdfViewer'
@@ -15,10 +15,15 @@ import { usePinAttemptThrottle } from '../lib/pinThrottle'
 import { getSubject, isSubjectUnlocked, unlockSubject, type SubjectMeta } from '../lib/subjects'
 
 /**
- * 과목별 수업자료 화면 (/materials/:subjectId).
+ * 과목별 수업자료 화면의 레이아웃 라우트 (/materials/:subjectId, LabGate.tsx와
+ * 같은 <Outlet/> 패턴). 과목 로드 + ComingSoon/PinGate 통과는 여기서 한 번만
+ * 하고, 통과하면 공용 헤더(뒤로가기·과목명·교사용 핀 배지·노션 링크) + 자료/
+ * 수업목차 탭 nav 를 그린 뒤 자식 라우트를 <Outlet/>으로 내려보낸다 — 탭을
+ * 바꿀 때마다 핀을 다시 묻지 않기 위해서다.
  *
- * 핀을 통과하기 전에는 목록을 아예 그리지 않는다 — Firestore 규칙상 어차피 읽기가
- * 공개라 완전한 차단은 아니지만, 최소한 이 화면 자체는 핀 없이는 자료를 보여주지 않는다.
+ * 핀을 통과하기 전에는 자식 라우트 자체를 그리지 않는다 — Firestore 규칙상
+ * 어차피 읽기가 공개라 완전한 차단은 아니지만, 최소한 이 화면 자체는 핀
+ * 없이는 자료도 수업목차도 보여주지 않는다.
  *
  * 로그인한 교사는 핀을 몰라서가 아니라 매번 치는 게 번거로워서 건너뛴다 —
  * 자기 계정으로 이미 Google 로그인했다는 것 자체가 학생보다 강한 확인이다.
@@ -73,7 +78,7 @@ export default function SubjectMaterials() {
     return <PinGate subject={subject} onUnlock={() => setUnlocked(true)} />
   }
 
-  return <MaterialsList subject={subject} isTeacherViewer={isTeacherViewer} />
+  return <SubjectShell subject={subject} isTeacherViewer={isTeacherViewer} />
 }
 
 function ComingSoon({ subject }: { subject: SubjectMeta }) {
@@ -154,22 +159,29 @@ function PinGate({ subject, onUnlock }: { subject: SubjectMeta; onUnlock: () => 
   )
 }
 
-function MaterialsList({
+export interface SubjectOutletContext {
+  subject: SubjectMeta
+  isTeacherViewer: boolean
+}
+
+/** 자식 라우트(MaterialsList/LabRoadmap/LabActivities/LabActivityDetail)가
+ *  이미 핀을 통과한 subject 를 다시 불러오지 않고 그대로 받아 쓰는 훅. */
+export function useSubjectContext(): SubjectOutletContext {
+  return useOutletContext<SubjectOutletContext>()
+}
+
+function SubjectShell({
   subject,
   isTeacherViewer,
 }: {
   subject: SubjectMeta
   isTeacherViewer: boolean
 }) {
-  const [materials, setMaterials] = useState<MaterialMeta[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState<MaterialMeta | null>(null)
-
-  useEffect(() => {
-    listMaterials(subject.id)
-      .then(setMaterials)
-      .finally(() => setLoading(false))
-  }, [subject.id])
+  const location = useLocation()
+  const basePath = `/materials/${subject.id}`
+  // 자료 탭은 index 라우트(정확히 basePath), 수업목차 탭은 그 아래 outline/
+  // content(/:id) 전부 — pathname 접두사로 판별한다.
+  const isOutlineTab = location.pathname !== basePath && location.pathname !== `${basePath}/`
 
   return (
     <div className="flex flex-col gap-6">
@@ -204,6 +216,46 @@ function MaterialsList({
         )}
       </header>
 
+      <nav className="flex gap-2 border-b border-cream-deep pb-3">
+        <Link
+          to={basePath}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            !isOutlineTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          📎 자료
+        </Link>
+        <Link
+          to={`${basePath}/outline`}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            isOutlineTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          🗺️ 수업목차
+        </Link>
+      </nav>
+
+      <Outlet context={{ subject, isTeacherViewer } satisfies SubjectOutletContext} />
+    </div>
+  )
+}
+
+export function MaterialsList() {
+  const { subject } = useSubjectContext()
+  const [materials, setMaterials] = useState<MaterialMeta[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<MaterialMeta | null>(null)
+
+  useEffect(() => {
+    listMaterials(subject.id)
+      .then(setMaterials)
+      .finally(() => setLoading(false))
+  }, [subject.id])
+
+  return (
+    <div className="flex flex-col gap-6">
       {loading ? (
         <p className="text-ink-500">불러오는 중…</p>
       ) : materials.length === 0 ? (
