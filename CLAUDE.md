@@ -35,8 +35,10 @@ Firebase Google 로그인 기반 교사 인증. 학생은 회원가입 없이 �
 | 교사 인증 | `/teacher` | Firebase Auth(Google) + Firestore `teachers` 컬렉션 화이트리스트 |
 | 정책 팝업 | 풋터 | 개인정보처리방침 / 이용약관, 실제 데이터 처리 방식 검증 후 작성함 |
 
-배포: **Vercel**(`chicode-psi.vercel.app`, 메인)과 **GitHub Pages**
+배포: **Vercel**(`chico-edu.vercel.app`, 메인)과 **GitHub Pages**
 (`yeji-log.github.io/chicode`, 보조) 둘 다 `main` push 시 자동 배포.
+(예전엔 `chicode-psi.vercel.app` 이었으나 2026-08-20 `chico-edu.vercel.app` 로 옮기고
+Firebase 승인 도메인·Vercel 도메인 연결 둘 다 정리함.)
 Firebase 승인 도메인은 Vercel 쪽만 등록되어 있다 (GitHub Pages는 로그인 안 됨,
 사이트 자체는 열림 — 의도된 상태, 이유는 커밋 로그 `Firebase 승인 도메인` 검색).
 

@@ -158,8 +158,9 @@ GitHub Actions (매일 KST 05:00, .github/workflows/daily-news.yml)
 
 ## 배포
 
-**Vercel**(메인, `chicode-psi.vercel.app`)과 **GitHub Pages**(보조,
+**Vercel**(메인, `chico-edu.vercel.app`)과 **GitHub Pages**(보조,
 `yeji-log.github.io/chicode`) 둘 다 쓴다. `main` 에 push 하면 둘 다 자동 배포된다.
+(예전엔 `chicode-psi.vercel.app` 이었으나 `chico-edu.vercel.app` 로 옮기고 정리함.)
 
 - Vercel: Root Directory 를 `web` 으로 설정해야 한다(저장소 루트엔 package.json 이 없다).
   `vercel.json` 에 SPA rewrite + 캐시 헤더가 있다. 환경변수는 Vercel 프로젝트 설정에 등록.
