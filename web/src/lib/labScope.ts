@@ -36,7 +36,9 @@ export function useLabScope(): LabScope {
       subjectId,
       seasonNoun: '수업목차',
       activityNoun: '내용',
-      roadmapPath: `/materials/${subjectId}/outline`,
+      // 수업목차(LabRoadmap)는 과목 안에서 index 라우트라 별도 세그먼트가 없다
+      // — main.tsx 참고, 학생이 과목에 들어오면 자료보다 수업목차부터 보게 함.
+      roadmapPath: `/materials/${subjectId}`,
       activitiesPath: `/materials/${subjectId}/content`,
       activityDetailPath: (id) => `/materials/${subjectId}/content/${id}`,
     }

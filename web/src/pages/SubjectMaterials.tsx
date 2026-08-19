@@ -179,9 +179,12 @@ function SubjectShell({
 }) {
   const location = useLocation()
   const basePath = `/materials/${subject.id}`
-  // 자료 탭은 index 라우트(정확히 basePath), 수업목차 탭은 그 아래 outline/
-  // content(/:id) 전부 — pathname 접두사로 판별한다.
-  const isOutlineTab = location.pathname !== basePath && location.pathname !== `${basePath}/`
+  const materialsPath = `${basePath}/materials`
+  // 수업목차 탭이 index 라우트(basePath 자체 + content/:id 전부)이고, 자료
+  // 탭만 별도 경로(materialsPath)다 — 학생이 과목에 들어오면 자료보다
+  // 수업목차부터 보게 하려고 main.tsx 에서 순서를 이렇게 잡았다.
+  const isMaterialsTab =
+    location.pathname === materialsPath || location.pathname === `${materialsPath}/`
 
   return (
     <div className="flex flex-col gap-6">
@@ -218,19 +221,19 @@ function SubjectShell({
 
       <nav className="flex gap-2 border-b border-cream-deep pb-3">
         <Link
-          to={`${basePath}/outline`}
+          to={basePath}
           className={[
             'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-            isOutlineTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+            !isMaterialsTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
           ].join(' ')}
         >
           🗺️ 수업목차
         </Link>
         <Link
-          to={basePath}
+          to={materialsPath}
           className={[
             'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-            !isOutlineTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+            isMaterialsTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
           ].join(' ')}
         >
           📎 자료

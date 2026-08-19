@@ -39,10 +39,12 @@ createRoot(document.getElementById('root')!).render(
                 자료/수업목차 탭을 오가도 핀을 다시 묻지 않는다. LabRoadmap/
                 LabActivities/LabActivityDetail 을 여기 두 번째로 마운트해서
                 과목별 "수업목차"/"내용" 화면으로 재사용한다(useLabScope 참고,
-                페이지를 복제하지 않았다). */}
+                페이지를 복제하지 않았다). 학생이 과목에 들어오면 자료보다
+                수업목차부터 보게 하고 싶어서 수업목차(LabRoadmap)를 index로,
+                자료 목록은 /materials 하위 경로로 옮겼다. */}
             <Route path="materials/:subjectId" element={<SubjectMaterials />}>
-              <Route index element={<MaterialsList />} />
-              <Route path="outline" element={<LabRoadmap />} />
+              <Route index element={<LabRoadmap />} />
+              <Route path="materials" element={<MaterialsList />} />
               <Route path="content" element={<LabActivities />} />
               <Route path="content/:id" element={<LabActivityDetail />} />
             </Route>
