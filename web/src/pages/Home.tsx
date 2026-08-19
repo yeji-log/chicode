@@ -41,16 +41,17 @@ export default function Home() {
             Learn · Teach · Grow
           </span>
 
-          <h1 className="font-display text-4xl leading-tight tracking-tight text-ink-900 sm:text-5xl">
-            치즈처럼 즐겁게,
-            <br />
-            코드처럼 단단하게.
+          <h1 className="break-keep font-display text-4xl leading-tight tracking-tight text-ink-900 sm:text-5xl">
+            <span className="text-5xl sm:text-6xl">코드</span>에{' '}
+            <span className="text-5xl text-cheese-500 sm:text-6xl">재미</span>를 더하다.
           </h1>
 
-          <p className="max-w-lg text-lg leading-relaxed text-ink-700">
+          <p className="max-w-lg break-keep text-lg leading-relaxed tracking-tight text-ink-700">
             배우고, 직접 만들고, 새로운 것을 발견해 보세요.
             <br />
-            수업자료부터 코딩 실습, 프로젝트까지 CHICODE에서 바로 시작할 수 있습니다.
+            수업자료부터 코딩 실습, 프로젝트까지
+            <br />
+            <span className="text-cheese-500">CHICODE</span>에서 바로 시작할 수 있습니다.
           </p>
 
           <div className="flex flex-wrap gap-3 pt-1">
