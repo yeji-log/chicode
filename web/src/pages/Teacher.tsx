@@ -492,17 +492,6 @@ function SubjectPanel({
 
       <nav className="flex gap-2 border-b border-cream-deep pb-3">
         <button
-          onClick={() => setPanelTab('materials')}
-          className={[
-            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-            panelTab === 'materials'
-              ? 'bg-cheese-400 text-ink-900'
-              : 'text-ink-700 hover:bg-cheese-100',
-          ].join(' ')}
-        >
-          📎 자료
-        </button>
-        <button
           onClick={() => setPanelTab('outline')}
           className={[
             'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
@@ -512,6 +501,17 @@ function SubjectPanel({
           ].join(' ')}
         >
           🗺️ 수업목차
+        </button>
+        <button
+          onClick={() => setPanelTab('materials')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            panelTab === 'materials'
+              ? 'bg-cheese-400 text-ink-900'
+              : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          📎 자료
         </button>
       </nav>
 

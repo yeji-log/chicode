@@ -218,15 +218,6 @@ function SubjectShell({
 
       <nav className="flex gap-2 border-b border-cream-deep pb-3">
         <Link
-          to={basePath}
-          className={[
-            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-            !isOutlineTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
-          ].join(' ')}
-        >
-          📎 자료
-        </Link>
-        <Link
           to={`${basePath}/outline`}
           className={[
             'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
@@ -234,6 +225,15 @@ function SubjectShell({
           ].join(' ')}
         >
           🗺️ 수업목차
+        </Link>
+        <Link
+          to={basePath}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            !isOutlineTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          📎 자료
         </Link>
       </nav>
 
