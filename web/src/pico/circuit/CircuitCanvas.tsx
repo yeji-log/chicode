@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { BOARD_HEIGHT, BOARD_PINS, BOARD_WIDTH, BOARD_X, BOARD_Y, type BoardPin } from './board'
-import { breadboardAnchor, breadboardRailAnchor, COLUMNS, layoutBreadboard } from './breadboard'
+import {
+  type BreadboardLayout,
+  breadboardAnchor,
+  breadboardRailAnchor,
+  layoutBreadboard,
+} from './breadboard'
 import { resolveConnectivity } from './connectivity'
 import {
+  BREADBOARD_SIZES,
+  type BreadboardSize,
+  COMPONENT_LIST,
   COMPONENT_PINS,
+  type ComponentCategory,
   type ComponentType,
   type PinRef,
+  type PlacedBreadboard,
   type PlacedComponent,
   type Point,
   type Wire,
@@ -17,17 +27,21 @@ const STORAGE_KEY = 'chicode.pico.circuit'
 const VIEW_WIDTH = 900
 const VIEW_HEIGHT = 640
 
-const BREADBOARD = layoutBreadboard('bb1', 24, 90)
-
 interface SavedCircuit {
   components: PlacedComponent[]
+  breadboards: PlacedBreadboard[]
   wires: Wire[]
 }
 
 function loadInitial(): SavedCircuit {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as SavedCircuit
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<SavedCircuit>
+      if (parsed.components && parsed.wires) {
+        return { components: parsed.components, breadboards: parsed.breadboards ?? [], wires: parsed.wires }
+      }
+    }
   } catch {
     /* 저장된 값이 깨졌으면 그냥 기본값으로 시작한다 */
   }
@@ -36,6 +50,7 @@ function loadInitial(): SavedCircuit {
       { id: 'led1', type: 'led', x: 700, y: 90 },
       { id: 'button1', type: 'button', x: 700, y: 200 },
     ],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
     wires: [
       {
         id: 'w1',
@@ -52,35 +67,54 @@ function loadInitial(): SavedCircuit {
 }
 
 export interface CircuitCanvasProps {
-  /** 워커가 보고하는 GPIO 출력값 — LED 를 실제로 켜고 끄는 데 쓴다. */
+  /** 워커가 보고하는 GPIO 출력값 — LED 등을 실제로 켜고 끄는 데 쓴다. */
   gpioLevels: Map<number, 0 | 1>
-  /** 버튼 부품을 누르고 뗄 때, 그 버튼이 연결된 GPIO 번호로 알려준다(연결 안 됐으면 안 불림). */
+  /** 버튼/스위치가 눌리거나 켜질 때, 연결된 GPIO 번호로 알려준다(연결 안 됐으면 안 불림). */
   onButtonChange: (gpio: number, pressed: boolean) => void
 }
 
+type DragTarget = { id: string; kind: 'component' | 'breadboard'; dx: number; dy: number }
+
 export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCanvasProps) {
-  const [{ components, wires }, setState] = useState<SavedCircuit>(loadInitial)
+  const [{ components, breadboards, wires }, setState] = useState<SavedCircuit>(loadInitial)
+  const [tab, setTab] = useState<ComponentCategory | 'breadboard'>('output')
   const [draft, setDraft] = useState<{ from: PinRef; to: Point } | null>(null)
-  const [dragging, setDragging] = useState<{ id: string; dx: number; dy: number } | null>(null)
-  const [heldButtons, setHeldButtons] = useState<Set<string>>(new Set())
+  const [dragging, setDragging] = useState<DragTarget | null>(null)
+  // 버튼(누르는 동안)과 스위치(클릭해서 토글) 둘 다 "지금 켜진 입력 부품 id" 로 통일해서 관리한다.
+  const [activeInputs, setActiveInputs] = useState<Set<string>>(new Set())
   const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ components, wires }))
-  }, [components, wires])
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ components, breadboards, wires }))
+  }, [components, breadboards, wires])
 
   const connectivity = useMemo(() => resolveConnectivity(wires), [wires])
 
-  // 버튼 부품이 눌려 있는 동안, 연결된 GPIO 로 계속 알려준다(연결이 바뀌어도 따라감).
+  const breadboardLayouts = useMemo(() => {
+    const map = new Map<string, BreadboardLayout>()
+    for (const b of breadboards) {
+      const columns = BREADBOARD_SIZES.find((s) => s.size === b.size)?.columns ?? 10
+      map.set(b.id, layoutBreadboard(b.id, b.x, b.y, columns))
+    }
+    return map
+  }, [breadboards])
+
+  const gpioForPin = useCallback(
+    (componentId: string, pin: string) =>
+      connectivity.pinToGpio.get(pinRefKey({ kind: 'component', componentId, pin })),
+    [connectivity],
+  )
+
+  /** 입력 부품이 켜져 있는 동안, 연결이 바뀌어도(재배선) 최신 GPIO 로 계속 알려준다. */
   useEffect(() => {
     for (const c of components) {
-      if (c.type !== 'button') continue
-      const gpio = connectivity.pinToGpio.get(pinRefKey({ kind: 'component', componentId: c.id, pin: 'a' })) ??
-        connectivity.pinToGpio.get(pinRefKey({ kind: 'component', componentId: c.id, pin: 'b' }))
-      if (gpio !== undefined && heldButtons.has(c.id)) onButtonChange(gpio, true)
+      if (c.type !== 'button' && c.type !== 'switch') continue
+      if (!activeInputs.has(c.id)) continue
+      const gpio = gpioForPin(c.id, 'a') ?? gpioForPin(c.id, 'b')
+      if (gpio !== undefined) onButtonChange(gpio, true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectivity, heldButtons])
+  }, [connectivity, activeInputs])
 
   const toSvgPoint = useCallback((clientX: number, clientY: number): Point => {
     const svg = svgRef.current
@@ -94,18 +128,15 @@ export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCan
     return { x: local.x, y: local.y }
   }, [])
 
-  const startWire = (ref: PinRef, point: Point) => {
-    setDraft({ from: ref, to: point })
-  }
+  const startWire = (ref: PinRef, point: Point) => setDraft({ from: ref, to: point })
 
   const finishWire = (ref: PinRef) => {
     setDraft((current) => {
       if (!current) return null
       if (pinRefKey(current.from) === pinRefKey(ref)) return null
       // exists 체크를 setState 콜백 "안"에서 최신 s.wires 로 해야 한다 — 바깥의 wires 는
-      // 클로저에 붙잡힌 예전 값이라, 한 제스처에서 finishWire 가 두 번 불리면(실측으로
-      // 재현됨 — 드래그 한 번에 전선이 두 개 생기는 버그였다) 둘 다 "아직 없다"고
-      // 잘못 판단해서 중복 전선이 생긴다.
+      // 클로저에 붙잡힌 예전 값이라, 한 제스처에서 finishWire 가 두 번 불리면 중복 전선이
+      // 생긴다(실제로 재현해서 찾은 버그).
       setState((s) => {
         const exists = s.wires.some(
           (w) =>
@@ -129,35 +160,42 @@ export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCan
     const p = toSvgPoint(event.clientX, event.clientY)
     if (draft) setDraft((d) => (d ? { ...d, to: p } : d))
     if (dragging) {
-      setState((s) => ({
-        ...s,
-        components: s.components.map((c) =>
-          c.id === dragging.id ? { ...c, x: p.x - dragging.dx, y: p.y - dragging.dy } : c,
-        ),
-      }))
+      setState((s) =>
+        dragging.kind === 'component'
+          ? {
+              ...s,
+              components: s.components.map((c) =>
+                c.id === dragging.id ? { ...c, x: p.x - dragging.dx, y: p.y - dragging.dy } : c,
+              ),
+            }
+          : {
+              ...s,
+              breadboards: s.breadboards.map((b) =>
+                b.id === dragging.id ? { ...b, x: p.x - dragging.dx, y: p.y - dragging.dy } : b,
+              ),
+            },
+      )
     }
   }
 
   const onPointerUp = () => {
     setDragging(null)
-    // 빈 곳에서 놓으면 배선 취소
-    setDraft(null)
+    setDraft(null) // 빈 곳에서 놓으면 배선 취소
   }
 
-  const removeWire = (id: string) => {
-    setState((s) => ({ ...s, wires: s.wires.filter((w) => w.id !== id) }))
-  }
+  const removeWire = (id: string) => setState((s) => ({ ...s, wires: s.wires.filter((w) => w.id !== id) }))
 
   const addComponent = (type: ComponentType) => {
-    const id = `${type}${Date.now().toString(36)}`
+    const id = `${type.replace('-', '')}${Date.now().toString(36)}`
     setState((s) => ({
       ...s,
-      components: [...s.components, { id, type, x: 560, y: 380 + s.components.length * 10 }],
+      components: [...s.components, { id, type, x: 560, y: 380 + ((s.components.length * 36) % 200) }],
     }))
   }
 
   const removeComponent = (id: string) => {
     setState((s) => ({
+      ...s,
       components: s.components.filter((c) => c.id !== id),
       wires: s.wires.filter(
         (w) =>
@@ -167,13 +205,47 @@ export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCan
     }))
   }
 
+  const addBreadboard = (size: BreadboardSize) => {
+    const id = `bb${Date.now().toString(36)}`
+    setState((s) => ({ ...s, breadboards: [...s.breadboards, { id, size, x: 24, y: 90 + s.breadboards.length * 40 }] }))
+  }
+
+  const removeBreadboard = (id: string) => {
+    setState((s) => ({
+      ...s,
+      breadboards: s.breadboards.filter((b) => b.id !== id),
+      wires: s.wires.filter(
+        (w) =>
+          !((w.from.kind === 'breadboard' || w.from.kind === 'breadboardRail') && w.from.boardId === id) &&
+          !((w.to.kind === 'breadboard' || w.to.kind === 'breadboardRail') && w.to.boardId === id),
+      ),
+    }))
+  }
+
+  const setInputActive = (componentId: string, active: boolean) => {
+    setActiveInputs((prev) => {
+      const next = new Set(prev)
+      if (active) next.add(componentId)
+      else next.delete(componentId)
+      return next
+    })
+    const gpio = gpioForPin(componentId, 'a') ?? gpioForPin(componentId, 'b')
+    if (gpio !== undefined) onButtonChange(gpio, active)
+  }
+
   const pinPoint = (ref: PinRef): Point => {
     if (ref.kind === 'board') {
       const pin = BOARD_PINS.find((p) => p.id === ref.pinId)
       return pin ? { x: pin.x, y: pin.y } : { x: 0, y: 0 }
     }
-    if (ref.kind === 'breadboard') return breadboardAnchor(BREADBOARD, ref.col, ref.side)
-    if (ref.kind === 'breadboardRail') return breadboardRailAnchor(BREADBOARD, ref.rail)
+    if (ref.kind === 'breadboard') {
+      const layout = breadboardLayouts.get(ref.boardId)
+      return layout ? breadboardAnchor(layout, ref.col, ref.side) : { x: 0, y: 0 }
+    }
+    if (ref.kind === 'breadboardRail') {
+      const layout = breadboardLayouts.get(ref.boardId)
+      return layout ? breadboardRailAnchor(layout, ref.rail) : { x: 0, y: 0 }
+    }
     const comp = components.find((c) => c.id === ref.componentId)
     const spec = comp ? COMPONENT_PINS[comp.type].find((p) => p.pin === ref.pin) : undefined
     if (!comp || !spec) return { x: 0, y: 0 }
@@ -187,35 +259,38 @@ export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCan
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => addComponent('led')}
-          className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50"
-        >
-          + LED 추가
-        </button>
-        <button
-          onClick={() => addComponent('button')}
-          className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50"
-        >
-          + 버튼 추가
-        </button>
-        <span className="text-xs text-ink-500">
-          핀(원)을 마우스로 눌러 끌면 다른 핀까지 전선이 이어집니다. 부품 몸통은 끌어서 옮길 수
-          있어요. 전선을 클릭하면 지워집니다.
-        </span>
-      </div>
+      <Palette tab={tab} setTab={setTab} addComponent={addComponent} addBreadboard={addBreadboard} />
 
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
-        className="h-[520px] w-full rounded-xl border border-cream-deep bg-cream/40 touch-none select-none"
+        className="h-[520px] w-full touch-none rounded-xl border border-cream-deep bg-cream/40 select-none"
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={() => setDragging(null)}
       >
-        <Breadboard />
-        <PicoBoard />
+        {breadboards.map((b) => {
+          const layout = breadboardLayouts.get(b.id)
+          if (!layout) return null
+          return (
+            <BreadboardGlyph
+              key={b.id}
+              layout={layout}
+              onBodyPointerDown={(event) => {
+                const p = toSvgPoint(event.clientX, event.clientY)
+                setDragging({ id: b.id, kind: 'breadboard', dx: p.x - b.x, dy: p.y - b.y })
+              }}
+              onRemove={() => removeBreadboard(b.id)}
+              onDotPointerDown={(ref, point) => startWire(ref, point)}
+              onDotPointerUp={(ref) => finishWire(ref)}
+            />
+          )
+        })}
+
+        <PicoBoard
+          onPinPointerDown={(pin, point) => startWire({ kind: 'board', pinId: pin.id }, point)}
+          onPinPointerUp={(pin) => finishWire({ kind: 'board', pinId: pin.id })}
+        />
 
         {wires.map((w) => {
           const a = pinPoint(w.from)
@@ -233,6 +308,18 @@ export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCan
             />
           )
         })}
+        {/* 실제 선 위(3px)는 클릭하기 얇아서, 안 보이는 굵은 선을 하나 더 깔아 클릭 영역을 넓힌다. */}
+        {wires.map((w) => (
+          <path
+            key={`${w.id}-hit`}
+            d={elbowPath(pinPoint(w.from), pinPoint(w.to))}
+            stroke="transparent"
+            strokeWidth={14}
+            fill="none"
+            className="cursor-pointer"
+            onClick={() => removeWire(w.id)}
+          />
+        ))}
 
         {draft && (
           <path
@@ -249,11 +336,11 @@ export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCan
             key={c.id}
             component={c}
             gpioLevels={gpioLevels}
-            connectivity={connectivity}
-            heldButtons={heldButtons}
+            gpioForPin={(pin) => gpioForPin(c.id, pin)}
+            active={activeInputs.has(c.id)}
             onBodyPointerDown={(event) => {
               const p = toSvgPoint(event.clientX, event.clientY)
-              setDragging({ id: c.id, dx: p.x - c.x, dy: p.y - c.y })
+              setDragging({ id: c.id, kind: 'component', dx: p.x - c.x, dy: p.y - c.y })
             }}
             onRemove={() => removeComponent(c.id)}
             onPinPointerDown={(pin, event) => {
@@ -264,169 +351,76 @@ export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCan
               event.stopPropagation()
               finishWire({ kind: 'component', componentId: c.id, pin })
             }}
-            onButtonHold={(pressed) => {
-              setHeldButtons((prev) => {
-                const next = new Set(prev)
-                if (pressed) next.add(c.id)
-                else next.delete(c.id)
-                return next
-              })
-              const gpio =
-                connectivity.pinToGpio.get(pinRefKey({ kind: 'component', componentId: c.id, pin: 'a' })) ??
-                connectivity.pinToGpio.get(pinRefKey({ kind: 'component', componentId: c.id, pin: 'b' }))
-              if (gpio !== undefined) onButtonChange(gpio, pressed)
-            }}
+            onInputActiveChange={(active) => setInputActive(c.id, active)}
           />
         ))}
       </svg>
     </div>
   )
+}
 
-  function Breadboard() {
-    const l = BREADBOARD
-    const dots: React.ReactNode[] = []
-    for (let col = 0; col < COLUMNS; col++) {
-      const x = l.colX(col)
-      l.topRowsY.forEach((y, i) => {
-        dots.push(
-          <PinDot
-            key={`t${col}-${i}`}
-            x={x}
-            y={y}
-            r={3.5}
-            fill="#fff"
-            stroke="#c9b28a"
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              startWire({ kind: 'breadboard', boardId: l.id, col, side: 'top' }, { x, y })
-            }}
-            onPointerUp={(e) => {
-              e.stopPropagation()
-              finishWire({ kind: 'breadboard', boardId: l.id, col, side: 'top' })
-            }}
-          />,
-        )
-      })
-      l.bottomRowsY.forEach((y, i) => {
-        dots.push(
-          <PinDot
-            key={`b${col}-${i}`}
-            x={x}
-            y={y}
-            r={3.5}
-            fill="#fff"
-            stroke="#c9b28a"
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              startWire({ kind: 'breadboard', boardId: l.id, col, side: 'bottom' }, { x, y })
-            }}
-            onPointerUp={(e) => {
-              e.stopPropagation()
-              finishWire({ kind: 'breadboard', boardId: l.id, col, side: 'bottom' })
-            }}
-          />,
-        )
-      })
-    }
-    for (let col = 0; col < COLUMNS; col++) {
-      const x = l.colX(col)
-      dots.push(
-        <PinDot
-          key={`rp${col}`}
-          x={x}
-          y={l.railPlusY}
-          r={3}
-          fill="#fecaca"
-          stroke="#ef4444"
-          onPointerDown={(e) => {
-            e.stopPropagation()
-            startWire({ kind: 'breadboardRail', boardId: l.id, rail: 'plus' }, { x, y: l.railPlusY })
-          }}
-          onPointerUp={(e) => {
-            e.stopPropagation()
-            finishWire({ kind: 'breadboardRail', boardId: l.id, rail: 'plus' })
-          }}
-        />,
-      )
-      dots.push(
-        <PinDot
-          key={`rm${col}`}
-          x={x}
-          y={l.railMinusY}
-          r={3}
-          fill="#cbd5f5"
-          stroke="#3b82f6"
-          onPointerDown={(e) => {
-            e.stopPropagation()
-            startWire({ kind: 'breadboardRail', boardId: l.id, rail: 'minus' }, { x, y: l.railMinusY })
-          }}
-          onPointerUp={(e) => {
-            e.stopPropagation()
-            finishWire({ kind: 'breadboardRail', boardId: l.id, rail: 'minus' })
-          }}
-        />,
-      )
-    }
+function Palette({
+  tab,
+  setTab,
+  addComponent,
+  addBreadboard,
+}: {
+  tab: ComponentCategory | 'breadboard'
+  setTab: (t: ComponentCategory | 'breadboard') => void
+  addComponent: (type: ComponentType) => void
+  addBreadboard: (size: BreadboardSize) => void
+}) {
+  const TABS: { key: ComponentCategory | 'breadboard'; label: string }[] = [
+    { key: 'output', label: '출력 장치' },
+    { key: 'input', label: '입력 장치' },
+    { key: 'breadboard', label: '브레드보드' },
+  ]
 
-    return (
-      <g>
-        <rect
-          x={l.x}
-          y={l.y}
-          width={l.width}
-          height={l.height}
-          rx={8}
-          fill="#f2e6c9"
-          stroke="#d8c39a"
-        />
-        <text x={l.x + 8} y={l.y + l.height - 6} fontSize={10} fill="#a08a5c">
-          브레드보드
-        </text>
-        {dots}
-      </g>
-    )
-  }
-
-  function PicoBoard() {
-    return (
-      <g>
-        <rect
-          x={BOARD_X}
-          y={BOARD_Y}
-          width={BOARD_WIDTH}
-          height={BOARD_HEIGHT}
-          rx={10}
-          fill="#1f6b4d"
-          stroke="#134a34"
-        />
-        <text
-          x={BOARD_X + BOARD_WIDTH / 2}
-          y={BOARD_Y + BOARD_HEIGHT / 2}
-          fontSize={13}
-          fill="#bfe3d2"
-          textAnchor="middle"
-          transform={`rotate(90 ${BOARD_X + BOARD_WIDTH / 2} ${BOARD_Y + BOARD_HEIGHT / 2})`}
-        >
-          Pico 2 W
-        </text>
-        {BOARD_PINS.map((pin) => (
-          <BoardPinDot
-            key={pin.id}
-            pin={pin}
-            connected={connectivity.pinToGpio !== undefined}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              startWire({ kind: 'board', pinId: pin.id }, { x: pin.x, y: pin.y })
-            }}
-            onPointerUp={(e) => {
-              e.stopPropagation()
-              finishWire({ kind: 'board', pinId: pin.id })
-            }}
-          />
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-1 border-b border-cream-deep">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={[
+              'rounded-t-lg px-3 py-1.5 text-xs font-bold transition-colors',
+              tab === t.key
+                ? 'border border-b-0 border-cream-deep bg-white text-ink-900'
+                : 'text-ink-500 hover:text-ink-700',
+            ].join(' ')}
+          >
+            {t.label}
+          </button>
         ))}
-      </g>
-    )
-  }
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {tab !== 'breadboard'
+          ? COMPONENT_LIST.filter((c) => c.category === tab).map((c) => (
+              <button
+                key={c.type}
+                onClick={() => addComponent(c.type)}
+                className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50"
+              >
+                {c.emoji} {c.label} 추가
+              </button>
+            ))
+          : BREADBOARD_SIZES.map((b) => (
+              <button
+                key={b.size}
+                onClick={() => addBreadboard(b.size)}
+                className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50"
+              >
+                🍞 {b.label} 추가
+              </button>
+            ))}
+        <span className="text-xs text-ink-500">
+          핀(원)을 끌어 다른 핀까지 전선을 잇고, 몸통은 끌어서 옮기고, 전선/✕는 클릭합니다.
+        </span>
+      </div>
+    </div>
+  )
 }
 
 function PinDot({
@@ -461,13 +455,193 @@ function PinDot({
   )
 }
 
+function BreadboardGlyph({
+  layout,
+  onBodyPointerDown,
+  onRemove,
+  onDotPointerDown,
+  onDotPointerUp,
+}: {
+  layout: BreadboardLayout
+  onBodyPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
+  onRemove: () => void
+  onDotPointerDown: (ref: PinRef, point: Point) => void
+  onDotPointerUp: (ref: PinRef) => void
+}) {
+  const l = layout
+  const dots: React.ReactNode[] = []
+
+  for (let col = 0; col < l.columns; col++) {
+    const x = l.colX(col)
+    l.topRowsY.forEach((y, i) => {
+      const ref: PinRef = { kind: 'breadboard', boardId: l.id, col, side: 'top' }
+      dots.push(
+        <PinDot
+          key={`t${col}-${i}`}
+          x={x}
+          y={y}
+          r={3.5}
+          fill="#fff"
+          stroke="#c9b28a"
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            onDotPointerDown(ref, { x, y })
+          }}
+          onPointerUp={(e) => {
+            e.stopPropagation()
+            onDotPointerUp(ref)
+          }}
+        />,
+      )
+    })
+    l.bottomRowsY.forEach((y, i) => {
+      const ref: PinRef = { kind: 'breadboard', boardId: l.id, col, side: 'bottom' }
+      dots.push(
+        <PinDot
+          key={`b${col}-${i}`}
+          x={x}
+          y={y}
+          r={3.5}
+          fill="#fff"
+          stroke="#c9b28a"
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            onDotPointerDown(ref, { x, y })
+          }}
+          onPointerUp={(e) => {
+            e.stopPropagation()
+            onDotPointerUp(ref)
+          }}
+        />,
+      )
+    })
+  }
+  for (let col = 0; col < l.columns; col++) {
+    const x = l.colX(col)
+    const plusRef: PinRef = { kind: 'breadboardRail', boardId: l.id, rail: 'plus' }
+    const minusRef: PinRef = { kind: 'breadboardRail', boardId: l.id, rail: 'minus' }
+    dots.push(
+      <PinDot
+        key={`rp${col}`}
+        x={x}
+        y={l.railPlusY}
+        r={3}
+        fill="#fecaca"
+        stroke="#ef4444"
+        onPointerDown={(e) => {
+          e.stopPropagation()
+          onDotPointerDown(plusRef, { x, y: l.railPlusY })
+        }}
+        onPointerUp={(e) => {
+          e.stopPropagation()
+          onDotPointerUp(plusRef)
+        }}
+      />,
+    )
+    dots.push(
+      <PinDot
+        key={`rm${col}`}
+        x={x}
+        y={l.railMinusY}
+        r={3}
+        fill="#cbd5f5"
+        stroke="#3b82f6"
+        onPointerDown={(e) => {
+          e.stopPropagation()
+          onDotPointerDown(minusRef, { x, y: l.railMinusY })
+        }}
+        onPointerUp={(e) => {
+          e.stopPropagation()
+          onDotPointerUp(minusRef)
+        }}
+      />,
+    )
+  }
+
+  return (
+    <g>
+      <rect
+        x={l.x}
+        y={l.y}
+        width={l.width}
+        height={l.height}
+        rx={8}
+        fill="#f2e6c9"
+        stroke="#d8c39a"
+        className="cursor-grab"
+        onPointerDown={onBodyPointerDown}
+      />
+      <text x={l.x + 8} y={l.y + l.height - 6} fontSize={10} fill="#a08a5c">
+        브레드보드
+      </text>
+      <text
+        x={l.x + l.width - 8}
+        y={l.y + l.height - 6}
+        fontSize={9}
+        fill="#b91c1c"
+        textAnchor="end"
+        className="cursor-pointer"
+        onClick={onRemove}
+      >
+        ✕ 삭제
+      </text>
+      {dots}
+    </g>
+  )
+}
+
+function PicoBoard({
+  onPinPointerDown,
+  onPinPointerUp,
+}: {
+  onPinPointerDown: (pin: BoardPin, point: Point) => void
+  onPinPointerUp: (pin: BoardPin) => void
+}) {
+  return (
+    <g>
+      <rect
+        x={BOARD_X}
+        y={BOARD_Y}
+        width={BOARD_WIDTH}
+        height={BOARD_HEIGHT}
+        rx={10}
+        fill="#1f6b4d"
+        stroke="#134a34"
+      />
+      <text
+        x={BOARD_X + BOARD_WIDTH / 2}
+        y={BOARD_Y + BOARD_HEIGHT / 2}
+        fontSize={13}
+        fill="#bfe3d2"
+        textAnchor="middle"
+        transform={`rotate(90 ${BOARD_X + BOARD_WIDTH / 2} ${BOARD_Y + BOARD_HEIGHT / 2})`}
+      >
+        Pico 2 W
+      </text>
+      {BOARD_PINS.map((pin) => (
+        <BoardPinDot
+          key={pin.id}
+          pin={pin}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            onPinPointerDown(pin, { x: pin.x, y: pin.y })
+          }}
+          onPointerUp={(e) => {
+            e.stopPropagation()
+            onPinPointerUp(pin)
+          }}
+        />
+      ))}
+    </g>
+  )
+}
+
 function BoardPinDot({
   pin,
   onPointerDown,
   onPointerUp,
 }: {
   pin: BoardPin
-  connected: boolean
   onPointerDown: (e: React.PointerEvent) => void
   onPointerUp: (e: React.PointerEvent) => void
 }) {
@@ -501,32 +675,29 @@ function BoardPinDot({
 function ComponentGlyph({
   component,
   gpioLevels,
-  connectivity,
-  heldButtons,
+  gpioForPin,
+  active,
   onBodyPointerDown,
   onPinPointerDown,
   onPinPointerUp,
-  onButtonHold,
+  onInputActiveChange,
   onRemove,
 }: {
   component: PlacedComponent
   gpioLevels: Map<number, 0 | 1>
-  connectivity: { pinToGpio: Map<string, number> }
-  heldButtons: Set<string>
+  gpioForPin: (pin: string) => number | undefined
+  active: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGGElement>) => void
   onPinPointerDown: (pin: string, e: React.PointerEvent) => void
   onPinPointerUp: (pin: string, e: React.PointerEvent) => void
-  onButtonHold: (pressed: boolean) => void
+  onInputActiveChange: (active: boolean) => void
   onRemove: () => void
 }) {
   const pins = COMPONENT_PINS[component.type]
-
-  const gpioFor = (pin: string) =>
-    connectivity.pinToGpio.get(pinRefKey({ kind: 'component', componentId: component.id, pin }))
-
-  const ledGpio = component.type === 'led' ? gpioFor('anode') ?? gpioFor('cathode') : undefined
-  const ledOn = ledGpio !== undefined && gpioLevels.get(ledGpio) === 1
-  const held = heldButtons.has(component.id)
+  const isOn = (pin: string) => {
+    const gpio = gpioForPin(pin)
+    return gpio !== undefined && gpioLevels.get(gpio) === 1
+  }
 
   return (
     <g transform={`translate(${component.x} ${component.y})`}>
@@ -536,16 +707,56 @@ function ComponentGlyph({
             cx={0}
             cy={20}
             r={16}
-            fill={ledOn ? '#fde047' : '#e5e7eb'}
-            stroke={ledOn ? '#f59e0b' : '#9ca3af'}
+            fill={isOn('anode') || isOn('cathode') ? '#fde047' : '#e5e7eb'}
+            stroke={isOn('anode') || isOn('cathode') ? '#f59e0b' : '#9ca3af'}
             strokeWidth={2}
-            style={ledOn ? { filter: 'drop-shadow(0 0 8px #fbbf24)' } : undefined}
+            style={isOn('anode') || isOn('cathode') ? { filter: 'drop-shadow(0 0 8px #fbbf24)' } : undefined}
           />
           <text x={0} y={24} fontSize={9} textAnchor="middle" fill="#57534e">
             LED
           </text>
         </g>
       )}
+
+      {component.type === 'rgb-led' && (
+        <g onPointerDown={onBodyPointerDown} className="cursor-grab">
+          <circle
+            cx={0}
+            cy={20}
+            r={16}
+            fill={`rgb(${isOn('r') ? 255 : 60}, ${isOn('g') ? 255 : 60}, ${isOn('b') ? 255 : 60})`}
+            stroke="#78716c"
+            strokeWidth={2}
+            style={
+              isOn('r') || isOn('g') || isOn('b')
+                ? { filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.8))' }
+                : undefined
+            }
+          />
+          <text x={0} y={24} fontSize={8} textAnchor="middle" fill="#57534e">
+            RGB
+          </text>
+        </g>
+      )}
+
+      {component.type === 'buzzer' && (
+        <g onPointerDown={onBodyPointerDown} className="cursor-grab">
+          <rect
+            x={-14}
+            y={4}
+            width={28}
+            height={22}
+            rx={14}
+            fill={isOn('positive') || isOn('negative') ? '#fca5a5' : '#e7e5e4'}
+            stroke={isOn('positive') || isOn('negative') ? '#ef4444' : '#a8a29e'}
+            strokeWidth={2}
+          />
+          <text x={0} y={19} fontSize={9} textAnchor="middle" fill="#57534e">
+            🔔
+          </text>
+        </g>
+      )}
+
       {component.type === 'button' && (
         <g onPointerDown={onBodyPointerDown} className="cursor-grab">
           <rect
@@ -554,23 +765,44 @@ function ComponentGlyph({
             width={40}
             height={20}
             rx={4}
-            fill={held ? '#fde68a' : '#f5f0e6'}
+            fill={active ? '#fde68a' : '#f5f0e6'}
             stroke="#a8a29e"
             strokeWidth={2}
+            className="cursor-pointer"
             onPointerDown={(e) => {
               e.stopPropagation()
-              onButtonHold(true)
+              onInputActiveChange(true)
             }}
             onPointerUp={(e) => {
               e.stopPropagation()
-              onButtonHold(false)
+              onInputActiveChange(false)
             }}
-            onPointerLeave={() => held && onButtonHold(false)}
-            className="cursor-pointer"
+            onPointerLeave={() => active && onInputActiveChange(false)}
           />
           <text x={0} y={14} fontSize={9} textAnchor="middle" fill="#57534e">
             버튼
           </text>
+        </g>
+      )}
+
+      {component.type === 'switch' && (
+        <g onPointerDown={onBodyPointerDown} className="cursor-grab">
+          <rect
+            x={-20}
+            y={0}
+            width={40}
+            height={20}
+            rx={10}
+            fill={active ? '#bbf7d0' : '#f5f0e6'}
+            stroke={active ? '#22c55e' : '#a8a29e'}
+            strokeWidth={2}
+            className="cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation()
+              onInputActiveChange(!active)
+            }}
+          />
+          <circle cx={active ? 10 : -10} cy={10} r={7} fill="#fff" stroke="#78716c" strokeWidth={1} />
         </g>
       )}
 
@@ -592,7 +824,7 @@ function ComponentGlyph({
           cx={p.dx}
           cy={p.dy}
           r={4}
-          fill={gpioFor(p.pin) !== undefined ? '#4ade80' : '#fff'}
+          fill={gpioForPin(p.pin) !== undefined ? '#4ade80' : '#fff'}
           stroke="#334155"
           strokeWidth={1}
           className="cursor-crosshair"
