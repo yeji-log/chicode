@@ -1,12 +1,27 @@
 import { useEffect, useState } from 'react'
 
+import {
+  addOtPresentation,
+  removeOtPresentation,
+  renameOtPresentation,
+  type OtPresentationMeta,
+  type SubjectMeta,
+} from '../lib/subjects'
 import { SlidesPanel } from '../pages/LabBoardEditor'
 import {
   startPresentation,
   subscribePresentation,
   type LabPresentationState,
 } from '../lib/labPresentation'
-import { getNotes, getSlidePdfFile, getSlidePptxFile, getSlideSet, type LabSlideSet } from '../lib/labSlides'
+import {
+  deleteSlidePdf,
+  deleteSlidePptx,
+  getNotes,
+  getSlidePdfFile,
+  getSlidePptxFile,
+  getSlideSet,
+  type LabSlideSet,
+} from '../lib/labSlides'
 import LabPresentationOverlay from './LabPresentationOverlay'
 import LabPresenter from './LabPresenter'
 import PptxSlideViewer from './PptxSlideViewer'
@@ -14,26 +29,125 @@ import PptxSlideViewer from './PptxSlideViewer'
 const IDLE_PRESENTATION: LabPresentationState = { active: false, currentSlide: 1, updatedAt: 0 }
 
 /**
- * 교사 페이지 OT 탭 전용 "OT 발표자료" — PPT를 올리고, 대본과 나란히 보면서
- * 슬라이드를 넘기는 발표 모드까지 Lab 활동의 발표 기능(LabPresenter/
- * PptxSlideViewer/labPresentation.ts, LabActivityDetail.tsx가 쓰는 것과 동일)을
- * 그대로 재사용한다. Lab은 "활동" 하나에 이 슬라이드 자리가 여러 섹션 중
- * 하나로 끼워지는 구조라, 여기서는 그 활동 모델 없이 과목 하나당 발표자료
- * 하나만 두는 훨씬 단순한 버전으로 다시 짰다.
+ * 교사 페이지 OT 탭 전용 "OT 발표자료" 목록 — 항목을 여러 개 추가할 수 있고
+ * (예: 1차시/2차시 발표자료를 따로 두는 식), 항목마다 독립적으로 PPT 업로드 +
+ * 발표(슬라이드+대본 나란히) 기능을 쓴다. Lab 활동의 발표 기능(LabPresenter/
+ * PptxSlideViewer/labPresentation.ts/labSlides.ts)을 그대로 재사용한다 — 전부
+ * activityId 문자열 하나로만 동작해서 "활동" 데이터 모델 없이도 그대로 붙는다.
+ *
+ * 목록 자체(제목)는 subjects/{subjectId}.otPresentations 배열에 있고, 항목별
+ * 실제 PPT/PDF·대본은 각자 자기 id로 된 labSlides/labPresentations 문서에
+ * 있다(id는 crypto.randomUUID() — 다른 곳의 활동 id와 겹칠 일이 없다).
  *
  * 학생 화면 어디에도 이 컴포넌트를 그리지 않으므로 학생은 볼 수 없다 — 다만
  * labSlides/labPresentations 문서 자체는 이 프로젝트의 다른 "가벼운 잠금"과
  * 같은 이유로 Firestore read:true라(firestore.rules), 그게 진짜 보안 장치는
  * 아니라는 점은 동일하다.
- *
- * Firestore 문서 id로 실제 Lab 활동 id(crypto.randomUUID())와 절대 겹치지
- * 않도록 `ot-${subjectId}` 접두어를 쓴다 — subjectId는 Firebase 콘솔에서
- * 사람이 직접 지어준 짧은 slug(ai-basics 등)라 접두어를 붙여도 이 프로젝트
- * 안에서 충돌할 일이 없다.
  */
-export default function OtPresentationPanel({ subjectId }: { subjectId: string }) {
-  const slideId = `ot-${subjectId}`
+export default function OtPresentationPanel({
+  subject,
+  onSubjectChange,
+}: {
+  subject: SubjectMeta
+  onSubjectChange: (patch: Partial<SubjectMeta>) => void
+}) {
+  const items = subject.otPresentations ?? []
+  const [busy, setBusy] = useState(false)
 
+  async function handleAdd() {
+    setBusy(true)
+    try {
+      const entry = await addOtPresentation(subject.id, `발표자료 ${items.length + 1}`)
+      onSubjectChange({ otPresentations: [...items, entry] })
+    } catch (caught) {
+      console.error('발표자료 추가 실패', caught)
+      alert('발표자료를 추가하지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRemove(entry: OtPresentationMeta) {
+    if (!confirm(`"${entry.title}"를 삭제할까요? 업로드한 PPT/PDF도 함께 삭제됩니다.`)) return
+    try {
+      await removeOtPresentation(subject.id, entry.id)
+      // labSlides 문서 자체(대본)는 Lab의 deleteActivity와 같은 이유로 안
+      // 지운다(subjects.ts의 removeOtPresentation 주석 참고) — 용량을 크게
+      // 차지하는 PPT/PDF 원본만 확실히 지운다.
+      await Promise.all([deleteSlidePptx(entry.id), deleteSlidePdf(entry.id)])
+      onSubjectChange({ otPresentations: items.filter((item) => item.id !== entry.id) })
+    } catch (caught) {
+      console.error('발표자료 삭제 실패', caught)
+      alert('발표자료를 삭제하지 못했습니다. 다시 시도해 주세요.')
+    }
+  }
+
+  async function handleRename(entry: OtPresentationMeta, title: string) {
+    // 낙관적으로 먼저 반영 — 실패해도 다음에 다시 고치면 되는 사소한 텍스트라
+    // SubjectSettings처럼 저장 버튼/에러 문구까지 둘 정도는 아니라고 판단했다.
+    onSubjectChange({
+      otPresentations: items.map((item) => (item.id === entry.id ? { ...item, title } : item)),
+    })
+    try {
+      await renameOtPresentation(subject.id, entry.id, title)
+    } catch (caught) {
+      console.error('발표자료 이름 변경 실패', caught)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6">
+      <div>
+        <h2 className="font-bold text-ink-900">🎤 OT 발표자료</h2>
+        <p className="mt-1 text-xs text-ink-500">
+          여기 올린 PPT와 대본은 학생 화면 어디에도 안 보입니다. 발표자료를 여러 개 추가해서
+          (예: 1차시/2차시) 각각 따로 관리할 수 있어요. "발표 시작"을 누르면 슬라이드와 대본을
+          나란히 보면서 프로젝터로 진행할 수 있습니다.
+        </p>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-cream-deep px-4 py-8 text-center text-sm text-ink-500">
+          아직 추가한 발표자료가 없습니다.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {items.map((entry) => (
+            <OtPresentationItem
+              key={entry.id}
+              entry={entry}
+              onRename={(title) => handleRename(entry, title)}
+              onRemove={() => handleRemove(entry)}
+            />
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={handleAdd}
+        disabled={busy}
+        className="self-start rounded-xl border border-cream-deep px-4 py-2 text-sm font-bold text-ink-700 transition-colors hover:border-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? '추가하는 중…' : '+ 발표자료 추가'}
+      </button>
+    </div>
+  )
+}
+
+/** 발표자료 하나 — 제목 인라인 수정 + 업로드(SlidesPanel) + 미리보기/발표
+ *  모드. entry.id 를 그대로 labSlides/labPresentations 문서 id로 쓴다. */
+function OtPresentationItem({
+  entry,
+  onRename,
+  onRemove,
+}: {
+  entry: OtPresentationMeta
+  onRename: (title: string) => void
+  onRemove: () => void
+}) {
+  const slideId = entry.id
+
+  const [titleDraft, setTitleDraft] = useState(entry.title)
   const [slideFiles, setSlideFiles] = useState<{ pptx: Blob | null; pdf: Blob | null } | null>(
     null,
   )
@@ -44,6 +158,10 @@ export default function OtPresentationPanel({ subjectId }: { subjectId: string }
   // SlidesPanel이 업로드/삭제를 마칠 때마다 값이 바뀌어, 아래 slideFiles/notes
   // 재조회 effect를 다시 돌게 만드는 트리거. 값 자체엔 의미 없다.
   const [refreshToken, setRefreshToken] = useState(0)
+
+  useEffect(() => {
+    setTitleDraft(entry.title)
+  }, [entry.title])
 
   useEffect(() => {
     let cancelled = false
@@ -72,9 +190,6 @@ export default function OtPresentationPanel({ subjectId }: { subjectId: string }
   useEffect(() => subscribePresentation(slideId, setPresentation), [slideId])
 
   const canPresent = !!slideFiles?.pdf
-  // 두 교사가 동시에 이 화면을 열었을 때, 발표를 직접 조작하지 않는 쪽에
-  // 전체화면 오버레이를 띄운다(Lab의 학생 화면과 같은 컴포넌트) — 흔치 않은
-  // 상황이지만 있는 컴포넌트를 그대로 쓰는 게 새로 만드는 것보다 안전하다.
   const showFollowerOverlay = presentation.active && !isPresenting && !!slideFiles?.pdf
 
   async function handleStartPresenting() {
@@ -87,9 +202,6 @@ export default function OtPresentationPanel({ subjectId }: { subjectId: string }
   }
 
   function handleSlidesChange(next: LabSlideSet) {
-    // SlidesPanel은 메타(ChunkedFileMeta)만 들고 있고 실제 Blob은 안 갖고
-    // 있어서, 여기선 새로 올라온 파일이 있다는 신호로만 쓰고 실제 재조회는
-    // 위 effect(getSlideSet + blob 로딩)에 맡긴다.
     if (!next.pptx && !next.pdf) {
       setSlideFiles(null)
       return
@@ -98,13 +210,24 @@ export default function OtPresentationPanel({ subjectId }: { subjectId: string }
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6">
-      <div>
-        <h2 className="font-bold text-ink-900">🎤 OT 발표자료</h2>
-        <p className="mt-1 text-xs text-ink-500">
-          여기 올린 PPT와 대본은 학생 화면 어디에도 안 보입니다. 수업 중 이 화면에서 "발표
-          시작"을 누르면 슬라이드와 대본을 나란히 보면서 프로젝터로 진행할 수 있어요.
-        </p>
+    <div className="flex flex-col gap-3 rounded-xl border border-cream-deep bg-cream/40 p-4">
+      <div className="flex items-center gap-2">
+        <input
+          value={titleDraft}
+          onChange={(event) => setTitleDraft(event.target.value)}
+          onBlur={() => {
+            const trimmed = titleDraft.trim() || '발표자료'
+            setTitleDraft(trimmed)
+            if (trimmed !== entry.title) onRename(trimmed)
+          }}
+          className="min-w-0 flex-1 rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-sm font-bold text-ink-900 focus:border-cheese-300 focus:outline-none"
+        />
+        <button
+          onClick={onRemove}
+          className="shrink-0 rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
+        >
+          삭제
+        </button>
       </div>
 
       <SlidesPanel activityId={slideId} onChange={handleSlidesChange} />
@@ -113,7 +236,7 @@ export default function OtPresentationPanel({ subjectId }: { subjectId: string }
         <LabPresentationOverlay
           pdfFile={slideFiles.pdf}
           currentSlide={presentation.currentSlide}
-          filename="OT 발표자료"
+          filename={entry.title}
           isTeacherViewer
           onTakeControl={() => setIsPresenting(true)}
         />
@@ -164,7 +287,7 @@ export default function OtPresentationPanel({ subjectId }: { subjectId: string }
             <PptxSlideViewer
               pptxFile={slideFiles.pptx}
               pdfFile={slideFiles.pdf}
-              filename="OT 발표자료"
+              filename={entry.title}
               onPageChange={setBrowsePage}
             />
           </div>

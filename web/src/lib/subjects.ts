@@ -40,6 +40,13 @@ export interface SubjectMeta {
    *  사이트(X-Frame-Options/CSP frame-ancestors)를 넣으면 빈 화면만 보인다 —
    *  등록 전에 확인할 것. */
   otUrl?: string
+  /** OT 탭 안에서 교사가 올리는 발표자료(PPT) 목록 — 항목마다 하나씩 독립된
+   *  labSlides/{id}·labPresentations/{id} 문서를 갖는다(id는
+   *  crypto.randomUUID(), 다른 곳의 활동 id와 같은 방식이라 겹칠 일이 없다).
+   *  실제 PPT/PDF·대본은 이 배열이 아니라 그 문서들에 있고, 여기엔 목록에
+   *  띄울 제목만 둔다. 학생 화면(SubjectMaterials.tsx)은 이 필드를 아예 안
+   *  읽으므로 학생에게는 보이지 않는다 — OtPresentationPanel.tsx 참고. */
+  otPresentations?: OtPresentationMeta[]
   /** false 면 학생이 핀 없이 바로 열람할 수 있다. 수업 시간에 핀을 잘못
    *  불러주거나 학생이 오타를 반복해서 시간을 잡아먹는 걸 교사가 그 자리에서
    *  임시로 풀어줄 수 있게 하는 스위치다(교사 페이지에서 토글). 필드 자체가
@@ -54,6 +61,11 @@ export interface SubjectMeta {
    *  안 그러면 이 기능을 넣는 순간 기존 과목이 갑자기 학생 눈앞에서
    *  잠겨버린다. normalizeSubject 참고. */
   published?: boolean
+}
+
+export interface OtPresentationMeta {
+  id: string
+  title: string
 }
 
 const SUBJECTS = 'subjects'
@@ -84,6 +96,46 @@ export async function updateSubject(
   >,
 ): Promise<void> {
   await updateDoc(doc(db, SUBJECTS, id), patch)
+}
+
+/**
+ * OT 발표자료 목록에 새 항목을 추가한다. 배열 하나를 통째로 읽고 다시 쓰는
+ * 방식이라(arrayUnion을 안 쓴 이유: 항목이 객체라 나중에 rename 할 때도 같은
+ * "읽고 통째로 다시 쓰기"가 필요해서, 추가·이름 변경·삭제를 전부 같은 방식으로
+ * 맞췄다) 동시에 두 교사가 각자 추가하면 하나가 사라질 수 있다 — 이 프로젝트
+ * 전반의 "가벼운 잠금"과 같은 수준의 트레이드오프로 받아들인다.
+ */
+export async function addOtPresentation(
+  subjectId: string,
+  title: string,
+): Promise<OtPresentationMeta> {
+  const subject = await getSubject(subjectId)
+  const entry: OtPresentationMeta = { id: crypto.randomUUID(), title: title.trim() || '발표자료' }
+  const next = [...(subject?.otPresentations ?? []), entry]
+  await updateDoc(doc(db, SUBJECTS, subjectId), { otPresentations: next })
+  return entry
+}
+
+export async function renameOtPresentation(
+  subjectId: string,
+  id: string,
+  title: string,
+): Promise<void> {
+  const subject = await getSubject(subjectId)
+  const next = (subject?.otPresentations ?? []).map((entry) =>
+    entry.id === id ? { ...entry, title: title.trim() || '발표자료' } : entry,
+  )
+  await updateDoc(doc(db, SUBJECTS, subjectId), { otPresentations: next })
+}
+
+/** 목록에서만 지운다 — 업로드된 PPT/PDF 파일 자체(labSlides/{id})는 별도로
+ *  지워야 한다(OtPresentationPanel.tsx가 호출부에서 함께 처리). Lab의
+ *  deleteActivity도 labSlides 문서 자체는 안 지우는 같은 한계가 있다
+ *  (Teacher.tsx 참고) — 여기서 새로 만드는 문제가 아니다. */
+export async function removeOtPresentation(subjectId: string, id: string): Promise<void> {
+  const subject = await getSubject(subjectId)
+  const next = (subject?.otPresentations ?? []).filter((entry) => entry.id !== id)
+  await updateDoc(doc(db, SUBJECTS, subjectId), { otPresentations: next })
 }
 
 /**

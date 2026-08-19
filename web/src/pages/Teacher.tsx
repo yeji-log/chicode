@@ -621,7 +621,7 @@ function SubjectPanel({
       {panelTab === 'ot' && (
         <div className="flex flex-col gap-6">
           <OtFrame subject={subject} />
-          <OtPresentationPanel subjectId={subject.id} />
+          <OtPresentationPanel subject={subject} onSubjectChange={onSubjectChange} />
         </div>
       )}
 
