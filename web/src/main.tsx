@@ -24,6 +24,7 @@ import NotFound from './pages/NotFound'
 // Python 실습에 들어갈 때만 내려받는다.
 const PythonLab = lazy(() => import('./pages/PythonLab'))
 const CLab = lazy(() => import('./pages/CLab'))
+const PicoLab = lazy(() => import('./pages/PicoLab'))
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -69,19 +70,9 @@ createRoot(document.getElementById('root')!).render(
             <Route
               path="practice/pico"
               element={
-                <ComingSoon
-                  emoji="🔌"
-                  title="Pico 2 W 시뮬레이터"
-                  backTo={{ to: '/practice', label: '실습' }}
-                  description={
-                    <>
-                      브라우저에서 가상 Pico 2 W 보드로
-                      <br />
-                      GPIO, LED, 버튼을 직접 다뤄보세요.
-                    </>
-                  }
-                  secondary={{ to: '/practice/python', label: 'Python 실습 하러 가기' }}
-                />
+                <Suspense fallback={<p className="text-ink-500">Pico 실습 화면을 여는 중…</p>}>
+                  <PicoLab />
+                </Suspense>
               }
             />
             {/* 예전 주소로 온 링크·북마크가 끊기지 않도록 새 위치로 보낸다. */}

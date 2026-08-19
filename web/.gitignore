@@ -33,3 +33,6 @@ public/pyodide/
 
 # clang 툴체인 — npm install 시 scripts/sync-clang.mjs 가 다시 받는다 (약 51MB)
 public/clang/
+
+# MicroPython WebAssembly 런타임(Pico 2 W 시뮬레이터) — scripts/sync-micropython.mjs 가 다시 만든다
+public/micropython/
