@@ -68,7 +68,8 @@ export default function PicoLab() {
           <StatusPill status={status} />
 
           <select
-            className="rounded-lg border border-cream-deep bg-white/70 px-3 py-2 text-sm font-semibold text-ink-700"
+            disabled={running}
+            className="rounded-lg border border-cream-deep bg-white/70 px-3 py-2 text-sm font-semibold text-ink-700 disabled:cursor-not-allowed disabled:opacity-50"
             value=""
             onChange={(event) => {
               const example = EXAMPLES.find((item) => item.name === event.target.value)
@@ -126,7 +127,9 @@ export default function PicoLab() {
         <section className="flex flex-col overflow-hidden rounded-2xl border border-cream-deep bg-white">
           <div className="flex items-center justify-between border-b border-cream-deep px-4 py-2.5">
             <h2 className="text-sm font-bold text-ink-700">코드</h2>
-            <span className="text-xs text-ink-500">⌘/Ctrl + Enter 로 실행</span>
+            <span className="text-xs text-ink-500">
+              {running ? '실행 중에는 수정할 수 없어요 — 중지를 누르세요' : '⌘/Ctrl + Enter 로 실행'}
+            </span>
           </div>
 
           <div className="h-[300px]">
@@ -135,7 +138,7 @@ export default function PicoLab() {
               theme="vs"
               value={code}
               onChange={(value) => setCode(value ?? '')}
-              options={EDITOR_OPTIONS}
+              options={{ ...EDITOR_OPTIONS, readOnly: running }}
               loading={<span className="text-sm text-ink-500">에디터 준비 중…</span>}
             />
           </div>
@@ -186,8 +189,15 @@ export default function PicoLab() {
         </section>
 
         <section className="rounded-2xl border border-cream-deep bg-white p-3">
-          <h2 className="mb-2 px-1 text-sm font-bold text-ink-700">회로</h2>
-          <CircuitCanvas ref={circuitRef} gpioLevels={gpio} onButtonChange={setButton} />
+          <div className="mb-2 flex items-center justify-between px-1">
+            <h2 className="text-sm font-bold text-ink-700">회로</h2>
+            {running && (
+              <span className="text-xs font-semibold text-cheese-600">
+                실행 중 — 버튼/스위치는 눌러볼 수 있지만 배선은 중지 후에 바꿀 수 있어요
+              </span>
+            )}
+          </div>
+          <CircuitCanvas ref={circuitRef} gpioLevels={gpio} onButtonChange={setButton} locked={running} />
         </section>
       </div>
     </div>

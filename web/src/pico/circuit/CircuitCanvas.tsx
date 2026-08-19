@@ -63,6 +63,12 @@ export interface CircuitCanvasProps {
   gpioLevels: Map<number, 0 | 1>
   /** 버튼/스위치가 눌리거나 켜질 때, 연결된 GPIO 번호로 알려준다(연결 안 됐으면 안 불림). */
   onButtonChange: (gpio: number, pressed: boolean) => void
+  /**
+   * true 면 배선/부품 편집을 전부 막는다(코드 실행 중). 버튼·스위치를 눌러보는 것만은
+   * 계속 된다 — "실행 중인 회로가 실제로 반응하는 걸 보는" 게 이 잠금의 목적이지,
+   * 상호작용 자체를 막는 게 아니라서다.
+   */
+  locked?: boolean
 }
 
 /** "예제 불러오기" 가 코드와 함께 회로도 같이 구성할 수 있도록 여는 창구. */
@@ -73,7 +79,7 @@ export interface CircuitCanvasHandle {
 type DragTarget = { id: string; kind: 'component' | 'breadboard'; dx: number; dy: number }
 
 function CircuitCanvas(
-  { gpioLevels, onButtonChange }: CircuitCanvasProps,
+  { gpioLevels, onButtonChange, locked = false }: CircuitCanvasProps,
   ref: React.Ref<CircuitCanvasHandle>,
 ) {
   const [{ components, breadboards, wires }, setState] = useState<CircuitSnapshot>(loadInitial)
@@ -144,9 +150,13 @@ function CircuitCanvas(
     return { x: local.x, y: local.y }
   }, [])
 
-  const startWire = (ref: PinRef, point: Point) => setDraft({ from: ref, to: point })
+  const startWire = (ref: PinRef, point: Point) => {
+    if (locked) return
+    setDraft({ from: ref, to: point })
+  }
 
   const finishWire = (ref: PinRef) => {
+    if (locked) return
     setDraft((current) => {
       if (!current) return null
       if (pinRefKey(current.from) === pinRefKey(ref)) return null
@@ -173,6 +183,7 @@ function CircuitCanvas(
   }
 
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (locked) return
     const p = toSvgPoint(event.clientX, event.clientY)
     if (draft) setDraft((d) => (d ? { ...d, to: p } : d))
     if (dragging) {
@@ -199,9 +210,13 @@ function CircuitCanvas(
     setDraft(null) // 빈 곳에서 놓으면 배선 취소
   }
 
-  const removeWire = (id: string) => setState((s) => ({ ...s, wires: s.wires.filter((w) => w.id !== id) }))
+  const removeWire = (id: string) => {
+    if (locked) return
+    setState((s) => ({ ...s, wires: s.wires.filter((w) => w.id !== id) }))
+  }
 
   const addComponent = (type: ComponentType) => {
+    if (locked) return
     const id = `${type.replace('-', '')}${Date.now().toString(36)}`
     setState((s) => ({
       ...s,
@@ -210,6 +225,7 @@ function CircuitCanvas(
   }
 
   const removeComponent = (id: string) => {
+    if (locked) return
     setState((s) => ({
       ...s,
       components: s.components.filter((c) => c.id !== id),
@@ -222,11 +238,13 @@ function CircuitCanvas(
   }
 
   const addBreadboard = (size: BreadboardSize) => {
+    if (locked) return
     const id = `bb${Date.now().toString(36)}`
     setState((s) => ({ ...s, breadboards: [...s.breadboards, { id, size, x: 24, y: 90 + s.breadboards.length * 40 }] }))
   }
 
   const removeBreadboard = (id: string) => {
+    if (locked) return
     setState((s) => ({
       ...s,
       breadboards: s.breadboards.filter((b) => b.id !== id),
@@ -238,6 +256,8 @@ function CircuitCanvas(
     }))
   }
 
+  // 버튼/스위치는 locked 여부와 무관하게 항상 된다 — 실행 중인 회로를 눌러보는 게
+  // 이번 요청의 핵심이라 여기만 잠금에서 뺐다.
   const setInputActive = (componentId: string, active: boolean) => {
     setActiveInputs((prev) => {
       const next = new Set(prev)
@@ -268,23 +288,45 @@ function CircuitCanvas(
     return { x: comp.x + spec.dx, y: comp.y + spec.dy }
   }
 
-  const elbowPath = (a: Point, b: Point) => {
-    const midX = (a.x + b.x) / 2
-    return `M ${a.x} ${a.y} L ${midX} ${a.y} L ${midX} ${b.y} L ${b.x} ${b.y}`
+  /** Tinkercad 처럼 전선이 부드러운 곡선(케이블)으로 처지게 그린다 — 직각 꺾임 대신. */
+  const wirePath = (a: Point, b: Point) => {
+    const dx = Math.max(30, Math.abs(b.x - a.x) * 0.55)
+    return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <Palette tab={tab} setTab={setTab} addComponent={addComponent} addBreadboard={addBreadboard} />
+      <Palette
+        tab={tab}
+        setTab={setTab}
+        addComponent={addComponent}
+        addBreadboard={addBreadboard}
+        locked={locked}
+      />
 
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
-        className="h-[520px] w-full touch-none rounded-xl border border-cream-deep bg-cream/40 select-none"
+        className="h-[520px] w-full touch-none rounded-xl border border-cream-deep bg-[#eef2ea] select-none"
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={() => setDragging(null)}
       >
+        <defs>
+          <filter id="chico-shadow" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="2" stdDeviation="1.6" floodColor="#1c1917" floodOpacity="0.28" />
+          </filter>
+          <linearGradient id="chico-board-body" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#2c7a54" />
+            <stop offset="55%" stopColor="#1f6b48" />
+            <stop offset="100%" stopColor="#175a3c" />
+          </linearGradient>
+          <linearGradient id="chico-bb-body" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#fbfaf5" />
+            <stop offset="100%" stopColor="#ece7d8" />
+          </linearGradient>
+        </defs>
+
         {breadboards.map((b) => {
           const layout = breadboardLayouts.get(b.id)
           if (!layout) return null
@@ -292,7 +334,9 @@ function CircuitCanvas(
             <BreadboardGlyph
               key={b.id}
               layout={layout}
+              locked={locked}
               onBodyPointerDown={(event) => {
+                if (locked) return
                 const p = toSvgPoint(event.clientX, event.clientY)
                 setDragging({ id: b.id, kind: 'breadboard', dx: p.x - b.x, dy: p.y - b.y })
               }}
@@ -314,34 +358,35 @@ function CircuitCanvas(
           return (
             <path
               key={w.id}
-              d={elbowPath(a, b)}
-              stroke="#2563eb"
-              strokeWidth={3}
+              d={wirePath(a, b)}
+              stroke="#dc2626"
+              strokeWidth={3.5}
               fill="none"
               strokeLinecap="round"
-              className="cursor-pointer hover:stroke-red-500"
+              className={locked ? '' : 'cursor-pointer hover:stroke-red-800'}
               onClick={() => removeWire(w.id)}
             />
           )
         })}
-        {/* 실제 선 위(3px)는 클릭하기 얇아서, 안 보이는 굵은 선을 하나 더 깔아 클릭 영역을 넓힌다. */}
-        {wires.map((w) => (
-          <path
-            key={`${w.id}-hit`}
-            d={elbowPath(pinPoint(w.from), pinPoint(w.to))}
-            stroke="transparent"
-            strokeWidth={14}
-            fill="none"
-            className="cursor-pointer"
-            onClick={() => removeWire(w.id)}
-          />
-        ))}
+        {/* 실제 선(3.5px)은 클릭하기 얇아서, 안 보이는 굵은 선을 하나 더 깔아 클릭 영역을 넓힌다. */}
+        {!locked &&
+          wires.map((w) => (
+            <path
+              key={`${w.id}-hit`}
+              d={wirePath(pinPoint(w.from), pinPoint(w.to))}
+              stroke="transparent"
+              strokeWidth={14}
+              fill="none"
+              className="cursor-pointer"
+              onClick={() => removeWire(w.id)}
+            />
+          ))}
 
         {draft && (
           <path
-            d={elbowPath(pinPoint(draft.from), draft.to)}
+            d={wirePath(pinPoint(draft.from), draft.to)}
             stroke="#94a3b8"
-            strokeWidth={2}
+            strokeWidth={2.5}
             strokeDasharray="4 3"
             fill="none"
           />
@@ -354,7 +399,9 @@ function CircuitCanvas(
             gpioLevels={gpioLevels}
             gpioForPin={(pin) => gpioForPin(c.id, pin)}
             active={activeInputs.has(c.id)}
+            locked={locked}
             onBodyPointerDown={(event) => {
+              if (locked) return
               const p = toSvgPoint(event.clientX, event.clientY)
               setDragging({ id: c.id, kind: 'component', dx: p.x - c.x, dy: p.y - c.y })
             }}
@@ -382,11 +429,13 @@ function Palette({
   setTab,
   addComponent,
   addBreadboard,
+  locked,
 }: {
   tab: ComponentCategory | 'breadboard'
   setTab: (t: ComponentCategory | 'breadboard') => void
   addComponent: (type: ComponentType) => void
   addBreadboard: (size: BreadboardSize) => void
+  locked: boolean
 }) {
   const TABS: { key: ComponentCategory | 'breadboard'; label: string }[] = [
     { key: 'output', label: '출력 장치' },
@@ -418,8 +467,9 @@ function Palette({
           ? COMPONENT_LIST.filter((c) => c.category === tab).map((c) => (
               <button
                 key={c.type}
+                disabled={locked}
                 onClick={() => addComponent(c.type)}
-                className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50"
+                className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {c.emoji} {c.label} 추가
               </button>
@@ -427,14 +477,17 @@ function Palette({
           : BREADBOARD_SIZES.map((b) => (
               <button
                 key={b.size}
+                disabled={locked}
                 onClick={() => addBreadboard(b.size)}
-                className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50"
+                className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 🍞 {b.label} 추가
               </button>
             ))}
         <span className="text-xs text-ink-500">
-          핀(원)을 끌어 다른 핀까지 전선을 잇고, 몸통은 끌어서 옮기고, 전선/✕는 클릭합니다.
+          {locked
+            ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
+            : '핀(원)을 끌어 다른 핀까지 전선을 잇고, 몸통은 끌어서 옮기고, 전선/✕는 클릭합니다.'}
         </span>
       </div>
     </div>
@@ -447,6 +500,7 @@ function PinDot({
   r,
   fill,
   stroke,
+  interactive,
   onPointerDown,
   onPointerUp,
 }: {
@@ -455,6 +509,7 @@ function PinDot({
   r: number
   fill: string
   stroke: string
+  interactive: boolean
   onPointerDown: (e: React.PointerEvent) => void
   onPointerUp: (e: React.PointerEvent) => void
 }) {
@@ -466,21 +521,23 @@ function PinDot({
       fill={fill}
       stroke={stroke}
       strokeWidth={1}
-      className="cursor-crosshair"
-      onPointerDown={onPointerDown}
-      onPointerUp={onPointerUp}
+      className={interactive ? 'cursor-crosshair' : ''}
+      onPointerDown={interactive ? onPointerDown : undefined}
+      onPointerUp={interactive ? onPointerUp : undefined}
     />
   )
 }
 
 function BreadboardGlyph({
   layout,
+  locked,
   onBodyPointerDown,
   onRemove,
   onDotPointerDown,
   onDotPointerUp,
 }: {
   layout: BreadboardLayout
+  locked: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
   onRemove: () => void
   onDotPointerDown: (ref: PinRef, point: Point) => void
@@ -488,6 +545,8 @@ function BreadboardGlyph({
 }) {
   const l = layout
   const dots: React.ReactNode[] = []
+  const ROW_LETTERS_TOP = ['a', 'b', 'c', 'd', 'e']
+  const ROW_LETTERS_BOTTOM = ['f', 'g', 'h', 'i', 'j']
 
   for (let col = 0; col < l.columns; col++) {
     const x = l.colX(col)
@@ -498,9 +557,10 @@ function BreadboardGlyph({
           key={`t${col}-${i}`}
           x={x}
           y={y}
-          r={3.5}
+          r={3.2}
           fill="#fff"
-          stroke="#c9b28a"
+          stroke="#c2b391"
+          interactive={!locked}
           onPointerDown={(e) => {
             e.stopPropagation()
             onDotPointerDown(ref, { x, y })
@@ -519,9 +579,10 @@ function BreadboardGlyph({
           key={`b${col}-${i}`}
           x={x}
           y={y}
-          r={3.5}
+          r={3.2}
           fill="#fff"
-          stroke="#c9b28a"
+          stroke="#c2b391"
+          interactive={!locked}
           onPointerDown={(e) => {
             e.stopPropagation()
             onDotPointerDown(ref, { x, y })
@@ -543,9 +604,10 @@ function BreadboardGlyph({
         key={`rp${col}`}
         x={x}
         y={l.railPlusY}
-        r={3}
+        r={2.8}
         fill="#fecaca"
         stroke="#ef4444"
+        interactive={!locked}
         onPointerDown={(e) => {
           e.stopPropagation()
           onDotPointerDown(plusRef, { x, y: l.railPlusY })
@@ -561,9 +623,10 @@ function BreadboardGlyph({
         key={`rm${col}`}
         x={x}
         y={l.railMinusY}
-        r={3}
+        r={2.8}
         fill="#cbd5f5"
         stroke="#3b82f6"
+        interactive={!locked}
         onPointerDown={(e) => {
           e.stopPropagation()
           onDotPointerDown(minusRef, { x, y: l.railMinusY })
@@ -576,33 +639,70 @@ function BreadboardGlyph({
     )
   }
 
+  // 5칸마다 눈금(1, 5, 10, …) — 진짜 브레드보드처럼.
+  const tickCols = [0]
+  for (let c = 4; c < l.columns; c += 5) tickCols.push(c)
+
   return (
-    <g>
+    <g style={{ filter: 'url(#chico-shadow)' }}>
+      <rect x={l.x} y={l.y} width={l.width} height={l.height} rx={6} fill="url(#chico-bb-body)" stroke="#cbbf9c" />
+      {/* 전원 레일 줄무늬 */}
+      <line x1={l.x + 10} y1={l.railPlusY} x2={l.x + l.width - 10} y2={l.railPlusY} stroke="#f87171" strokeWidth={1.5} opacity={0.5} />
+      <line x1={l.x + 10} y1={l.railMinusY} x2={l.x + l.width - 10} y2={l.railMinusY} stroke="#60a5fa" strokeWidth={1.5} opacity={0.5} />
+      <text x={l.x + 6} y={l.railPlusY + 3} fontSize={9} fill="#dc2626" fontWeight="bold">+</text>
+      <text x={l.x + 6} y={l.railMinusY + 3} fontSize={9} fill="#2563eb" fontWeight="bold">−</text>
+      {/* 가운데 홈(중앙 골) */}
+      <rect
+        x={l.x + 8}
+        y={(l.topRowsY[4] + l.bottomRowsY[0]) / 2 - 3}
+        width={l.width - 16}
+        height={6}
+        fill="#00000010"
+      />
+      {/* 줄 문자(a~e / f~j) */}
+      {ROW_LETTERS_TOP.map((letter, i) => (
+        <text key={letter} x={l.x + 8} y={l.topRowsY[i] + 3} fontSize={7} fill="#a08a5c">
+          {letter}
+        </text>
+      ))}
+      {ROW_LETTERS_BOTTOM.map((letter, i) => (
+        <text key={letter} x={l.x + 8} y={l.bottomRowsY[i] + 3} fontSize={7} fill="#a08a5c">
+          {letter}
+        </text>
+      ))}
+      {/* 칸 눈금 숫자 */}
+      {tickCols.map((c) => (
+        <text key={c} x={l.colX(c)} y={l.topRowsY[0] - 8} fontSize={7} fill="#a08a5c" textAnchor="middle">
+          {c + 1}
+        </text>
+      ))}
+
       <rect
         x={l.x}
         y={l.y}
         width={l.width}
         height={l.height}
-        rx={8}
-        fill="#f2e6c9"
-        stroke="#d8c39a"
-        className="cursor-grab"
-        onPointerDown={onBodyPointerDown}
+        rx={6}
+        fill="transparent"
+        className={locked ? '' : 'cursor-grab'}
+        onPointerDown={locked ? undefined : onBodyPointerDown}
       />
-      <text x={l.x + 8} y={l.y + l.height - 6} fontSize={10} fill="#a08a5c">
+      <text x={l.x + l.width / 2} y={l.y + l.height + 12} fontSize={9} fill="#8a7a55" textAnchor="middle">
         브레드보드
       </text>
-      <text
-        x={l.x + l.width - 8}
-        y={l.y + l.height - 6}
-        fontSize={9}
-        fill="#b91c1c"
-        textAnchor="end"
-        className="cursor-pointer"
-        onClick={onRemove}
-      >
-        ✕ 삭제
-      </text>
+      {!locked && (
+        <text
+          x={l.x + l.width - 4}
+          y={l.y + 10}
+          fontSize={9}
+          fill="#b91c1c"
+          textAnchor="end"
+          className="cursor-pointer"
+          onClick={onRemove}
+        >
+          ✕
+        </text>
+      )}
       {dots}
     </g>
   )
@@ -615,24 +715,34 @@ function PicoBoard({
   onPinPointerDown: (pin: BoardPin, point: Point) => void
   onPinPointerUp: (pin: BoardPin) => void
 }) {
+  const cx = BOARD_X + BOARD_WIDTH / 2
   return (
-    <g>
+    <g style={{ filter: 'url(#chico-shadow)' }}>
       <rect
         x={BOARD_X}
         y={BOARD_Y}
         width={BOARD_WIDTH}
         height={BOARD_HEIGHT}
         rx={10}
-        fill="#1f6b4d"
-        stroke="#134a34"
+        fill="url(#chico-board-body)"
+        stroke="#0f3d29"
       />
+      {/* USB 커넥터 */}
+      <rect x={cx - 18} y={BOARD_Y - 6} width={36} height={16} rx={2} fill="#c7cdd6" stroke="#8891a1" />
+      {/* BOOTSEL 버튼 */}
+      <rect x={cx - 12} y={BOARD_Y + 60} width={24} height={24} rx={3} fill="#f8fafc" stroke="#cbd5e1" />
+      <text x={cx} y={BOARD_Y + 90} fontSize={6} fill="#bfe3d2" textAnchor="middle">
+        BOOTSEL
+      </text>
+      {/* 칩 */}
+      <rect x={cx - 22} y={BOARD_Y + 130} width={44} height={44} rx={2} fill="#111827" stroke="#000" />
       <text
-        x={BOARD_X + BOARD_WIDTH / 2}
-        y={BOARD_Y + BOARD_HEIGHT / 2}
+        x={cx}
+        y={BOARD_Y + BOARD_HEIGHT / 2 + 60}
         fontSize={13}
         fill="#bfe3d2"
         textAnchor="middle"
-        transform={`rotate(90 ${BOARD_X + BOARD_WIDTH / 2} ${BOARD_Y + BOARD_HEIGHT / 2})`}
+        transform={`rotate(90 ${cx} ${BOARD_Y + BOARD_HEIGHT / 2 + 60})`}
       >
         Pico 2 W
       </text>
@@ -666,11 +776,20 @@ function BoardPinDot({
   const labelX = pin.side === 'left' ? pin.x - 8 : pin.x + 8
   return (
     <g>
+      <rect
+        x={pin.x - 5}
+        y={pin.y - 5}
+        width={10}
+        height={10}
+        rx={2}
+        fill="#0b2f1f"
+        stroke="#0b2f1f"
+      />
       <circle
         cx={pin.x}
         cy={pin.y}
-        r={4.5}
-        fill={pin.gpio !== null ? '#facc15' : '#94a3b8'}
+        r={4}
+        fill={pin.gpio !== null ? '#facc15' : '#cbd5e1'}
         stroke="#0f172a"
         strokeWidth={1}
         className="cursor-crosshair"
@@ -695,6 +814,7 @@ function ComponentGlyph({
   gpioLevels,
   gpioForPin,
   active,
+  locked,
   onBodyPointerDown,
   onPinPointerDown,
   onPinPointerUp,
@@ -705,6 +825,7 @@ function ComponentGlyph({
   gpioLevels: Map<number, 0 | 1>
   gpioForPin: (pin: string) => number | undefined
   active: boolean
+  locked: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGGElement>) => void
   onPinPointerDown: (pin: string, e: React.PointerEvent) => void
   onPinPointerUp: (pin: string, e: React.PointerEvent) => void
@@ -717,75 +838,111 @@ function ComponentGlyph({
     return gpio !== undefined && gpioLevels.get(gpio) === 1
   }
 
+  /** 부품 몸통에서 각 핀까지 내려가는 다리(리드선) — 실제 부품처럼 보이게 한다. */
+  const Legs = () => (
+    <>
+      {pins.map((p) => (
+        <line
+          key={p.pin}
+          x1={p.dx * 0.4}
+          y1={30}
+          x2={p.dx}
+          y2={p.dy}
+          stroke="#9ca3af"
+          strokeWidth={2}
+        />
+      ))}
+    </>
+  )
+
   return (
     <g transform={`translate(${component.x} ${component.y})`}>
+      {(component.type === 'led' || component.type === 'rgb-led' || component.type === 'buzzer') && <Legs />}
+
       {component.type === 'led' && (
-        <g onPointerDown={onBodyPointerDown} className="cursor-grab">
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          <path d="M -13 20 A 13 13 0 1 1 13 20 L 13 26 L -13 26 Z" fill="#78716c" opacity={0.35} />
           <circle
             cx={0}
-            cy={20}
-            r={16}
-            fill={isOn('anode') || isOn('cathode') ? '#fde047' : '#e5e7eb'}
-            stroke={isOn('anode') || isOn('cathode') ? '#f59e0b' : '#9ca3af'}
+            cy={18}
+            r={14}
+            fill={isOn('anode') || isOn('cathode') ? '#fde047' : '#fca5a5'}
+            stroke={isOn('anode') || isOn('cathode') ? '#f59e0b' : '#b91c1c'}
             strokeWidth={2}
-            style={isOn('anode') || isOn('cathode') ? { filter: 'drop-shadow(0 0 8px #fbbf24)' } : undefined}
+            style={isOn('anode') || isOn('cathode') ? { filter: 'drop-shadow(0 0 9px #fbbf24)' } : undefined}
           />
-          <text x={0} y={24} fontSize={9} textAnchor="middle" fill="#57534e">
-            LED
-          </text>
+          <ellipse cx={-4} cy={13} rx={4} ry={2.5} fill="#ffffff" opacity={0.5} />
         </g>
       )}
 
       {component.type === 'rgb-led' && (
-        <g onPointerDown={onBodyPointerDown} className="cursor-grab">
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          <path d="M -14 20 A 14 14 0 1 1 14 20 L 14 26 L -14 26 Z" fill="#78716c" opacity={0.3} />
           <circle
             cx={0}
-            cy={20}
-            r={16}
-            fill={`rgb(${isOn('r') ? 255 : 60}, ${isOn('g') ? 255 : 60}, ${isOn('b') ? 255 : 60})`}
-            stroke="#78716c"
+            cy={18}
+            r={15}
+            fill={`rgb(${isOn('r') ? 255 : 90}, ${isOn('g') ? 255 : 90}, ${isOn('b') ? 255 : 90})`}
+            stroke="#57534e"
             strokeWidth={2}
+            opacity={0.9}
             style={
               isOn('r') || isOn('g') || isOn('b')
-                ? { filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.8))' }
+                ? { filter: 'drop-shadow(0 0 9px rgba(255,255,255,0.9))' }
                 : undefined
             }
           />
-          <text x={0} y={24} fontSize={8} textAnchor="middle" fill="#57534e">
-            RGB
-          </text>
+          <ellipse cx={-4} cy={12} rx={4} ry={2.5} fill="#ffffff" opacity={0.6} />
         </g>
       )}
 
       {component.type === 'buzzer' && (
-        <g onPointerDown={onBodyPointerDown} className="cursor-grab">
-          <rect
-            x={-14}
-            y={4}
-            width={28}
-            height={22}
-            rx={14}
-            fill={isOn('positive') || isOn('negative') ? '#fca5a5' : '#e7e5e4'}
-            stroke={isOn('positive') || isOn('negative') ? '#ef4444' : '#a8a29e'}
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          <circle
+            cx={0}
+            cy={18}
+            r={15}
+            fill={isOn('positive') || isOn('negative') ? '#fca5a5' : '#3f3f46'}
+            stroke={isOn('positive') || isOn('negative') ? '#ef4444' : '#18181b'}
             strokeWidth={2}
           />
-          <text x={0} y={19} fontSize={9} textAnchor="middle" fill="#57534e">
+          <circle cx={0} cy={18} r={7} fill="#18181b" opacity={0.6} />
+          <text x={0} y={22} fontSize={8} textAnchor="middle" fill="#fafaf9">
             🔔
           </text>
         </g>
       )}
 
       {component.type === 'button' && (
-        <g onPointerDown={onBodyPointerDown} className="cursor-grab">
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          <line x1={-16} y1={20} x2={-16} y2={18} stroke="#9ca3af" strokeWidth={2} />
+          <line x1={16} y1={20} x2={16} y2={18} stroke="#9ca3af" strokeWidth={2} />
+          <rect x={-18} y={0} width={36} height={20} rx={3} fill="#e7e5e4" stroke="#78716c" strokeWidth={1.5} />
           <rect
-            x={-20}
-            y={0}
-            width={40}
-            height={20}
-            rx={4}
-            fill={active ? '#fde68a' : '#f5f0e6'}
-            stroke="#a8a29e"
-            strokeWidth={2}
+            x={-11}
+            y={active ? 5 : 3}
+            width={22}
+            height={12}
+            rx={2}
+            fill={active ? '#fbbf24' : '#f5f0e6'}
+            stroke="#57534e"
+            strokeWidth={1.5}
             className="cursor-pointer"
             onPointerDown={(e) => {
               e.stopPropagation()
@@ -797,44 +954,48 @@ function ComponentGlyph({
             }}
             onPointerLeave={() => active && onInputActiveChange(false)}
           />
-          <text x={0} y={14} fontSize={9} textAnchor="middle" fill="#57534e">
-            버튼
-          </text>
         </g>
       )}
 
       {component.type === 'switch' && (
-        <g onPointerDown={onBodyPointerDown} className="cursor-grab">
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          <line x1={-16} y1={20} x2={-16} y2={18} stroke="#9ca3af" strokeWidth={2} />
+          <line x1={16} y1={20} x2={16} y2={18} stroke="#9ca3af" strokeWidth={2} />
+          <rect x={-18} y={2} width={36} height={16} rx={8} fill="#e7e5e4" stroke="#78716c" strokeWidth={1.5} />
           <rect
-            x={-20}
-            y={0}
-            width={40}
-            height={20}
-            rx={10}
-            fill={active ? '#bbf7d0' : '#f5f0e6'}
-            stroke={active ? '#22c55e' : '#a8a29e'}
-            strokeWidth={2}
+            x={-16}
+            y={4}
+            width={32}
+            height={12}
+            rx={6}
+            fill={active ? '#bbf7d0' : '#d6d3d1'}
             className="cursor-pointer"
             onClick={(e) => {
               e.stopPropagation()
               onInputActiveChange(!active)
             }}
           />
-          <circle cx={active ? 10 : -10} cy={10} r={7} fill="#fff" stroke="#78716c" strokeWidth={1} />
+          <circle cx={active ? 10 : -10} cy={10} r={6} fill="#fff" stroke="#57534e" strokeWidth={1} />
         </g>
       )}
 
-      <text
-        x={0}
-        y={-6}
-        fontSize={9}
-        textAnchor="middle"
-        fill="#b91c1c"
-        className="cursor-pointer"
-        onClick={onRemove}
-      >
-        ✕ 삭제
-      </text>
+      {!locked && (
+        <text
+          x={0}
+          y={-6}
+          fontSize={9}
+          textAnchor="middle"
+          fill="#b91c1c"
+          className="cursor-pointer"
+          onClick={onRemove}
+        >
+          ✕ 삭제
+        </text>
+      )}
 
       {pins.map((p) => (
         <circle
@@ -845,9 +1006,9 @@ function ComponentGlyph({
           fill={gpioForPin(p.pin) !== undefined ? '#4ade80' : '#fff'}
           stroke="#334155"
           strokeWidth={1}
-          className="cursor-crosshair"
-          onPointerDown={(e) => onPinPointerDown(p.pin, e)}
-          onPointerUp={(e) => onPinPointerUp(p.pin, e)}
+          className={locked ? '' : 'cursor-crosshair'}
+          onPointerDown={locked ? undefined : (e) => onPinPointerDown(p.pin, e)}
+          onPointerUp={locked ? undefined : (e) => onPinPointerUp(p.pin, e)}
         />
       ))}
     </g>
