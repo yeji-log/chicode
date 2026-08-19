@@ -21,9 +21,9 @@ export default function Practice() {
           작성하고 실행 결과를 확인해 보세요.
         </FeatureCard>
         <FeatureCard to="/practice/c" emoji="⚙️" title="C언어">
-          컴파일부터 실행까지 브라우저에서.
+          웹 브라우저에서 바로 C 코드를
           <br />
-          진짜 C 컴파일러가 그대로 돌아갑니다.
+          작성하고 컴파일하여 실행해 보세요.
         </FeatureCard>
         <FeatureCard to="/practice/pico" emoji="🔌" title="Pico 2 W">
           가상 보드로 GPIO, LED, Button 을
