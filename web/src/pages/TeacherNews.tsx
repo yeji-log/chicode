@@ -212,6 +212,8 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
                       category: issue.category,
                       keywords: issue.keywords,
                     }}
+                    sourceName={issue.sourceName}
+                    sourceUrl={issue.sourceUrl}
                     submitLabel="수정 저장"
                     busyLabel="저장 중…"
                     onCancel={() => setEditingPublishedId(null)}
@@ -237,12 +239,16 @@ interface PublishFormValues {
 
 function PublishForm({
   initial,
+  sourceName,
+  sourceUrl,
   submitLabel,
   busyLabel,
   onCancel,
   onSubmit,
 }: {
   initial: PublishFormValues
+  sourceName?: string
+  sourceUrl?: string
   submitLabel: string
   busyLabel: string
   onCancel: () => void
@@ -289,6 +295,17 @@ function PublishForm({
       onSubmit={handleSubmit}
       className="mt-4 flex flex-col gap-4 rounded-xl border border-cheese-200 bg-cheese-50 p-4"
     >
+      {sourceUrl && (
+        <a
+          href={sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-fit text-xs font-semibold text-cheese-600 underline underline-offset-2"
+        >
+          원문 보기{sourceName ? ` (${sourceName})` : ''} →
+        </a>
+      )}
+
       <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
         제목 (학생이 볼 문장으로 다듬기)
         <input
