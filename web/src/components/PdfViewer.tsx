@@ -192,7 +192,14 @@ export default function PdfViewer({
         // 한도를 넘어서인 것으로 보인다. 발표 모드의 전체화면 오버레이처럼
         // 화면 전체 크기로 그릴 때 특히 이 값이 커진다. 화질 차이가 거의
         // 안 느껴지는 선에서 최대 변 길이를 안전하게 제한한다.
-        const MAX_CANVAS_SIDE = 2600
+        //
+        // 2600 으로는 갤럭시 탭 발표 모드(전체화면)에서 여전히 완전히 빈 화면만
+        // 남는다는 실사용 보고를 받아서 더 낮췄다. 다만 이 기기로 직접
+        // 재현·검증은 못 했다 — "GPU 텍스처 한도" 자체가 확인된 사실이 아니라
+        // 증상(에러 없이 완전히 빈 화면, 전체화면일 때만)에 들어맞는 가장 유력한
+        // 추정이다. 다음에도 안 되면 이 추정 자체가 틀렸다는 뜻이니 다른 원인을
+        // 봐야 한다.
+        const MAX_CANVAS_SIDE = 1600
         const longestSide = Math.max(viewport.width, viewport.height)
         if (longestSide > MAX_CANVAS_SIDE) {
           viewport = target.getViewport({ scale: (scale * ratio * MAX_CANVAS_SIDE) / longestSide })
