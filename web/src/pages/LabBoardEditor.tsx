@@ -1183,9 +1183,24 @@ function SectionAttachmentUploader({
  * 이유는 Materials 의 SubjectPanel과 같다 — 파일은 activityId 가 있어야
  * 붙일 수 있는데(chunk 경로가 activityId 기준), 새 활동은 첫 저장 전엔
  * id 가 없다.
+ *
+ * onChange는 원래(Lab 활동) 쓰임에는 필요 없었다 — 이 컴포넌트가 자기 상태를
+ * 그대로 그려서 끝이었으니까. OtPresentationPanel(교사 페이지 OT 탭)이 업로드
+ * 직후 미리보기/발표 시작 버튼을 새 파일로 갱신해야 해서 추가했다 — 있으면
+ * slides가 바뀔 때마다 부모에 최신값을 흘려준다.
  */
-function SlidesPanel({ activityId }: { activityId: string }) {
-  const [slides, setSlides] = useState<LabSlideSet>({ pptx: null, pdf: null })
+export function SlidesPanel({
+  activityId,
+  onChange,
+}: {
+  activityId: string
+  onChange?: (slides: LabSlideSet) => void
+}) {
+  const [slides, setSlidesState] = useState<LabSlideSet>({ pptx: null, pdf: null })
+  function setSlides(next: LabSlideSet) {
+    setSlidesState(next)
+    onChange?.(next)
+  }
   const [pptxFile, setPptxFile] = useState<File | null>(null)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1196,8 +1211,11 @@ function SlidesPanel({ activityId }: { activityId: string }) {
 
   useEffect(() => {
     setLoading(true)
+    // 최초 로드는 onChange를 안 울린다 — 부모(OtPresentationPanel)가 이미 자기
+    // 몫으로 한 번 불러오므로, 여기서도 알리면 마운트 시점에 같은 파일을 두 번
+    // 내려받게 된다. onChange는 "그 뒤에 실제로 뭔가 바뀌었을 때"만 쓴다.
     getSlideSet(activityId)
-      .then(setSlides)
+      .then(setSlidesState)
       .finally(() => setLoading(false))
   }, [activityId])
 

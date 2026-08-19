@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthProvider'
+import OtPresentationPanel from '../components/OtPresentationPanel'
 import ToggleSwitch from '../components/ToggleSwitch'
 import { asset } from '../lib/asset'
 import { isFirebaseConfigured } from '../lib/firebase'
@@ -617,7 +618,12 @@ function SubjectPanel({
         </button>
       </nav>
 
-      {panelTab === 'ot' && <OtFrame subject={subject} />}
+      {panelTab === 'ot' && (
+        <div className="flex flex-col gap-6">
+          <OtFrame subject={subject} />
+          <OtPresentationPanel subjectId={subject.id} />
+        </div>
+      )}
 
       {panelTab === 'materials' && (
         <>
