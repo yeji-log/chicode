@@ -9,7 +9,7 @@ import { AuthProvider } from './auth/AuthProvider'
 import Home from './pages/Home'
 import News from './pages/News'
 import Materials from './pages/Materials'
-import SubjectMaterials, { MaterialsList } from './pages/SubjectMaterials'
+import SubjectMaterials, { MaterialsList, SubjectOt } from './pages/SubjectMaterials'
 import Practice from './pages/Practice'
 import LabGate from './pages/LabGate'
 import LabHome from './pages/LabHome'
@@ -44,6 +44,7 @@ createRoot(document.getElementById('root')!).render(
                 자료 목록은 /materials 하위 경로로 옮겼다. */}
             <Route path="materials/:subjectId" element={<SubjectMaterials />}>
               <Route index element={<LabRoadmap />} />
+              <Route path="ot" element={<SubjectOt />} />
               <Route path="materials" element={<MaterialsList />} />
               <Route path="content" element={<LabActivities />} />
               <Route path="content/:id" element={<LabActivityDetail />} />

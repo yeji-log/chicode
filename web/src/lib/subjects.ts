@@ -34,6 +34,12 @@ export interface SubjectMeta {
   pin: string
   notionUrl: string
   order: number
+  /** 과목 페이지의 "OT" 탭에 iframe으로 띄울 오리엔테이션 페이지 주소.
+   *  비어 있으면 OT 탭 자체가 안 보인다(SubjectMaterials.tsx). notionUrl과
+   *  달리 새 창으로 안 열고 화면 안에 그대로 보여주므로, 임베드를 막는
+   *  사이트(X-Frame-Options/CSP frame-ancestors)를 넣으면 빈 화면만 보인다 —
+   *  등록 전에 확인할 것. */
+  otUrl?: string
   /** false 면 학생이 핀 없이 바로 열람할 수 있다. 수업 시간에 핀을 잘못
    *  불러주거나 학생이 오타를 반복해서 시간을 잡아먹는 걸 교사가 그 자리에서
    *  임시로 풀어줄 수 있게 하는 스위치다(교사 페이지에서 토글). 필드 자체가
@@ -73,7 +79,9 @@ export async function getSubject(id: string): Promise<SubjectMeta | null> {
 
 export async function updateSubject(
   id: string,
-  patch: Partial<Pick<SubjectMeta, 'name' | 'pin' | 'notionUrl' | 'pinRequired' | 'published'>>,
+  patch: Partial<
+    Pick<SubjectMeta, 'name' | 'pin' | 'notionUrl' | 'otUrl' | 'pinRequired' | 'published'>
+  >,
 ): Promise<void> {
   await updateDoc(doc(db, SUBJECTS, id), patch)
 }
@@ -88,6 +96,7 @@ export async function createSubject(input: {
   name: string
   pin: string
   notionUrl?: string
+  otUrl?: string
 }): Promise<SubjectMeta> {
   const existing = await listSubjects()
   const nextOrder = existing.reduce((max, subject) => Math.max(max, subject.order ?? 0), -1) + 1
@@ -97,6 +106,7 @@ export async function createSubject(input: {
     name: input.name.trim(),
     pin: input.pin.trim(),
     notionUrl: input.notionUrl?.trim() ?? '',
+    otUrl: input.otUrl?.trim() ?? '',
     order: nextOrder,
     pinRequired: true,
     published: false,

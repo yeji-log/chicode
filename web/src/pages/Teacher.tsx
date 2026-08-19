@@ -348,6 +348,7 @@ function AddSubjectForm({
   const [name, setName] = useState('')
   const [pin, setPin] = useState('')
   const [notionUrl, setNotionUrl] = useState('')
+  const [otUrl, setOtUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -367,7 +368,7 @@ function AddSubjectForm({
     setBusy(true)
     setError(null)
     try {
-      const subject = await createSubject({ name: trimmedName, pin: trimmedPin, notionUrl })
+      const subject = await createSubject({ name: trimmedName, pin: trimmedPin, notionUrl, otUrl })
       onCreated(subject)
     } catch (caught) {
       console.error('과목 만들기 실패', caught)
@@ -389,7 +390,7 @@ function AddSubjectForm({
         준비중인 동안에도 학생 화면 과목 목록에는 이름이 보이지만 들어갈 수는 없습니다.
       </p>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
           과목 이름
           <input
@@ -422,6 +423,16 @@ function AddSubjectForm({
             value={notionUrl}
             onChange={(event) => setNotionUrl(event.target.value)}
             placeholder="https://www.notion.so/..."
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          OT 링크 (선택)
+          <input
+            value={otUrl}
+            onChange={(event) => setOtUrl(event.target.value)}
+            placeholder="https://..."
             className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
           />
         </label>
@@ -760,6 +771,7 @@ function SubjectSettings({
 }) {
   const [pin, setPin] = useState(subject.pin)
   const [notionUrl, setNotionUrl] = useState(subject.notionUrl ?? '')
+  const [otUrl, setOtUrl] = useState(subject.otUrl ?? '')
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
@@ -826,7 +838,7 @@ function SubjectSettings({
     setBusy(true)
     setSaveError(null)
     try {
-      const patch = { pin: trimmedPin, notionUrl: notionUrl.trim() }
+      const patch = { pin: trimmedPin, notionUrl: notionUrl.trim(), otUrl: otUrl.trim() }
       await updateSubject(subject.id, patch)
       onChange(patch)
       setSavedAt(Date.now())
@@ -896,7 +908,7 @@ function SubjectSettings({
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
           핀번호
           <input
@@ -921,6 +933,22 @@ function SubjectSettings({
             placeholder="https://www.notion.so/..."
             className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
           />
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink-700">
+          OT 링크 (선택)
+          <input
+            value={otUrl}
+            onChange={(event) => {
+              setOtUrl(event.target.value)
+              setSaveError(null)
+            }}
+            placeholder="https://..."
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+          />
+          <span className="text-xs font-normal text-ink-500">
+            학생 화면 OT 탭에 이 페이지를 화면 안에 그대로 띄웁니다. 비워두면 OT 탭이 안 보입니다.
+          </span>
         </label>
       </div>
 

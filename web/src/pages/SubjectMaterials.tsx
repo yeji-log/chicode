@@ -179,10 +179,13 @@ function SubjectShell({
 }) {
   const location = useLocation()
   const basePath = `/materials/${subject.id}`
+  const otPath = `${basePath}/ot`
   const materialsPath = `${basePath}/materials`
   // 수업목차 탭이 index 라우트(basePath 자체 + content/:id 전부)이고, 자료
   // 탭만 별도 경로(materialsPath)다 — 학생이 과목에 들어오면 자료보다
-  // 수업목차부터 보게 하려고 main.tsx 에서 순서를 이렇게 잡았다.
+  // 수업목차부터 보게 하려고 main.tsx 에서 순서를 이렇게 잡았다. OT 탭(otPath)은
+  // 그보다 앞에 탭으로만 추가한 것이라 기본 진입 화면은 그대로 수업목차다.
+  const isOtTab = location.pathname === otPath || location.pathname === `${otPath}/`
   const isMaterialsTab =
     location.pathname === materialsPath || location.pathname === `${materialsPath}/`
 
@@ -220,11 +223,24 @@ function SubjectShell({
       </header>
 
       <nav className="flex gap-2 border-b border-cream-deep pb-3">
+        {subject.otUrl && (
+          <Link
+            to={otPath}
+            className={[
+              'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+              isOtTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+            ].join(' ')}
+          >
+            🙋 OT
+          </Link>
+        )}
         <Link
           to={basePath}
           className={[
             'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-            !isMaterialsTab ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+            !isOtTab && !isMaterialsTab
+              ? 'bg-cheese-400 text-ink-900'
+              : 'text-ink-700 hover:bg-cheese-100',
           ].join(' ')}
         >
           🗺️ 수업목차
@@ -242,6 +258,32 @@ function SubjectShell({
 
       <Outlet context={{ subject, isTeacherViewer } satisfies SubjectOutletContext} />
     </div>
+  )
+}
+
+/**
+ * OT 탭 내용 — subject.otUrl을 화면 안에 iframe으로 그대로 띄운다. 새 탭으로
+ * 여는 노션 링크와 달리 여기는 "화면 안에 그대로 보여달라"는 요청이라 iframe을
+ * 썼다. otUrl이 비어 있으면 nav에서 OT 탭 자체가 안 보이지만, 링크를 직접 쳐서
+ * 들어오는 경우(또는 저장 도중 값이 사라진 경우)를 대비해 안내 문구를 둔다.
+ */
+export function SubjectOt() {
+  const { subject } = useSubjectContext()
+
+  if (!subject.otUrl) {
+    return (
+      <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-14 text-center text-sm text-ink-500">
+        아직 OT 링크가 설정되지 않았습니다.
+      </p>
+    )
+  }
+
+  return (
+    <iframe
+      src={subject.otUrl}
+      title={`${subject.name} OT`}
+      className="h-[80vh] w-full rounded-2xl border border-cream-deep bg-white"
+    />
   )
 }
 
