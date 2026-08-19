@@ -28,6 +28,7 @@ import {
   type SubjectMeta,
 } from '../lib/subjects'
 import { ActivitiesPanel, SeasonsPanel } from './LabBoardEditor'
+import { OtFrame } from './SubjectMaterials'
 import TeacherLab from './TeacherLab'
 import TeacherNews from './TeacherNews'
 
@@ -487,7 +488,10 @@ function SubjectPanel({
   // 수업자료용으로 바꿈) 두 탭 — TeacherDashboard의 최상위 section 탭과 같은 자리 원칙.
   // 기본값은 수업목차 — 학생 화면(SubjectMaterials.tsx)도 과목에 들어가면
   // 자료보다 수업목차부터 보이게 되어 있어서, 교사 쪽도 같은 순서로 맞췄다.
-  const [panelTab, setPanelTab] = useState<'materials' | 'outline'>('outline')
+  // "OT" 탭은 학생 화면과 달리 여기서만 별도로 노출한다 — 교사가 수업 시작
+  // 전에 이 화면을 열어 프로젝터로 띄워놓고 진행하려는 용도. otUrl이 설정된
+  // 과목에서만 탭이 보인다(SubjectSettings 아래 참고).
+  const [panelTab, setPanelTab] = useState<'materials' | 'outline' | 'ot'>('outline')
 
   useEffect(() => {
     listMaterials(subject.id).then(setMaterials)
@@ -578,6 +582,17 @@ function SubjectPanel({
       />
 
       <nav className="flex gap-2 border-b border-cream-deep pb-3">
+        {subject.otUrl && (
+          <button
+            onClick={() => setPanelTab('ot')}
+            className={[
+              'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+              panelTab === 'ot' ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+            ].join(' ')}
+          >
+            🙋 OT
+          </button>
+        )}
         <button
           onClick={() => setPanelTab('outline')}
           className={[
@@ -601,6 +616,8 @@ function SubjectPanel({
           📎 자료
         </button>
       </nav>
+
+      {panelTab === 'ot' && <OtFrame subject={subject} />}
 
       {panelTab === 'materials' && (
         <>

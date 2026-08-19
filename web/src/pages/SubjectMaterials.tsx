@@ -262,14 +262,13 @@ function SubjectShell({
 }
 
 /**
- * OT 탭 내용 — subject.otUrl을 화면 안에 iframe으로 그대로 띄운다. 새 탭으로
- * 여는 노션 링크와 달리 여기는 "화면 안에 그대로 보여달라"는 요청이라 iframe을
- * 썼다. otUrl이 비어 있으면 nav에서 OT 탭 자체가 안 보이지만, 링크를 직접 쳐서
- * 들어오는 경우(또는 저장 도중 값이 사라진 경우)를 대비해 안내 문구를 둔다.
+ * subject.otUrl을 화면 안에 iframe으로 그대로 띄우는 공용 조각 — 학생용 OT 탭
+ * (SubjectOt, 아래)과 교사 페이지(Teacher.tsx의 SubjectPanel)가 함께 쓴다.
+ * 교사가 수업 중 이 화면을 프로젝터로 띄우고 진행하는 용도라, 학생 화면과
+ * 똑같이 iframe으로 그대로 보여주는 게 목적이다(발표 슬라이드 자체를 실시간
+ * 동기화하는 기능은 아니다 — 그건 Lab의 PDF/PPTX 발표 모드와 별개).
  */
-export function SubjectOt() {
-  const { subject } = useSubjectContext()
-
+export function OtFrame({ subject }: { subject: SubjectMeta }) {
   if (!subject.otUrl) {
     return (
       <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-14 text-center text-sm text-ink-500">
@@ -285,6 +284,15 @@ export function SubjectOt() {
       className="h-[80vh] w-full rounded-2xl border border-cream-deep bg-white"
     />
   )
+}
+
+/** 학생용 OT 탭 — 새 탭으로 여는 노션 링크와 달리 "화면 안에 그대로 보여달라"는
+ *  요청이라 iframe(OtFrame)을 그대로 쓴다. otUrl이 비어 있으면 nav에서 OT 탭
+ *  자체가 안 보이지만, 링크를 직접 쳐서 들어오는 경우를 대비해 OtFrame이 안내
+ *  문구를 대신 보여준다. */
+export function SubjectOt() {
+  const { subject } = useSubjectContext()
+  return <OtFrame subject={subject} />
 }
 
 export function MaterialsList() {
