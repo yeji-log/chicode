@@ -474,7 +474,9 @@ function SubjectPanel({
   const fileInputRef = useRef<HTMLInputElement>(null)
   // "자료"(기존 파일 업로드) / "수업목차"(Lab과 같은 시즌+활동 에디터, 이름만
   // 수업자료용으로 바꿈) 두 탭 — TeacherDashboard의 최상위 section 탭과 같은 자리 원칙.
-  const [panelTab, setPanelTab] = useState<'materials' | 'outline'>('materials')
+  // 기본값은 수업목차 — 학생 화면(SubjectMaterials.tsx)도 과목에 들어가면
+  // 자료보다 수업목차부터 보이게 되어 있어서, 교사 쪽도 같은 순서로 맞췄다.
+  const [panelTab, setPanelTab] = useState<'materials' | 'outline'>('outline')
 
   useEffect(() => {
     listMaterials(subject.id).then(setMaterials)
