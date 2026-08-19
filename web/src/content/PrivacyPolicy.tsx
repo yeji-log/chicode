@@ -1,6 +1,6 @@
 import PolicyArticle from '../components/PolicyArticle'
 
-export const PRIVACY_POLICY_EFFECTIVE_DATE = '2026. 8. 18.'
+export const PRIVACY_POLICY_EFFECTIVE_DATE = '2026. 8. 19.'
 
 /**
  * chicode 코드베이스(Firebase 인증 · Firestore · Pyodide 실행 방식 · 동아리(Lab)
@@ -34,6 +34,12 @@ export default function PrivacyPolicy() {
           이 중 이메일 주소는 사전에 허용된 교사 계정인지 확인하는 용도로만 사용되며,
           별도로 등록된 이메일 목록과 대조됩니다.
         </p>
+        <p>
+          또한 교사가 수업자료·수업목차(OT) 자료를 올리거나, 동아리(Lab) 활동자료를
+          작성·수정하거나, 오늘의 이슈를 발행하면 그 이메일 주소가 등록자 정보로 함께
+          저장됩니다. 이 데이터는 로그인 없이도 열람할 수 있게 열려 있어, 화면에
+          표시되지는 않지만 개발자도구 등을 이용하면 확인할 수 있습니다(제9조 참고).
+        </p>
       </PolicyArticle>
 
       <PolicyArticle num="제2조" title="개인정보의 수집 및 이용 목적">
@@ -41,6 +47,10 @@ export default function PrivacyPolicy() {
         <ol>
           <li>교사 인증 — 사전에 허용된 계정만 수업자료를 올리고 지울 수 있도록 확인</li>
           <li>서비스 부정 이용 방지</li>
+          <li>
+            자료·이슈 등록자 관리 — 수업자료·동아리(Lab) 활동자료·오늘의 이슈를 누가
+            올리고 고쳤는지 기록해 문제 발생 시 확인
+          </li>
         </ol>
       </PolicyArticle>
 
@@ -69,7 +79,8 @@ export default function PrivacyPolicy() {
               <tr className="border-t border-cream-deep align-top">
                 <td className="px-3 py-2">Google Firebase</td>
                 <td className="px-3 py-2">
-                  로그인 인증(Authentication), 수업자료·동아리(Lab) 활동자료 저장(Firestore)
+                  로그인 인증(Authentication), 수업자료·동아리(Lab) 활동자료·오늘의 이슈
+                  저장(Firestore)
                 </td>
                 <td className="px-3 py-2 text-ink-500">
                   Firestore는 서울(asia-northeast3) 리전, Authentication은 Google 글로벌
@@ -105,6 +116,13 @@ export default function PrivacyPolicy() {
           불러오기 위해 유튜브 서버에 직접 접속하면서 발생하는 것이며, 유튜브의
           개인정보처리방침이 적용됩니다. CHICODE는 추적을 최소화하는
           youtube-nocookie.com 도메인으로 임베드합니다.
+        </p>
+        <p>
+          오늘의 AI·IT 이슈는 매일 아침 GitHub Actions가 국내외 공식 기술 블로그의
+          공개 RSS를 자동으로 수집해 후보로 쌓아 둡니다. 이 과정에서 수집되는 것은
+          기사 제목·요약·링크 등 공개된 정보뿐이며, 이용자의 개인정보는 포함되지
+          않습니다. 교사가 이 중 일부를 골라 직접 요약과 설명을 써서 승인해야만
+          학생 화면에 공개됩니다.
         </p>
       </PolicyArticle>
 
@@ -178,6 +196,12 @@ export default function PrivacyPolicy() {
           <li>
             등록된 교사 목록은 본인 계정으로 로그인한 경우에만 자신의 등록 여부를 확인할
             수 있으며, 전체 목록은 공개적으로 조회할 수 없습니다.
+          </li>
+          <li>
+            수업자료·동아리(Lab) 활동자료·오늘의 이슈에는 이를 올리거나 고친 교사의
+            이메일이 등록자 정보로 함께 저장되며, 이 데이터는 다른 공개 콘텐츠와
+            마찬가지로 읽기 권한이 열려 있습니다. 화면에 노출하지는 않지만, 개발자도구로
+            조회하면 확인할 수 있는 정보라는 점을 알려드립니다.
           </li>
         </ul>
       </PolicyArticle>
