@@ -213,7 +213,7 @@ export default function PrivacyPolicy() {
           <br />
           담당자: 김예지
           <br />
-          연락처: yeji.sdh@gmail.com
+          연락처: kyj516@sen.go.kr
         </p>
         <p>
           개인정보 처리와 관련한 문의, 불만 처리 등에 대해 위 연락처로 문의해 주시면
