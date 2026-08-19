@@ -77,14 +77,14 @@ export default function LabHome() {
 
       <section className="grid gap-5 sm:grid-cols-2">
         <FeatureCard to="/lab/roadmap" emoji="🗺️" title="Roadmap">
-          지금까지 쌓아온 시즌을 순서대로
+          지금까지 진행한 시즌을 순서대로
           <br />
-          동아리 활동의 전체 여정을 확인해 보세요.
+          동아리 활동의 흐름을 확인해 보세요.
         </FeatureCard>
         <FeatureCard to="/lab/activities" emoji="🧪" title="활동">
-          지금까지 진행한 활동 목록에서
+          각 시즌에서 진행한 활동을
           <br />
-          자료와 Mission을 확인해 보세요.
+          한눈에 확인해 보세요.
         </FeatureCard>
       </section>
     </div>

@@ -60,7 +60,7 @@ export default function CLab() {
           </Link>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">C언어 실습</h1>
           <p className="text-sm text-ink-500">
-            컴파일도 실행도 내 브라우저 안에서 이뤄집니다. 서버로 보내지 않습니다.
+            코드는 내 브라우저 안에서 실행됩니다. 서버로 보내지 않습니다.
           </p>
         </div>
 

@@ -45,7 +45,6 @@ export default function LabRoadmap() {
           </Link>
         )}
         <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{scope.seasonNoun}</h1>
-        <p className="text-sm text-ink-500">{scope.seasonNoun}가 순서대로 쌓입니다.</p>
       </header>
 
       {loading ? (
