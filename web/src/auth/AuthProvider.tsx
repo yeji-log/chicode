@@ -7,7 +7,14 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
+import {
+  getRedirectResult,
+  onAuthStateChanged,
+  signInWithPopup,
+  signInWithRedirect,
+  signOut,
+  type User,
+} from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 
 import { auth, db, googleProvider } from '../lib/firebase'
@@ -22,6 +29,21 @@ import { auth, db, googleProvider } from '../lib/firebase'
  * firestore.rules / storage.rules 가 구글 서버에서 수행한다. 이 코드를 우회해도
  * 자료를 쓰지 못한다.
  */
+
+/**
+ * 안드로이드(삼성 인터넷·크롬 둘 다 확인됨)에서 signInWithPopup 이 오류 코드도 없이
+ * 조용히 실패하는 걸 실제로 겪고 나서 넣었다 — 팝업 창과 원래 창이 스토리지로 로그인
+ * 결과를 주고받는데, 안드로이드 브라우저들이 이 통신을 데스크톱과 다르게 처리해서 깨지는
+ * 것으로 보인다(Firebase 공식 문서도 모바일에는 리다이렉트 방식을 권장한다).
+ *
+ * 안드로이드로만 좁힌 이유: 아이폰(Safari)은 지금 팝업 방식으로 이미 잘 된다. 사파리는
+ * 추적 방지 때문에 리다이렉트 방식에서 또 다른 방식으로 깨질 수 있어서, 검증 안 된
+ * 위험을 새로 만들지 않으려고 이미 되는 흐름은 건드리지 않았다.
+ */
+function isAndroid(): boolean {
+  return /android/i.test(navigator.userAgent)
+}
+
 export type TeacherState = 'loading' | 'anonymous' | 'not-allowed' | 'teacher'
 
 interface AuthContextValue {
@@ -38,6 +60,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [state, setState] = useState<TeacherState>('loading')
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    // signInWithRedirect 로 나갔다가 돌아온 경우, 그 과정에서 난 오류는
+    // onAuthStateChanged 로는 안 잡히고 이걸로만 잡힌다.
+    getRedirectResult(auth).catch((caught) => {
+      const code = (caught as { code?: string }).code ?? ''
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return
+      setError(explainAuthError(code))
+    })
+  }, [])
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (nextUser) => {
@@ -63,6 +95,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async () => {
     setError(null)
     try {
+      if (isAndroid()) {
+        await signInWithRedirect(auth, googleProvider)
+        return
+      }
       await signInWithPopup(auth, googleProvider)
     } catch (caught) {
       const code = (caught as { code?: string }).code ?? ''
