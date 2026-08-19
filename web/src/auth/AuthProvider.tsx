@@ -39,9 +39,33 @@ import { auth, db, googleProvider } from '../lib/firebase'
  * 안드로이드로만 좁힌 이유: 아이폰(Safari)은 지금 팝업 방식으로 이미 잘 된다. 사파리는
  * 추적 방지 때문에 리다이렉트 방식에서 또 다른 방식으로 깨질 수 있어서, 검증 안 된
  * 위험을 새로 만들지 않으려고 이미 되는 흐름은 건드리지 않았다.
+ *
+ * 처음엔 navigator.userAgent 에 "android" 가 있는지만 봤는데, 배포하고도 갤럭시 탭에서
+ * 똑같이 실패했다 — 원인은 Chrome 이 2023년부터 화면 10인치·8GB RAM 이상인
+ * "프리미엄" 안드로이드 태블릿에서 기본으로 "데스크톱 사이트" 모드를 켜기 때문이다.
+ * 이 모드에서는 UA 자체가 `Mozilla/5.0 (X11; Linux x86_64) ...` 처럼 바뀌어서 "android"
+ * 라는 단어가 아예 사라진다(https://developer.chrome.com/blog/desktop-mode). 삼성
+ * 인터넷도 태블릿에서 "데스크톱 사이트"를 켜면 똑같이 `X11; Linux x86_64 ...
+ * SamsungBrowser/...` 형태로 나온다 — 실제 UA 문자열로 확인.
+ *
+ * 그래서 UA 문자열만으로는 못 믿는다. 대신 "데스크톱 사이트" 모드에서도 못 속이는
+ * 값 — 실제 입력이 터치인지 — 를 같이 본다. UA 에 iPhone/iPad/Mac/Windows 가 없는데
+ * 터치(coarse pointer)까지 있으면, 이 학교 환경(교사는 맥북·윈도우 노트북만 씀)에서는
+ * 안드로이드 태블릿 말고는 해당할 게 없다.
  */
 function isAndroid(): boolean {
-  return /android/i.test(navigator.userAgent)
+  const ua = navigator.userAgent
+  if (/android/i.test(ua)) return true
+
+  const isKnownNonAndroid = /iphone|ipad|ipod|mac os|windows/i.test(ua)
+  if (isKnownNonAndroid) return false
+
+  const hasCoarseTouch =
+    typeof matchMedia === 'function' &&
+    navigator.maxTouchPoints > 0 &&
+    matchMedia('(pointer: coarse)').matches
+
+  return hasCoarseTouch
 }
 
 export type TeacherState = 'loading' | 'anonymous' | 'not-allowed' | 'teacher'
