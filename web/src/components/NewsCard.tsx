@@ -11,10 +11,10 @@ export default function NewsCard({ issue }: { issue: NewsIssue }) {
 
       <h3 className="font-bold leading-snug text-ink-900">{issue.title}</h3>
 
-      <p className="text-sm leading-relaxed text-ink-700">{issue.summary}</p>
+      <p className="whitespace-pre-line text-sm leading-relaxed text-ink-700">{issue.summary}</p>
 
       {issue.whyImportant && (
-        <p className="text-sm leading-relaxed text-ink-700">
+        <p className="whitespace-pre-line text-sm leading-relaxed text-ink-700">
           <span className="font-semibold text-ink-900">왜 중요한가? </span>
           {issue.whyImportant}
         </p>
