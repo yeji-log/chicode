@@ -77,6 +77,13 @@ export interface Wire {
   to: PinRef
 }
 
+/** 회로 캔버스가 통째로 저장/불러오는 상태 — 예제마다 이 모양으로 회로를 같이 들고 있는다. */
+export interface CircuitSnapshot {
+  components: PlacedComponent[]
+  breadboards: PlacedBreadboard[]
+  wires: Wire[]
+}
+
 /** 부품 종류별로 고정된 핀 이름 + 부품 기준 상대 좌표. */
 export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy: number }[]> = {
   led: [

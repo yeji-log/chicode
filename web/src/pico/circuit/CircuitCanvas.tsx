@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import { BOARD_HEIGHT, BOARD_PINS, BOARD_WIDTH, BOARD_X, BOARD_Y, type BoardPin } from './board'
 import {
@@ -11,15 +19,14 @@ import { resolveConnectivity } from './connectivity'
 import {
   BREADBOARD_SIZES,
   type BreadboardSize,
+  type CircuitSnapshot,
   COMPONENT_LIST,
   COMPONENT_PINS,
   type ComponentCategory,
   type ComponentType,
   type PinRef,
-  type PlacedBreadboard,
   type PlacedComponent,
   type Point,
-  type Wire,
   pinRefKey,
 } from './types'
 
@@ -27,17 +34,20 @@ const STORAGE_KEY = 'chicode.pico.circuit'
 const VIEW_WIDTH = 900
 const VIEW_HEIGHT = 640
 
-interface SavedCircuit {
-  components: PlacedComponent[]
-  breadboards: PlacedBreadboard[]
-  wires: Wire[]
+// 처음 들어왔을 때(저장된 회로가 없을 때)는 빈 회로로 시작한다 — 코드도
+// STARTER_CODE(from machine import Pin 하나)뿐이라 앞뒤가 맞아야 한다
+// (PicoLab.tsx 참고). 예제별 회로는 examples.ts 의 circuit 이 맡는다.
+const DEFAULT_CIRCUIT: CircuitSnapshot = {
+  components: [],
+  breadboards: [],
+  wires: [],
 }
 
-function loadInitial(): SavedCircuit {
+function loadInitial(): CircuitSnapshot {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<SavedCircuit>
+      const parsed = JSON.parse(raw) as Partial<CircuitSnapshot>
       if (parsed.components && parsed.wires) {
         return { components: parsed.components, breadboards: parsed.breadboards ?? [], wires: parsed.wires }
       }
@@ -45,25 +55,7 @@ function loadInitial(): SavedCircuit {
   } catch {
     /* 저장된 값이 깨졌으면 그냥 기본값으로 시작한다 */
   }
-  return {
-    components: [
-      { id: 'led1', type: 'led', x: 700, y: 90 },
-      { id: 'button1', type: 'button', x: 700, y: 200 },
-    ],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
-    wires: [
-      {
-        id: 'w1',
-        from: { kind: 'component', componentId: 'led1', pin: 'cathode' },
-        to: { kind: 'board', pinId: 'L20' }, // GP15
-      },
-      {
-        id: 'w2',
-        from: { kind: 'component', componentId: 'button1', pin: 'a' },
-        to: { kind: 'board', pinId: 'L19' }, // GP14
-      },
-    ],
-  }
+  return DEFAULT_CIRCUIT
 }
 
 export interface CircuitCanvasProps {
@@ -73,10 +65,18 @@ export interface CircuitCanvasProps {
   onButtonChange: (gpio: number, pressed: boolean) => void
 }
 
+/** "예제 불러오기" 가 코드와 함께 회로도 같이 구성할 수 있도록 여는 창구. */
+export interface CircuitCanvasHandle {
+  loadCircuit: (circuit: CircuitSnapshot) => void
+}
+
 type DragTarget = { id: string; kind: 'component' | 'breadboard'; dx: number; dy: number }
 
-export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCanvasProps) {
-  const [{ components, breadboards, wires }, setState] = useState<SavedCircuit>(loadInitial)
+function CircuitCanvas(
+  { gpioLevels, onButtonChange }: CircuitCanvasProps,
+  ref: React.Ref<CircuitCanvasHandle>,
+) {
+  const [{ components, breadboards, wires }, setState] = useState<CircuitSnapshot>(loadInitial)
   const [tab, setTab] = useState<ComponentCategory | 'breadboard'>('output')
   const [draft, setDraft] = useState<{ from: PinRef; to: Point } | null>(null)
   const [dragging, setDragging] = useState<DragTarget | null>(null)
@@ -87,6 +87,22 @@ export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCan
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ components, breadboards, wires }))
   }, [components, breadboards, wires])
+
+  // "예제 불러오기" 가 이 handle 로 회로를 통째로 갈아끼운다. JSON 왕복으로 깊은 복사를
+  // 해서, 같은 예제를 두 번 불러오거나 부품을 옮겨도 EXAMPLES 원본 데이터가 오염되지
+  // 않게 한다(배열/객체를 그대로 두면 여러 로드가 같은 참조를 공유하게 된다).
+  useImperativeHandle(
+    ref,
+    () => ({
+      loadCircuit: (circuit) => {
+        setState(JSON.parse(JSON.stringify(circuit)) as CircuitSnapshot)
+        setDraft(null)
+        setDragging(null)
+        setActiveInputs(new Set())
+      },
+    }),
+    [],
+  )
 
   const connectivity = useMemo(() => resolveConnectivity(wires), [wires])
 
@@ -358,6 +374,8 @@ export default function CircuitCanvas({ gpioLevels, onButtonChange }: CircuitCan
     </div>
   )
 }
+
+export default forwardRef(CircuitCanvas)
 
 function Palette({
   tab,

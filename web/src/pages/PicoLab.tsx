@@ -6,15 +6,21 @@ import SupportNote from '../components/SupportNote'
 import { EDITOR_OPTIONS } from '../lib/monaco'
 import { usePico } from '../pico/usePico'
 import { EXAMPLES } from '../pico/examples'
-import CircuitCanvas from '../pico/circuit/CircuitCanvas'
+import CircuitCanvas, { type CircuitCanvasHandle } from '../pico/circuit/CircuitCanvas'
 
 const CODE_KEY = 'chicode.pico.code'
 
+/** 처음 들어왔을 때(저장된 코드가 없을 때) 보여줄 최소 코드 — 예제를 불러오기 전엔
+ * 빈 회로에 맞게 이거 하나만 있어야 한다. EXAMPLES[0] 을 기본값으로 쓰면 회로 없이
+ * 코드만 "1. LED 켜고 끄기"로 시작해서 앞뒤가 안 맞는다. */
+const STARTER_CODE = 'from machine import Pin\n'
+
 export default function PicoLab() {
-  const [code, setCode] = useState(() => localStorage.getItem(CODE_KEY) ?? EXAMPLES[0].code)
+  const [code, setCode] = useState(() => localStorage.getItem(CODE_KEY) ?? STARTER_CODE)
 
   const { status, output, elapsedMs, bootError, gpio, run, stop, clearOutput, setButton } = usePico()
   const outputRef = useRef<HTMLDivElement>(null)
+  const circuitRef = useRef<CircuitCanvasHandle>(null)
 
   useEffect(() => {
     localStorage.setItem(CODE_KEY, code)
@@ -68,6 +74,7 @@ export default function PicoLab() {
               const example = EXAMPLES.find((item) => item.name === event.target.value)
               if (!example) return
               setCode(example.code)
+              circuitRef.current?.loadCircuit(example.circuit)
               clearOutput()
             }}
           >
@@ -180,7 +187,7 @@ export default function PicoLab() {
 
         <section className="rounded-2xl border border-cream-deep bg-white p-3">
           <h2 className="mb-2 px-1 text-sm font-bold text-ink-700">회로</h2>
-          <CircuitCanvas gpioLevels={gpio} onButtonChange={setButton} />
+          <CircuitCanvas ref={circuitRef} gpioLevels={gpio} onButtonChange={setButton} />
         </section>
       </div>
     </div>
