@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { asset } from '../lib/asset'
@@ -16,7 +17,7 @@ export default function ComingSoon({
 }: {
   emoji: string
   title: string
-  description: string
+  description: ReactNode
   /** 지금 당장 해볼 수 있는 다른 곳으로 안내할 때만 넣는다 (예: Pico 대신 Python). */
   secondary?: { to: string; label: string }
 }) {
@@ -25,7 +26,7 @@ export default function ComingSoon({
       <img src={asset('chicode.png')} alt="" className="size-20 rounded-full ring-2 ring-cheese-300" />
       <span className="text-4xl">{emoji}</span>
       <h1 className="font-display text-2xl tracking-tight text-ink-900">{title}</h1>
-      <p className="max-w-md text-ink-700">{description}</p>
+      <p className="max-w-md break-keep text-ink-700">{description}</p>
       <span className="rounded-full bg-cheese-100 px-3 py-1 text-sm font-semibold text-cheese-600">
         준비 중
       </span>

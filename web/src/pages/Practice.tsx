@@ -26,9 +26,9 @@ export default function Practice() {
           작성하고 컴파일하여 실행해 보세요.
         </FeatureCard>
         <FeatureCard to="/practice/pico" emoji="🔌" title="Pico 2 W">
-          가상 보드로 GPIO, LED, Button 을
+          가상 보드로 GPIO, LED, 버튼을 직접 다뤄보세요.
           <br />
-          다루는 실습입니다. 준비 중이에요.
+          곧 만나볼 수 있어요.
         </FeatureCard>
       </div>
     </div>
