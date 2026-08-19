@@ -20,6 +20,7 @@ import {
   formatSize,
   listMaterials,
 } from '../lib/materials'
+import { getPicoPracticeSettings, setPicoOpen } from '../lib/practiceSettings'
 import {
   createSubject,
   deleteSubject,
@@ -115,7 +116,7 @@ export default function Teacher() {
 
 function TeacherDashboard() {
   const { user, signOutTeacher } = useAuth()
-  const [section, setSection] = useState<'materials' | 'lab' | 'news'>('materials')
+  const [section, setSection] = useState<'materials' | 'lab' | 'news' | 'practice'>('materials')
 
   return (
     <div className="flex flex-col gap-6">
@@ -165,11 +166,96 @@ function TeacherDashboard() {
         >
           🔥 오늘의 뉴스
         </button>
+        <button
+          onClick={() => setSection('practice')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            section === 'practice' ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          🔌 실습
+        </button>
       </nav>
 
       {section === 'materials' && <MaterialsSection uploaderEmail={user?.email ?? ''} />}
       {section === 'lab' && <TeacherLab uploaderEmail={user?.email ?? ''} />}
       {section === 'news' && <TeacherNews teacherEmail={user?.email ?? ''} />}
+      {section === 'practice' && <PracticeSection />}
+    </div>
+  )
+}
+
+/**
+ * 실습 탭 공개 설정. 지금은 Pico 2 W 하나뿐이다 — Python/C는 이미 다 만들어져서
+ * 잠글 이유가 없다(사용자 요청). SubjectSettings 의 "학생에게 공개" 카드와
+ * 같은 모양(낙관적 업데이트 + 실패 시 롤백)으로 맞췄다.
+ */
+function PracticeSection() {
+  const [open, setOpen] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+
+  useEffect(() => {
+    getPicoPracticeSettings()
+      .then((settings) => setOpen(settings.open))
+      .catch((caught) => {
+        console.error('Pico 공개 설정 불러오기 실패', caught)
+        setLoadError(true)
+      })
+  }, [])
+
+  async function toggle() {
+    if (open === null) return
+    const next = !open
+    setOpen(next)
+    setBusy(true)
+    try {
+      await setPicoOpen(next)
+    } catch (caught) {
+      console.error('Pico 공개 설정 변경 실패', caught)
+      setOpen(!next)
+      alert('설정을 바꾸지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h2 className="font-bold text-ink-900">실습 공개 설정</h2>
+        <p className="text-sm text-ink-500">
+          Python/C 실습은 이미 열려 있습니다. 아래에서 켜고 끌 수 있는 건 Pico 2 W
+          시뮬레이터뿐입니다.
+        </p>
+      </div>
+
+      {loadError ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          설정을 불러오지 못했습니다. 새로고침해 주세요.
+        </p>
+      ) : (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-cream-deep bg-white/70 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-ink-900">🔌 Pico 2 W 시뮬레이터</p>
+            <p className="text-xs text-ink-500">
+              꺼두면 학생 화면에는 "준비 중"만 보이고 들어갈 수 없습니다(교사 계정은 이
+              설정과 무관하게 항상 들어갈 수 있어요).
+              <br />
+              지금 상태:{' '}
+              <strong className="font-semibold text-ink-700">
+                {open === null ? '불러오는 중…' : open ? '✅ 학생도 볼 수 있음' : '🚧 준비중 (학생에게 비공개)'}
+              </strong>
+            </p>
+          </div>
+          <ToggleSwitch
+            checked={open === true}
+            disabled={open === null || busy}
+            onChange={toggle}
+            label="Pico 2 W 시뮬레이터 학생 공개 여부"
+          />
+        </div>
+      )}
     </div>
   )
 }
