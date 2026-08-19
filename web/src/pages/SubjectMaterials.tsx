@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useOutletContext, useParams } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthProvider'
+import LabPresentationOverlay from '../components/LabPresentationOverlay'
 import PdfViewer from '../components/PdfViewer'
+import PptxSlideViewer from '../components/PptxSlideViewer'
+import { subscribePresentation, type LabPresentationState } from '../lib/labPresentation'
+import { getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import {
   type MaterialMeta,
   formatDate,
@@ -12,7 +16,13 @@ import {
   listMaterials,
 } from '../lib/materials'
 import { usePinAttemptThrottle } from '../lib/pinThrottle'
-import { getSubject, isSubjectUnlocked, unlockSubject, type SubjectMeta } from '../lib/subjects'
+import {
+  getSubject,
+  isSubjectUnlocked,
+  unlockSubject,
+  type OtPresentationMeta,
+  type SubjectMeta,
+} from '../lib/subjects'
 
 /**
  * 과목별 수업자료 화면의 레이아웃 라우트 (/materials/:subjectId, LabGate.tsx와
@@ -289,10 +299,91 @@ export function OtFrame({ subject }: { subject: SubjectMeta }) {
 /** 학생용 OT 탭 — 새 탭으로 여는 노션 링크와 달리 "화면 안에 그대로 보여달라"는
  *  요청이라 iframe(OtFrame)을 그대로 쓴다. otUrl이 비어 있으면 nav에서 OT 탭
  *  자체가 안 보이지만, 링크를 직접 쳐서 들어오는 경우를 대비해 OtFrame이 안내
- *  문구를 대신 보여준다. */
+ *  문구를 대신 보여준다. 그 아래에 교사가 첨부한 OT 자료(OtMaterialsList)를
+ *  이어서 보여준다. */
 export function SubjectOt() {
   const { subject } = useSubjectContext()
-  return <OtFrame subject={subject} />
+  return (
+    <div className="flex flex-col gap-6">
+      <OtFrame subject={subject} />
+      <OtMaterialsList subject={subject} />
+    </div>
+  )
+}
+
+const IDLE_PRESENTATION: LabPresentationState = { active: false, currentSlide: 1, updatedAt: 0 }
+
+/**
+ * 교사 페이지(OtPresentationPanel.tsx)에서 첨부한 "OT 자료"(PPT/PDF) 목록을
+ * 학생 화면에 그대로 보여준다. 항목이 없으면(아직 아무것도 안 올렸으면)
+ * 아무것도 안 그린다 — "그냥 첨부하면 보이도록"이 요청이었으므로 빈 상태
+ * 안내문 없이 조용히 생략한다.
+ *
+ * 대본(교사용 발표 노트)은 여기서 절대 안 불러온다 — getNotes를 아예 호출하지
+ * 않는다. 슬라이드 열람은 PptxSlideViewer(원본 다운로드 불가, 컴포넌트 자체
+ * 정책)로만 하고, 교사가 OtPresentationPanel에서 "발표 시작"을 누르면
+ * labPresentation.ts 실시간 구독으로 이 화면도 같은 슬라이드로 자동 전환된다
+ * (LabActivityDetail.tsx의 학생 팔로우 화면과 같은 구조).
+ */
+function OtMaterialsList({ subject }: { subject: SubjectMeta }) {
+  const items = subject.otPresentations ?? []
+  if (items.length === 0) return null
+
+  return (
+    <div className="flex flex-col gap-4">
+      {items.map((entry) => (
+        <OtMaterialItem key={entry.id} entry={entry} />
+      ))}
+    </div>
+  )
+}
+
+function OtMaterialItem({ entry }: { entry: OtPresentationMeta }) {
+  const [slideFiles, setSlideFiles] = useState<{ pptx: Blob | null; pdf: Blob | null } | null>(
+    null,
+  )
+  const [presentation, setPresentation] = useState<LabPresentationState>(IDLE_PRESENTATION)
+
+  useEffect(() => {
+    let cancelled = false
+    getSlideSet(entry.id).then(async (meta) => {
+      if (!meta.pptx && !meta.pdf) {
+        if (!cancelled) setSlideFiles(null)
+        return
+      }
+      const [pptx, pdf] = await Promise.all([
+        meta.pptx ? getSlidePptxFile(entry.id) : Promise.resolve(null),
+        meta.pdf ? getSlidePdfFile(entry.id) : Promise.resolve(null),
+      ])
+      if (!cancelled) setSlideFiles({ pptx, pdf })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [entry.id])
+
+  useEffect(() => subscribePresentation(entry.id, setPresentation), [entry.id])
+
+  // 아직 PPT/PDF를 안 올린 항목(제목만 추가해둔 상태)은 조용히 생략한다 —
+  // 교사가 실제로 파일을 첨부해야만 학생 화면에 나타난다.
+  if (!slideFiles || (!slideFiles.pptx && !slideFiles.pdf)) return null
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-cream-deep bg-white/70 p-6">
+      <h2 className="font-bold text-ink-900">{entry.title}</h2>
+      <PptxSlideViewer pptxFile={slideFiles.pptx} pdfFile={slideFiles.pdf} filename={entry.title} />
+
+      {presentation.active && slideFiles.pdf && (
+        <LabPresentationOverlay
+          pdfFile={slideFiles.pdf}
+          currentSlide={presentation.currentSlide}
+          filename={entry.title}
+          isTeacherViewer={false}
+          onTakeControl={() => {}}
+        />
+      )}
+    </div>
+  )
 }
 
 export function MaterialsList() {
