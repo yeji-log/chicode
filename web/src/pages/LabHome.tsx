@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthProvider'
 import FeatureCard from '../components/FeatureCard'
 import { asset } from '../lib/asset'
 import { getActivity, getHomeSettings, type LabActivity, type LabHomeSettings } from '../lib/labs'
@@ -10,6 +11,8 @@ import { getActivity, getHomeSettings, type LabActivity, type LabHomeSettings } 
  * 진행률 바는 계산 근거가 없어 Phase 1 에서는 뺐다(작업 로그 참고).
  */
 export default function LabHome() {
+  const { state: authState } = useAuth()
+  const isTeacherViewer = authState === 'teacher'
   const [settings, setSettings] = useState<LabHomeSettings | null>(null)
   const [featuredActivities, setFeaturedActivities] = useState<LabActivity[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,7 +40,16 @@ export default function LabHome() {
           alt=""
           className="size-14 rounded-full ring-2 ring-cheese-300"
         />
-        <h1 className="font-display text-3xl tracking-tight text-ink-900">EMBED-LAB</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="font-display text-3xl tracking-tight text-ink-900">EMBED-LAB</h1>
+          {isTeacherViewer && settings?.pin && (
+            // 교사만 보이는 표시 — SubjectMaterials.tsx 의 과목별 핀 배지와 같은 패턴.
+            // 학생에게는 절대 안 보인다(isTeacherViewer 는 Firebase 로그인 상태로만 정해짐).
+            <span className="rounded-lg border border-cheese-300 bg-cheese-50 px-3 py-1.5 text-sm font-semibold text-cheese-700">
+              🔑 학생용 핀번호: {settings.pin}
+            </span>
+          )}
+        </div>
         <p className="text-ink-700">배우고, 만들고, 실험하다.</p>
       </section>
 
