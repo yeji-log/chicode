@@ -19,10 +19,13 @@ const TABS = [
   { to: '/lab', label: 'Lab', end: false },
 ]
 
-// 시간표는 교사 전용 업무용 탭이라 로그인 상태일 때만 내비게이션에 노출한다
-// (firestore.rules 도 timetable 컬렉션은 isTeacher() 로 읽기까지 막아서, 로그인
-// 안 한 사람은 탭을 몰라도 어차피 못 본다 — 이 조건은 그 위의 편의일 뿐).
-const TEACHER_TABS = [{ to: '/timetable', label: '시간표', end: false }]
+// "일정"(경로는 /timetable 그대로 유지 — 사용자 요청은 탭 이름만 바꾸는 것이라
+// URL까지 바꿀 이유가 없었다)은 교사 전용 업무용 탭이라 로그인 상태일 때만
+// 내비게이션에 노출한다(firestore.rules 도 timetable/classRecords 컬렉션은
+// isTeacher() 로 읽기까지 막아서, 로그인 안 한 사람은 탭을 몰라도 어차피 못
+// 본다 — 이 조건은 그 위의 편의일 뿐). 탭 안에 시간표 그리드와 수업기록(기록)
+// 두 섹션이 함께 들어있다(Timetable.tsx의 ScheduleTabs 참고).
+const TEACHER_TABS = [{ to: '/timetable', label: '일정', end: false }]
 
 export default function App() {
   const [openPolicy, setOpenPolicy] = useState<OpenPolicy>(null)

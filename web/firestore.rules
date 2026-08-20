@@ -133,6 +133,21 @@ service cloud.firestore {
       allow read, write: if isTeacher();
     }
 
+    // 수업기록(반별 학생 명단 + 날짜별 참여 여부). 학번·이름은 미성년자
+    // 개인정보라 timetable과 동일하게 읽기·쓰기 모두 교사만 허용한다 — 학생은
+    // 이 데이터의 존재 자체를 모른다.
+    match /classRecords/{classId} {
+      allow read, write: if isTeacher();
+
+      match /students/{studentId} {
+        allow read, write: if isTeacher();
+      }
+
+      match /dates/{dateId} {
+        allow read, write: if isTeacher();
+      }
+    }
+
     // 활동 항목(section) 하나하나에 붙는 첨부파일(이미지·PDF·PPT·엑셀).
     // labSlides 와 같은 조각 저장 구조지만, 다운로드를 막을 이유가 없는
     // 일반 수업자료라 성격은 materials 에 더 가깝다.
