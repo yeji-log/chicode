@@ -371,6 +371,11 @@ function OtMaterialItem({
   const [notes, setNotes] = useState<string[]>([])
   const [presentation, setPresentation] = useState<LabPresentationState>(IDLE_PRESENTATION)
   const [isPresenting, setIsPresenting] = useState(false)
+  /** "발표 시작"을 누르면 몇 페이지부터 시작할지 — LabActivityDetail과 같은
+   *  이유로, presentation이 처음 로드되면 "마지막으로 발표를 종료한 자리"로
+   *  한 번 맞추고, 그 뒤로는 교사가 직접 넘기는 대로 따라간다. */
+  const [browsePage, setBrowsePage] = useState(1)
+  const [presentationLoaded, setPresentationLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -395,21 +400,41 @@ function OtMaterialItem({
     }
   }, [slideId, isTeacherViewer])
 
-  useEffect(() => subscribePresentation(slideId, setPresentation), [slideId])
+  useEffect(() => {
+    setPresentationLoaded(false)
+    return subscribePresentation(slideId, (state) => {
+      setPresentation(state)
+      setPresentationLoaded(true)
+    })
+  }, [slideId])
+
+  // presentation이 막 로드된 순간에 딱 한 번, 훑어보기 시작 페이지를
+  // "마지막으로 발표를 종료한 자리"로 맞춘다(LabActivityDetail과 같은 이유로
+  // presentation.currentSlide는 의존성에 넣지 않는다).
+  useEffect(() => {
+    if (presentationLoaded) setBrowsePage(presentation.currentSlide)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presentationLoaded])
 
   // 아직 PPT/PDF를 안 올린 항목(제목만 추가해둔 상태)은 조용히 생략한다 —
   // 교사가 실제로 파일을 첨부해야만 학생 화면에 나타난다.
   if (!slideFiles || (!slideFiles.pptx && !slideFiles.pdf)) return null
+  // presentation 구독이 처음 응답하기 전엔 currentSlide가 진짜 "마지막
+  // 종료 지점"인지 IDLE 기본값인지 구분할 수 없다 — 그 상태로 훑어보기
+  // 화면을 그리면 나중에 진짜 값이 와도 1쪽에 멈춰있는 것처럼 보일 수
+  // 있어서, 응답이 올 때까지는 아예 그리지 않는다.
+  if (!presentationLoaded) return null
 
   const canPresent = isTeacherViewer && !!slideFiles.pdf
   const showFollowerOverlay = presentation.active && !isPresenting && !!slideFiles.pdf
 
   async function handleStartPresenting() {
-    const resumeSlide = await startPresentation(slideId)
+    await startPresentation(slideId, browsePage)
     // onSnapshot 구독이 따라잡을 때까지 기다리면 LabPresenter가 잠깐
-    // 이전 currentSlide(1쪽)로 마운트됐다가 튀는 깜빡임이 생긴다 — 이미
-    // 알고 있는 값이니 로컬 상태를 바로 맞춰서 첫 렌더부터 정확하게 한다.
-    setPresentation((current) => ({ ...current, active: true, currentSlide: resumeSlide }))
+    // 이전 currentSlide로 마운트됐다가 튀는 깜빡임이 생긴다 — 이미 알고
+    // 있는 값(browsePage)이니 로컬 상태를 바로 맞춰서 첫 렌더부터
+    // 정확하게 한다.
+    setPresentation((current) => ({ ...current, active: true, currentSlide: browsePage }))
     setIsPresenting(true)
   }
 
@@ -446,7 +471,13 @@ function OtMaterialItem({
               return next
             })
           }
-          onExit={() => setIsPresenting(false)}
+          onExit={() => {
+            // 방금 종료한 자리로 훑어보기 페이지를 맞춰둔다 — 다음 "발표
+            // 시작"이 이 자리에서 이어지도록. presentation은 발표 중 goTo가
+            // 계속 갱신해온 값이라 여기서 이미 정확하다.
+            setBrowsePage(presentation.currentSlide)
+            setIsPresenting(false)
+          }}
         />
       ) : (
         <>
@@ -462,7 +493,7 @@ function OtMaterialItem({
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-ink-500">{presentation.currentSlide}쪽부터 시작</span>
+                  <span className="text-xs text-ink-500">{browsePage}쪽부터 시작</span>
                   <button
                     onClick={handleStartPresenting}
                     className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
@@ -476,6 +507,8 @@ function OtMaterialItem({
             pptxFile={slideFiles.pptx}
             pdfFile={slideFiles.pdf}
             filename={entry.title}
+            initialPage={browsePage}
+            onPageChange={setBrowsePage}
           />
         </>
       )}

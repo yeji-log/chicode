@@ -61,6 +61,18 @@ export default function LabActivityDetail() {
   /** 이 브라우저 탭에서 "발표 시작"을 눌러 지금 직접 조작 중인지. Firestore의
    *  active 플래그와 별개다 — 다른 기기가 이미 발표 중이면 이 탭은 false다. */
   const [isPresenting, setIsPresenting] = useState(false)
+  /** "발표 시작"을 누르면 몇 페이지부터 시작할지 — 교사가 지금 훑어보고
+   *  있는(browsing) 쪽 그대로 이어진다. presentation이 처음 로드되면(아래
+   *  effect) "마지막으로 발표를 종료한 자리"로 한 번 맞춰 두고, 그 뒤로는
+   *  PptxSlideViewer의 onPageChange가 교사가 직접 넘기는 대로 갱신한다 —
+   *  그래서 가만히 두면 종료 지점에서 재개되고, 옮기면 그 자리부터 된다. */
+  const [browsePage, setBrowsePage] = useState(1)
+  /** presentation 구독이 처음 응답하기 전까지는 currentSlide가 진짜
+   *  "마지막 종료 지점"인지 IDLE 기본값(1)인지 구분할 수 없다 — 그 상태로
+   *  browsePage를 섣불리 맞추면 나중에 진짜 값이 오는 순간이 아니라 계속
+   *  1쪽만 보여줄 수 있다. 그래서 훑어보기 화면 자체를 이게 true가 될
+   *  때까지 숨긴다(아래 렌더링부). */
+  const [presentationLoaded, setPresentationLoaded] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -107,8 +119,22 @@ export default function LabActivityDetail() {
   // 넘기면 이 콜백으로 즉시 들어온다.
   useEffect(() => {
     if (!id) return
-    return subscribePresentation(id, setPresentation)
+    setPresentationLoaded(false)
+    return subscribePresentation(id, (state) => {
+      setPresentation(state)
+      setPresentationLoaded(true)
+    })
   }, [id])
+
+  // presentation이 막 로드된 순간에 딱 한 번, 훑어보기 시작 페이지를
+  // "마지막으로 발표를 종료한 자리"로 맞춘다. 그 뒤로는 아래 onPageChange가
+  // 교사의 실제 탐색을 그대로 반영하므로, 여기서 presentation.currentSlide를
+  // 의존성에 넣지 않는다 — 넣으면 발표 중 슬라이드가 넘어갈 때마다 훑어보기
+  // 페이지가 덩달아 끌려간다.
+  useEffect(() => {
+    if (presentationLoaded) setBrowsePage(presentation.currentSlide)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presentationLoaded])
 
   if (loading) return <p className="text-ink-500">불러오는 중…</p>
 
@@ -139,11 +165,12 @@ export default function LabActivityDetail() {
 
   async function handleStartPresenting() {
     if (!id) return
-    const resumeSlide = await startPresentation(id)
+    await startPresentation(id, browsePage)
     // onSnapshot 구독이 따라잡을 때까지 기다리면 LabPresenter가 잠깐
-    // 이전 currentSlide(1쪽)로 마운트됐다가 튀는 깜빡임이 생긴다 — 이미
-    // 알고 있는 값이니 로컬 상태를 바로 맞춰서 첫 렌더부터 정확하게 한다.
-    setPresentation((current) => ({ ...current, active: true, currentSlide: resumeSlide }))
+    // 이전 currentSlide로 마운트됐다가 튀는 깜빡임이 생긴다 — 이미 알고
+    // 있는 값(browsePage)이니 로컬 상태를 바로 맞춰서 첫 렌더부터
+    // 정확하게 한다.
+    setPresentation((current) => ({ ...current, active: true, currentSlide: browsePage }))
     setIsPresenting(true)
   }
 
@@ -202,10 +229,18 @@ export default function LabActivityDetail() {
                     return next
                   })
                 }
-                onExit={() => setIsPresenting(false)}
+                onExit={() => {
+                  // 방금 종료한 자리로 훑어보기 페이지를 맞춰둔다 — 그래야
+                  // 다음 "발표 시작"이 이 자리에서 이어진다. presentation은
+                  // 발표 중 goTo가 계속 갱신해온 값이라 여기서 이미 정확하다.
+                  setBrowsePage(presentation.currentSlide)
+                  setIsPresenting(false)
+                }}
               />
             )
           }
+
+          if (!presentationLoaded) return null
 
           return (
             <section
@@ -224,9 +259,7 @@ export default function LabActivityDetail() {
                     </button>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink-500">
-                        {presentation.currentSlide}쪽부터 시작
-                      </span>
+                      <span className="text-xs text-ink-500">{browsePage}쪽부터 시작</span>
                       <button
                         onClick={handleStartPresenting}
                         className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
@@ -240,6 +273,8 @@ export default function LabActivityDetail() {
                 pptxFile={slideFiles.pptx}
                 pdfFile={slideFiles.pdf}
                 filename={section.title}
+                initialPage={browsePage}
+                onPageChange={setBrowsePage}
               />
             </section>
           )

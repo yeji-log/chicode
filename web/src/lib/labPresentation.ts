@@ -14,7 +14,7 @@
  * (발표 모드는 PDF 필수라 labSlides.ts 에서 강제한다).
  */
 
-import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
+import { doc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
 
 import { db } from './firebase'
 
@@ -43,29 +43,19 @@ export function subscribePresentation(
 }
 
 /**
- * 발표를 시작한다 — 시작 페이지는 항상 "지난번에 발표를 종료한 자리"부터
- * 이어진다. (한때는 교사가 시작 직전 훑어보던 페이지에서 시작했는데,
- * "종료한 페이지부터 재개"를 원한다는 요청으로 바꿨다. stopPresentation이
- * currentSlide를 건드리지 않고 종료하므로 그 값을 그대로 읽어와 이어쓰면
- * 된다 — 한 번도 발표한 적 없어 문서가 없으면 1쪽부터.)
- *
- * 실제로 이어서 시작한 페이지 번호를 반환한다 — 호출한 쪽(LabActivityDetail
- * 등)이 이 값으로 로컬 상태를 즉시 맞춰줘야, onSnapshot 구독이 따라잡기 전
- * 첫 렌더에 PdfViewer가 잠깐 1쪽으로 그렸다가 4쪽으로 튀는 깜빡임 없이
- * 바로 정확한 페이지로 뜬다.
+ * 발표를 시작한다 — 시작 페이지는 호출한 쪽이 정해서 넘긴다.
+ * LabActivityDetail/SubjectMaterials는 교사가 지금 훑어보고 있는(browsing)
+ * 쪽을 그대로 넘기는데, 그 훑어보기 화면 자체가 처음 열릴 때 "마지막으로
+ * 발표를 종료한 자리"로 미리 맞춰져 있어서(stopPresentation이 currentSlide를
+ * 건드리지 않고 종료하니까), 교사가 따로 페이지를 옮기지 않으면 자연히
+ * "종료한 페이지부터 재개"가 되고, 옮기면 그 페이지부터 새로 시작된다.
  */
-export async function startPresentation(activityId: string): Promise<number> {
-  const ref = presentationDoc(activityId)
-  const existing = await getDoc(ref)
-  const resumeSlide = existing.exists()
-    ? (existing.data() as LabPresentationState).currentSlide || 1
-    : 1
-  await setDoc(ref, {
+export async function startPresentation(activityId: string, atSlide: number): Promise<void> {
+  await setDoc(presentationDoc(activityId), {
     active: true,
-    currentSlide: resumeSlide,
+    currentSlide: atSlide,
     updatedAt: Date.now(),
   } satisfies LabPresentationState)
-  return resumeSlide
 }
 
 export async function stopPresentation(activityId: string): Promise<void> {
