@@ -23,10 +23,13 @@ import {
   type TimetableCell,
   type TimetableData,
 } from '../lib/timetable'
+import ClassRecords from './ClassRecords'
 import { Centered, GoogleMark } from './Teacher'
 
 /**
- * 교사 시간표.
+ * "일정" 탭 — 시간표(요일 x 교시 그리드) + 기록(반별 학생 명단과 참여 기록)
+ * 두 섹션을 하나의 탭 안에 둔다(사용자 요청 — 원래 "시간표"였던 최상단
+ * 내비게이션 탭 이름도 "일정"으로 바꿈, App.tsx의 TEACHER_TABS 참고).
  *
  * Teacher.tsx 와 같은 인증 게이트 4단계(loading/anonymous/not-allowed/teacher)를
  * 그대로 따른다 — Centered/GoogleMark 를 그쪽에서 가져다 쓴다(중복 방지).
@@ -101,7 +104,38 @@ export default function Timetable() {
     )
   }
 
-  return <TimetableBoard />
+  return <ScheduleTabs />
+}
+
+function ScheduleTabs() {
+  const [section, setSection] = useState<'grid' | 'records'>('grid')
+
+  return (
+    <div className="flex flex-col gap-6">
+      <nav className="flex gap-2 border-b border-cream-deep pb-3">
+        <button
+          onClick={() => setSection('grid')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            section === 'grid' ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          🗓️ 시간표
+        </button>
+        <button
+          onClick={() => setSection('records')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            section === 'records' ? 'bg-cheese-400 text-ink-900' : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          📝 기록
+        </button>
+      </nav>
+
+      {section === 'grid' ? <TimetableBoard /> : <ClassRecords />}
+    </div>
+  )
 }
 
 function TimetableBoard() {
