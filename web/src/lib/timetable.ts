@@ -37,6 +37,10 @@ export interface TimetableData {
   /** 반 이름(trim된 값) -> 지정 색상(hex). 여기 없는 반은 autoClassColor()로
    *  이름에서 결정론적으로 뽑은 색을 쓴다 — CellEditor의 색상 선택기 참고. */
   classColors: Record<string, string>
+  /** 교시(1부터) -> 시간 표시용 자유 텍스트(예: "09:00"). 값을 안 넣은
+   *  교시는 시간이 아예 안 보인다 — 형식을 강제하지 않는다(사용자가
+   *  "09:00~09:50"처럼 범위로 쓸 수도 있으니). */
+  periodTimes: Record<number, string>
 }
 
 const EMPTY_CELL: TimetableCell = { subject: '', className: '', room: '', note: '' }
@@ -87,13 +91,14 @@ export function isEmptyCell(cell: TimetableCell | undefined): boolean {
 
 export async function getTimetable(): Promise<TimetableData> {
   const snapshot = await getDoc(doc(db, TIMETABLE, DOC_ID))
-  if (!snapshot.exists()) return { periods: DEFAULT_PERIODS, cells: {}, classColors: {} }
+  if (!snapshot.exists()) return { periods: DEFAULT_PERIODS, cells: {}, classColors: {}, periodTimes: {} }
   const data = snapshot.data()
   const periods = typeof data.periods === 'number' ? data.periods : DEFAULT_PERIODS
   return {
     periods,
     cells: (data.cells as Record<string, TimetableCell>) ?? {},
     classColors: (data.classColors as Record<string, string>) ?? {},
+    periodTimes: (data.periodTimes as Record<number, string>) ?? {},
   }
 }
 
@@ -146,6 +151,23 @@ export async function setClassColor(className: string, color: string | null): Pr
     if ((caught as { code?: string }).code !== 'not-found') throw caught
     if (color === null) return // 문서가 없다는 건 지정된 색도 없다는 뜻이니 그냥 끝낸다.
     await setDoc(ref, { classColors: { [trimmed]: color } }, { merge: true })
+  }
+}
+
+/**
+ * 교시 하나의 시간 표시를 저장한다(빈 문자열이면 지운다) — setClassColor와
+ * 같은 dot-notation + not-found 폴백 패턴.
+ */
+export async function setPeriodTime(period: number, time: string): Promise<void> {
+  const trimmed = time.trim()
+  const ref = doc(db, TIMETABLE, DOC_ID)
+  const value = trimmed ? trimmed : deleteField()
+  try {
+    await updateDoc(ref, { [`periodTimes.${period}`]: value })
+  } catch (caught) {
+    if ((caught as { code?: string }).code !== 'not-found') throw caught
+    if (!trimmed) return
+    await setDoc(ref, { periodTimes: { [period]: trimmed } }, { merge: true })
   }
 }
 

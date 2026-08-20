@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { useAuth } from '../auth/AuthProvider'
 import PolicyModal from '../components/PolicyModal'
@@ -18,6 +18,7 @@ import {
   isEmptyCell,
   saveCell,
   setClassColor,
+  setPeriodTime,
   setPeriods,
   type TimetableCell,
   type TimetableData,
@@ -174,6 +175,39 @@ function TimetableBoard() {
     }
   }
 
+  // 입력창에 타이핑하는 동안은 로컬 상태만 바꾸고(즉시 화면에 반영), 포커스를
+  // 벗어날 때만 실제로 저장한다 — 교시 수 입력(applyPeriods)과 같은 패턴.
+  // 여기선 교시마다 입력칸이 여러 개라 별도 로컬 state 대신 data.periodTimes를
+  // 그대로 controlled value로 쓰고, 포커스 시점 값을 ref에 담아뒀다가 실패하면
+  // 그 값으로 되돌린다.
+  const periodTimeBeforeEdit = useRef<Record<number, string>>({})
+
+  function handlePeriodTimeFocus(period: number, value: string) {
+    periodTimeBeforeEdit.current[period] = value
+  }
+
+  function handlePeriodTimeInput(period: number, value: string) {
+    setData((prev) =>
+      prev ? { ...prev, periodTimes: { ...prev.periodTimes, [period]: value } } : prev,
+    )
+  }
+
+  async function handlePeriodTimeBlur(period: number) {
+    if (!data) return
+    const previous = (periodTimeBeforeEdit.current[period] ?? '').trim()
+    const value = (data.periodTimes[period] ?? '').trim()
+    if (value === previous) return
+    try {
+      await setPeriodTime(period, value)
+    } catch (caught) {
+      console.error('교시 시간 저장 실패', caught)
+      setData((prev) =>
+        prev ? { ...prev, periodTimes: { ...prev.periodTimes, [period]: previous } } : prev,
+      )
+      alert('시간을 저장하지 못했습니다. 다시 시도해 주세요.')
+    }
+  }
+
   if (loadError) {
     return (
       <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -239,7 +273,24 @@ function TimetableBoard() {
             {Array.from({ length: data.periods }, (_, index) => index + 1).map((period) => (
               <tr key={period}>
                 <th className="border-b border-cream-deep px-2 py-3 text-xs font-semibold text-ink-500">
-                  {period}
+                  <div className="flex flex-col items-center gap-1">
+                    <span>{period}</span>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={data.periodTimes[period] ?? ''}
+                        placeholder="시간"
+                        onFocus={(event) => handlePeriodTimeFocus(period, event.target.value)}
+                        onChange={(event) => handlePeriodTimeInput(period, event.target.value)}
+                        onBlur={() => handlePeriodTimeBlur(period)}
+                        className="w-14 rounded border border-cream-deep bg-white px-1 py-0.5 text-center text-[10px] font-normal text-ink-700"
+                      />
+                    ) : (
+                      data.periodTimes[period] && (
+                        <span className="font-normal text-ink-400">{data.periodTimes[period]}</span>
+                      )
+                    )}
+                  </div>
                 </th>
                 {TIMETABLE_DAYS.map((_day, dayIndex) => {
                   const key = cellKey(dayIndex, period)
