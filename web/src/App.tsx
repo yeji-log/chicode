@@ -19,6 +19,11 @@ const TABS = [
   { to: '/lab', label: 'Lab', end: false },
 ]
 
+// 시간표는 교사 전용 업무용 탭이라 로그인 상태일 때만 내비게이션에 노출한다
+// (firestore.rules 도 timetable 컬렉션은 isTeacher() 로 읽기까지 막아서, 로그인
+// 안 한 사람은 탭을 몰라도 어차피 못 본다 — 이 조건은 그 위의 편의일 뿐).
+const TEACHER_TABS = [{ to: '/timetable', label: '시간표', end: false }]
+
 export default function App() {
   const [openPolicy, setOpenPolicy] = useState<OpenPolicy>(null)
   const { state: authState } = useAuth()
@@ -41,7 +46,7 @@ export default function App() {
               버린다(수/업/자/료 처럼 세로로 쌓임). min-w-0 + overflow-x-auto +
               각 탭 whitespace-nowrap 조합으로 막는다. */}
           <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {TABS.map((tab) => (
+            {(authState === 'teacher' ? [...TABS, ...TEACHER_TABS] : TABS).map((tab) => (
               <NavLink
                 key={tab.to}
                 to={tab.to}
