@@ -10,7 +10,7 @@
  * (firestore.rules 의 timetable 규칙 참고) — "가벼운 잠금"이 아니라 진짜로
  * 로그인한 교사만 볼 수 있다.
  */
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { deleteField, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 
 import { db } from './firebase'
 
@@ -34,9 +34,47 @@ export interface TimetableData {
   periods: number
   /** 키는 `${dayIndex}-${period}` (dayIndex: 0=월 … 4=금, period: 1부터). */
   cells: Record<string, TimetableCell>
+  /** 반 이름(trim된 값) -> 지정 색상(hex). 여기 없는 반은 autoClassColor()로
+   *  이름에서 결정론적으로 뽑은 색을 쓴다 — CellEditor의 색상 선택기 참고. */
+  classColors: Record<string, string>
 }
 
 const EMPTY_CELL: TimetableCell = { subject: '', className: '', room: '', note: '' }
+
+/**
+ * 같은 반 이름은 항상 같은 색으로 보이게 하는 기본값(사용자 요청 — "랜덤
+ * 색 배정"이지만 새로고침마다 바뀌면 오히려 헷갈리므로, 이름을 해시해서
+ * 매번 같은 색이 나오게 했다. classColors에 직접 지정해두면 그 색이
+ * 우선한다.
+ */
+const AUTO_PALETTE = [
+  '#FBCFE8', // pink-200
+  '#BFDBFE', // blue-200
+  '#BBF7D0', // green-200
+  '#DDD6FE', // violet-200
+  '#FED7AA', // orange-200
+  '#A5F3FC', // cyan-200
+  '#FECACA', // red-200
+  '#D9F99D', // lime-200
+  '#E9D5FF', // purple-200
+  '#99F6E4', // teal-200
+] as const
+
+export { AUTO_PALETTE }
+
+export function autoClassColor(className: string): string {
+  const trimmed = className.trim()
+  let hash = 0
+  for (let i = 0; i < trimmed.length; i += 1) {
+    hash = (hash * 31 + trimmed.charCodeAt(i)) | 0
+  }
+  return AUTO_PALETTE[Math.abs(hash) % AUTO_PALETTE.length]
+}
+
+export function classColorFor(data: Pick<TimetableData, 'classColors'>, className: string): string {
+  const trimmed = className.trim()
+  return data.classColors[trimmed] ?? autoClassColor(trimmed)
+}
 
 export function cellKey(dayIndex: number, period: number): string {
   return `${dayIndex}-${period}`
@@ -49,10 +87,14 @@ export function isEmptyCell(cell: TimetableCell | undefined): boolean {
 
 export async function getTimetable(): Promise<TimetableData> {
   const snapshot = await getDoc(doc(db, TIMETABLE, DOC_ID))
-  if (!snapshot.exists()) return { periods: DEFAULT_PERIODS, cells: {} }
+  if (!snapshot.exists()) return { periods: DEFAULT_PERIODS, cells: {}, classColors: {} }
   const data = snapshot.data()
   const periods = typeof data.periods === 'number' ? data.periods : DEFAULT_PERIODS
-  return { periods, cells: (data.cells as Record<string, TimetableCell>) ?? {} }
+  return {
+    periods,
+    cells: (data.cells as Record<string, TimetableCell>) ?? {},
+    classColors: (data.classColors as Record<string, string>) ?? {},
+  }
 }
 
 /**
@@ -85,6 +127,26 @@ export async function saveCell(key: string, cell: TimetableCell): Promise<void> 
 
 export async function clearCell(key: string): Promise<void> {
   await saveCell(key, EMPTY_CELL)
+}
+
+/**
+ * 반 이름에 색을 지정하거나(색을 넘김), 지정을 지워 다시 자동 색으로
+ * 돌린다(color를 null로 넘김) — saveCell과 같은 이유로 updateDoc의
+ * dot-notation을 쓰고, 문서가 아직 없을 때만 setDoc(merge:true)로
+ * 새로 만든다.
+ */
+export async function setClassColor(className: string, color: string | null): Promise<void> {
+  const trimmed = className.trim()
+  if (!trimmed) return
+  const ref = doc(db, TIMETABLE, DOC_ID)
+  const value = color ?? deleteField()
+  try {
+    await updateDoc(ref, { [`classColors.${trimmed}`]: value })
+  } catch (caught) {
+    if ((caught as { code?: string }).code !== 'not-found') throw caught
+    if (color === null) return // 문서가 없다는 건 지정된 색도 없다는 뜻이니 그냥 끝낸다.
+    await setDoc(ref, { classColors: { [trimmed]: color } }, { merge: true })
+  }
 }
 
 export async function setPeriods(periods: number): Promise<void> {

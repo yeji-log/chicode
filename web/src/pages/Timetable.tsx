@@ -6,15 +6,18 @@ import ToggleSwitch from '../components/ToggleSwitch'
 import { asset } from '../lib/asset'
 import { isFirebaseConfigured } from '../lib/firebase'
 import {
+  AUTO_PALETTE,
   DEFAULT_PERIODS,
   MAX_PERIODS,
   MIN_PERIODS,
   TIMETABLE_DAYS,
   cellKey,
+  classColorFor,
   clearCell,
   getTimetable,
   isEmptyCell,
   saveCell,
+  setClassColor,
   setPeriods,
   type TimetableCell,
   type TimetableData,
@@ -151,6 +154,26 @@ function TimetableBoard() {
     setSelected(null)
   }
 
+  // 반 색상은 칸 저장과 별개로 즉시 반영한다(사용자 요청 — 색 지정 가능) —
+  // 다른 즉시-반영 토글들(SubjectSettings의 공개 여부 등)과 같은 이유로,
+  // "저장" 버튼까지 기다리지 않고 눌러본 그 자리에서 바로 확인하고 싶을
+  // 때가 많다고 판단했다.
+  async function handleColorChange(className: string, color: string | null) {
+    try {
+      await setClassColor(className, color)
+      setData((prev) => {
+        if (!prev) return prev
+        const nextColors = { ...prev.classColors }
+        if (color === null) delete nextColors[className]
+        else nextColors[className] = color
+        return { ...prev, classColors: nextColors }
+      })
+    } catch (caught) {
+      console.error('반 색상 변경 실패', caught)
+      alert('색상을 바꾸지 못했습니다. 다시 시도해 주세요.')
+    }
+  }
+
   if (loadError) {
     return (
       <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -234,22 +257,38 @@ function TimetableBoard() {
                       </span>
                     </>
                   )
+                  // 반 이름이 있으면 그 반의 색(직접 지정했거나, 없으면 이름에서
+                  // 결정론적으로 뽑은 자동 색)을 칸 배경에 쓴다 — 같은 반은 항상
+                  // 같은 색으로 보이게 하려는 목적(사용자 요청)이라 Tailwind
+                  // bg-* 유틸이 아니라 인라인 style로 칠한다(임의의 hex를 써야
+                  // 해서 정적 클래스로는 못 만든다). hover는 밝기만 살짝
+                  // 낮추는 필터를 써서 어떤 배경색에도 똑같이 먹힌다.
+                  const cellColor =
+                    !empty && cell!.className.trim() ? classColorFor(data, cell!.className) : null
                   const cellClass = [
-                    'flex h-16 w-full flex-col items-start gap-0.5 rounded-lg px-2 py-1.5 text-left transition-colors',
-                    empty ? 'text-ink-300' : 'bg-cheese-100',
-                    editMode && (empty ? 'hover:bg-cheese-100' : 'hover:bg-cheese-200'),
+                    'flex h-16 w-full flex-col items-start gap-0.5 rounded-lg px-2 py-1.5 text-left transition-[filter]',
+                    empty ? 'text-ink-300' : '',
+                    !cellColor && !empty ? 'bg-cheese-100' : '',
+                    editMode && (cellColor ? 'hover:brightness-95' : empty ? 'hover:bg-cheese-100' : 'hover:bg-cheese-200'),
                   ]
                     .filter(Boolean)
                     .join(' ')
+                  const cellStyle = cellColor ? { backgroundColor: cellColor } : undefined
 
                   return (
                     <td key={key} className="border-b border-l border-cream-deep p-1.5 align-top">
                       {editMode ? (
-                        <button onClick={() => setSelected({ dayIndex, period })} className={cellClass}>
+                        <button
+                          onClick={() => setSelected({ dayIndex, period })}
+                          className={cellClass}
+                          style={cellStyle}
+                        >
                           {content}
                         </button>
                       ) : (
-                        <div className={cellClass}>{content}</div>
+                        <div className={cellClass} style={cellStyle}>
+                          {content}
+                        </div>
                       )}
                     </td>
                   )
@@ -269,6 +308,8 @@ function TimetableBoard() {
           onSaved={handleSaved}
           clipboard={clipboard}
           onCopy={setClipboard}
+          classColors={data.classColors}
+          onColorChange={handleColorChange}
         />
       )}
     </div>
@@ -283,6 +324,8 @@ function CellEditor({
   onSaved,
   clipboard,
   onCopy,
+  classColors,
+  onColorChange,
 }: {
   dayIndex: number
   period: number
@@ -291,6 +334,8 @@ function CellEditor({
   onSaved: (key: string, cell: TimetableCell) => void
   clipboard: TimetableCell | null
   onCopy: (cell: TimetableCell) => void
+  classColors: Record<string, string>
+  onColorChange: (className: string, color: string | null) => Promise<void>
 }) {
   const key = cellKey(dayIndex, period)
   const [subject, setSubject] = useState(cell?.subject ?? '')
@@ -299,6 +344,21 @@ function CellEditor({
   const [note, setNote] = useState(cell?.note ?? '')
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [colorBusy, setColorBusy] = useState(false)
+
+  const trimmedClassName = className.trim()
+  const hasManualColor = trimmedClassName in classColors
+  const effectiveColor = trimmedClassName ? classColorFor({ classColors }, trimmedClassName) : null
+
+  async function handlePickColor(color: string | null) {
+    if (!trimmedClassName) return
+    setColorBusy(true)
+    try {
+      await onColorChange(trimmedClassName, color)
+    } finally {
+      setColorBusy(false)
+    }
+  }
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault()
@@ -364,6 +424,53 @@ function CellEditor({
             autoFocus
           />
         </label>
+
+        {/* 반 색상 — 같은 반 이름은 항상 같은 색으로 보이도록 이름에서 자동으로
+            색을 뽑아 쓰지만(lib/timetable.ts의 autoClassColor), 여기서 직접
+            지정해 그 자동 색을 덮어쓸 수도 있다(사용자 요청). 반 이름을 아직
+            안 썼으면 어떤 반에 지정하는 건지 알 수 없으니 숨긴다. 색은
+            저장 버튼과 무관하게 고르는 즉시 반영된다. */}
+        {trimmedClassName && (
+          <div className="flex flex-col gap-1.5 text-sm">
+            <span className="font-semibold text-ink-700">반 색상</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {AUTO_PALETTE.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`${trimmedClassName} 색상을 ${color}로 지정`}
+                  disabled={colorBusy}
+                  onClick={() => handlePickColor(color)}
+                  className={[
+                    'size-7 shrink-0 rounded-full ring-offset-2 transition-shadow disabled:cursor-not-allowed',
+                    effectiveColor === color ? 'ring-2 ring-ink-900' : 'ring-1 ring-cream-deep',
+                  ].join(' ')}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+
+              <input
+                type="color"
+                aria-label={`${trimmedClassName} 색상 직접 선택`}
+                value={effectiveColor ?? '#ffffff'}
+                disabled={colorBusy}
+                onChange={(event) => handlePickColor(event.target.value)}
+                className="size-7 shrink-0 cursor-pointer rounded-full border-0 bg-transparent p-0 disabled:cursor-not-allowed"
+              />
+
+              {hasManualColor && (
+                <button
+                  type="button"
+                  disabled={colorBusy}
+                  onClick={() => handlePickColor(null)}
+                  className="rounded-lg border border-cream-deep px-2.5 py-1 text-xs font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  자동으로
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-semibold text-ink-700">교실</span>
