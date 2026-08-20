@@ -163,11 +163,6 @@ function TimetableBoard() {
       <header className="flex flex-wrap items-center gap-3">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">시간표</h1>
-          {!editMode && (
-            <p className="text-sm text-ink-500">
-              보기 전용입니다. 훑어보다 실수로 바뀌지 않도록, 고치려면 편집 모드를 켜주세요.
-            </p>
-          )}
         </div>
 
         <div className="ml-auto flex items-center gap-4">
