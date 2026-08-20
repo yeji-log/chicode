@@ -7,14 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import {
-  getRedirectResult,
-  onAuthStateChanged,
-  signInWithPopup,
-  signInWithRedirect,
-  signOut,
-  type User,
-} from 'firebase/auth'
+import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 
 import { auth, db, googleProvider } from '../lib/firebase'
@@ -32,42 +25,30 @@ import { pushDebug } from '../lib/debugLog'
  */
 
 /**
- * 안드로이드(삼성 인터넷·크롬 둘 다 확인됨)에서 signInWithPopup 이 오류 코드도 없이
- * 조용히 실패하는 걸 실제로 겪고 나서 넣었다 — 팝업 창과 원래 창이 스토리지로 로그인
- * 결과를 주고받는데, 안드로이드 브라우저들이 이 통신을 데스크톱과 다르게 처리해서 깨지는
- * 것으로 보인다(Firebase 공식 문서도 모바일에는 리다이렉트 방식을 권장한다).
+ * 갤럭시 탭에서 signInWithPopup 이 오류 코드도 없이 조용히 실패하는 걸 겪고,
+ * 한동안 안드로이드만 signInWithRedirect 로 보내도록 갈라뒀던 적이 있다.
+ * 그런데 그것도 똑같이 "에러 없이 로그인 결과 없음"으로 조용히 실패했다 —
+ * ?debug=1 진단 패널로 실기기에서 signIn 클릭부터 getRedirectResult 까지
+ * 전 과정을 직접 받아 확인했다.
  *
- * 안드로이드로만 좁힌 이유: 아이폰(Safari)은 지금 팝업 방식으로 이미 잘 된다. 사파리는
- * 추적 방지 때문에 리다이렉트 방식에서 또 다른 방식으로 깨질 수 있어서, 검증 안 된
- * 위험을 새로 만들지 않으려고 이미 되는 흐름은 건드리지 않았다.
+ * 원인은 기기가 아니라 이 프로젝트의 Firebase 설정 자체에 있었다: authDomain
+ * 이 앱이 실제로 떠 있는 도메인(chico-edu.vercel.app)과 다른
+ * chicode-b5713.firebaseapp.com 이다. signInWithRedirect 는 로그인 결과를
+ * 돌려받을 때 이 둘 사이를 크로스 오리진 iframe 으로 연결해서 브라우저
+ * 스토리지에 접근하는데, Chrome 115+ 를 포함한 최신 브라우저는 이 크로스
+ * 오리진 스토리지 접근을 기본으로 차단한다 — Firebase 공식 문서가 정확히 이
+ * 증상과 원인을 설명하고, 대안으로 "signInWithPopup 사용"을 꼽는다
+ * (https://firebase.google.com/docs/auth/web/redirect-best-practices).
+ * signInWithPopup 은 팝업 창과 opener 사이를 postMessage 로 직접 잇기 때문에
+ * 이 스토리지 접근 문제가 없다.
  *
- * 처음엔 navigator.userAgent 에 "android" 가 있는지만 봤는데, 배포하고도 갤럭시 탭에서
- * 똑같이 실패했다 — 원인은 Chrome 이 2023년부터 화면 10인치·8GB RAM 이상인
- * "프리미엄" 안드로이드 태블릿에서 기본으로 "데스크톱 사이트" 모드를 켜기 때문이다.
- * 이 모드에서는 UA 자체가 `Mozilla/5.0 (X11; Linux x86_64) ...` 처럼 바뀌어서 "android"
- * 라는 단어가 아예 사라진다(https://developer.chrome.com/blog/desktop-mode). 삼성
- * 인터넷도 태블릿에서 "데스크톱 사이트"를 켜면 똑같이 `X11; Linux x86_64 ...
- * SamsungBrowser/...` 형태로 나온다 — 실제 UA 문자열로 확인.
- *
- * 그래서 UA 문자열만으로는 못 믿는다. 대신 "데스크톱 사이트" 모드에서도 못 속이는
- * 값 — 실제 입력이 터치인지 — 를 같이 본다. UA 에 iPhone/iPad/Mac/Windows 가 없는데
- * 터치(coarse pointer)까지 있으면, 이 학교 환경(교사는 맥북·윈도우 노트북만 씀)에서는
- * 안드로이드 태블릿 말고는 해당할 게 없다.
+ * 그래서 기기별로 방식을 가르지 않고 팝업으로 통일한다. 맥북/윈도우/아이폰은
+ * 이미 팝업으로 잘 된다 — 갤럭시 탭에서 애초에 왜 실패했는지(코드 없는 그
+ * 첫 실패)는 아직 정확히 확인 못 했다. authDomain 을 커스텀 도메인으로 맞추는
+ * 게 Firebase 가 권장하는 더 근본적인 해결책이지만, 이건 코드가 아니라
+ * Firebase Hosting 커스텀 도메인 설정이 필요한 인프라 변경이라 여기서 하지
+ * 않았다.
  */
-function isAndroid(): boolean {
-  const ua = navigator.userAgent
-  if (/android/i.test(ua)) return true
-
-  const isKnownNonAndroid = /iphone|ipad|ipod|mac os|windows/i.test(ua)
-  if (isKnownNonAndroid) return false
-
-  const hasCoarseTouch =
-    typeof matchMedia === 'function' &&
-    navigator.maxTouchPoints > 0 &&
-    matchMedia('(pointer: coarse)').matches
-
-  return hasCoarseTouch
-}
 
 export type TeacherState = 'loading' | 'anonymous' | 'not-allowed' | 'teacher'
 
@@ -87,20 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    pushDebug('AuthProvider 마운트', { isAndroid: isAndroid() })
-
-    // signInWithRedirect 로 나갔다가 돌아온 경우, 그 과정에서 난 오류는
-    // onAuthStateChanged 로는 안 잡히고 이걸로만 잡힌다.
-    getRedirectResult(auth)
-      .then((result) => {
-        pushDebug('getRedirectResult 완료', { hasUser: !!result?.user, email: result?.user?.email })
-      })
-      .catch((caught) => {
-        pushDebug('getRedirectResult 실패', caught)
-        const code = (caught as { code?: string }).code ?? ''
-        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return
-        setError(explainAuthError(code))
-      })
+    pushDebug('AuthProvider 마운트')
   }, [])
 
   useEffect(() => {
@@ -129,17 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async () => {
     setError(null)
-    const android = isAndroid()
-    pushDebug('signIn 클릭', {
-      isAndroid: android,
-      ua: navigator.userAgent,
-      maxTouchPoints: navigator.maxTouchPoints,
-    })
+    pushDebug('signIn 클릭', { ua: navigator.userAgent })
     try {
-      if (android) {
-        await signInWithRedirect(auth, googleProvider)
-        return
-      }
       await signInWithPopup(auth, googleProvider)
     } catch (caught) {
       pushDebug('signIn 실패', caught)

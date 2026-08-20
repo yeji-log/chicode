@@ -10,9 +10,10 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "sync:pyodide": "node scripts/sync-pyodide.mjs",
-    "postinstall": "node scripts/sync-pyodide.mjs && node scripts/sync-clang.mjs && node scripts/sync-micropython.mjs",
+    "postinstall": "node scripts/sync-pyodide.mjs && node scripts/sync-clang.mjs && node scripts/sync-micropython.mjs && node scripts/sync-pdfjs-assets.mjs",
     "sync:clang": "node scripts/sync-clang.mjs",
     "sync:micropython": "node scripts/sync-micropython.mjs",
+    "sync:pdfjs-assets": "node scripts/sync-pdfjs-assets.mjs",
     "fetch:news": "node scripts/fetch-news.mjs"
   },
   "dependencies": {
