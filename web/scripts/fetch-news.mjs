@@ -78,6 +78,12 @@ const SOURCES = [
   { name: 'Amazon Science', url: 'https://www.amazon.science/index.rss' },
   { name: 'Hugging Face', url: 'https://huggingface.co/blog/feed.xml' },
   { name: 'GitHub Blog', url: 'https://github.blog/feed/' },
+  // 과학·공학 전문 매체 — 기업 블로그만으로는 ai-science/robotics/ai-hardware
+  // 카테고리가 거의 안 채워지는 걸 실제로 확인하고(2026-08-20 테스트 수집에서
+  // 0건) 추가했다. curl로 실제 RSS인지 확인 후 넣었다 —
+  // www.dongascience.com/rss.php 는 200이 떴지만 실제로는 Next.js HTML
+  // 셸이라(진짜 RSS 아님) 뺐다.
+  { name: 'ScienceDaily(AI)', url: 'https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml' },
   // 국내 기업 기술 블로그.
   { name: '네이버 D2', url: 'https://d2.naver.com/d2.atom', lang: 'ko' },
   { name: '카카오 기술블로그', url: 'https://tech.kakao.com/feed', lang: 'ko' },
@@ -93,6 +99,9 @@ const SOURCES = [
   { name: '하이퍼커넥트', url: 'https://hyperconnect.github.io/feed.xml', lang: 'ko' },
   { name: 'NHN Cloud Meetup', url: 'https://meetup.nhncloud.com/rss', lang: 'ko' },
   { name: '원티드', url: 'https://medium.com/feed/wantedjobs', lang: 'ko' },
+  // 대덕특구(카이스트·정부출연연구기관) 중심 과학기술 전문매체. 위 "과학·공학
+  // 전문 매체" 주석 참고.
+  { name: '헬로디디', url: 'https://www.hellodd.com/rss/allArticle.xml', lang: 'ko' },
 ]
 
 // 기획서 4번 "뉴스 수집 분야"와 수집 가이드라인 5번 "우선적으로 수집할 뉴스"를
@@ -153,8 +162,25 @@ const CATEGORY_KEYWORDS = {
     'materials science',
     'astronomy',
     'scientific research',
+    'physics',
+    'chemistry',
+    'biology',
+    'engineering',
+    'photonics',
+    'superconducting',
+    'nanotechnology',
+    'research team',
+    'researchers',
     '신약 개발',
     '과학 연구',
+    '연구팀',
+    '연구진',
+    '공학',
+    '물리학',
+    '화학',
+    '생명과학',
+    '나노기술',
+    '초전도',
   ],
   'ai-hardware': [
     'gpu',
@@ -542,7 +568,16 @@ async function main() {
   )
 }
 
-main().catch((caught) => {
-  console.error('[fetch-news] 실패:', caught)
-  process.exit(1)
-})
+// SOURCES/tagCategory 를 export 해서, Firestore(FIREBASE_SERVICE_ACCOUNT_KEY)를
+// 안 건드리고도 "이 소스들이 실제로 어느 카테고리로 태깅되는지"를 별도 스크립트로
+// 확인할 수 있게 했다 — 과학·공학 소스를 추가할 때 이 방식으로 직접 검증했다.
+// import.meta.url 가드가 없으면 이 파일을 import 만 해도 main()이 즉시 실행돼
+// FIREBASE_SERVICE_ACCOUNT_KEY 없이 죽는다.
+export { SOURCES, tagCategory }
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((caught) => {
+    console.error('[fetch-news] 실패:', caught)
+    process.exit(1)
+  })
+}
