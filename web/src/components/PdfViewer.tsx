@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { pushDebug } from '../lib/debugLog'
+
 /**
  * PDF 뷰어.
  *
@@ -40,6 +42,32 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
     promise,
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
   ])
+}
+
+/**
+ * 렌더가 "성공"으로 끝났는데도 실제로는 빈 캔버스만 남는(GPU 텍스처 한도로
+ * 추정되는) 문제를 진단하려고 넣었다. 몇 개 점만 샘플로 찍어 전부 완전
+ * 흰색·완전 투명이면 사실상 빈 화면으로 본다 — 진단용이라 정밀할 필요는 없다.
+ */
+function checkCanvasBlank(canvas: HTMLCanvasElement): string {
+  try {
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return '2d context 없음(다른 context 타입 사용 중일 수 있음)'
+    const w = canvas.width
+    const h = canvas.height
+    if (w === 0 || h === 0) return `캔버스 크기가 0 (${w}x${h})`
+    const points = [
+      [Math.floor(w / 2), Math.floor(h / 2)],
+      [2, 2],
+      [w - 2, h - 2],
+    ]
+    const isBlankPixel = (data: Uint8ClampedArray) =>
+      (data[3] === 0) || (data[0] === 255 && data[1] === 255 && data[2] === 255)
+    const allBlank = points.every(([x, y]) => isBlankPixel(ctx.getImageData(x, y, 1, 1).data))
+    return allBlank ? '빈 화면으로 보임(샘플 픽셀 전부 흰색/투명)' : '정상적으로 그려진 것으로 보임'
+  } catch (caught) {
+    return `확인 실패: ${caught}`
+  }
 }
 
 /**
@@ -96,6 +124,7 @@ export default function PdfViewer({
     let cancelled = false
 
     async function load() {
+      pushDebug('PdfViewer 로드 시작', { filename })
       try {
         const pdfjs = await import('pdfjs-dist')
         // 워커는 번들러가 만든 주소를 그대로 쓴다. CDN 을 타지 않으므로
@@ -119,6 +148,7 @@ export default function PdfViewer({
           return
         }
 
+        pushDebug('PdfViewer 로드 성공', { numPages: loaded.numPages })
         documentRef.current = loaded
         setPageCount(loaded.numPages)
         onPageCountChange?.(loaded.numPages)
@@ -130,6 +160,7 @@ export default function PdfViewer({
       } catch (caught) {
         if (cancelled) return
         console.error('PDF 열기 실패', caught)
+        pushDebug('PdfViewer 로드 실패', caught)
         setError(
           '이 PDF 를 화면에 표시하지 못했습니다. 이 기기·브라우저와 호환되지 않을 수 있습니다. 다른 브라우저로 다시 시도해 주세요.',
         )
@@ -210,6 +241,15 @@ export default function PdfViewer({
         canvas.style.width = `${viewport.width / ratio}px`
         canvas.style.height = `${viewport.height / ratio}px`
 
+        pushDebug('PdfViewer 렌더 시작', {
+          page,
+          containerClientWidth: container.clientWidth,
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          ratio,
+          cappedByMaxSide: longestSide > MAX_CANVAS_SIDE,
+        })
+
         const task = target.render({ canvas, viewport })
         renderTaskRef.current = task
 
@@ -217,10 +257,12 @@ export default function PdfViewer({
           // getDocument() 는 성공했는데 실제 캔버스 그리기만 멈추는 기기도
           // 있을 수 있어서(GPU 드라이버 관련 등) 여기도 타임아웃을 건다.
           await withTimeout(task.promise, RENDER_TIMEOUT_MS, '쪽을 그리는 데 시간이 너무 오래 걸립니다')
+          pushDebug('PdfViewer 렌더 완료', { page, blankCheck: checkCanvasBlank(canvas) })
         } catch (caught) {
           // 취소는 정상적인 흐름이다 (쪽 이동이나 창 크기 변경).
           if ((caught as { name?: string }).name !== 'RenderingCancelledException') {
             console.error('PDF 쪽 그리기 실패', caught)
+            pushDebug('PdfViewer 렌더 실패', caught)
             if (generation === generationRef.current) {
               setError(
                 '이 화면을 그리지 못했습니다. 이 기기·브라우저와 호환되지 않을 수 있습니다. 다른 브라우저로 다시 시도해 주세요.',
