@@ -299,7 +299,14 @@ export default function PdfViewer({
         const available = container.clientWidth - 32
         const scale = Math.max(available / base.width, 0.1)
         const ratio = Math.min(window.devicePixelRatio || 1, 2)
-        let viewport = target.getViewport({ scale: scale * ratio })
+
+        // "화면에 보이는 크기"는 배율(ratio)과 무관하게 컨테이너 폭에만 맞춘다.
+        // 아래 해상도 캡이 걸리더라도 이 크기는 절대 줄어들면 안 된다 — 예전엔
+        // 캡이 걸린 viewport를 ratio로 나눠 되돌리는 방식이라, 캡이 걸리는 순간
+        // 화면 크기까지 같이 줄어들었다(아래 설명).
+        const displayViewport = target.getViewport({ scale })
+
+        let renderViewport = target.getViewport({ scale: scale * ratio })
 
         // 일부 모바일 기기(특히 큰 화면 태블릿 + 고배율)는 캔버스 한 변이
         // 일정 크기를 넘으면 JS 에러 없이 그냥 빈 화면만 남긴다 — GPU 텍스처
@@ -315,27 +322,38 @@ export default function PdfViewer({
         // 보고가 있었던 값이라 남겨둔다 — 2600 → 1600 으로 낮춘 것도 그
         // 보고 이후였고, 위 진짜 원인이 고쳐진 뒤에도 여전히 문제가
         // 재현되면 그때 다시 2600 으로 되돌려도 된다.
+        //
+        // 이 캡을 화면 크기(style.width/height) 계산에도 같이 써버리는 버그가
+        // 있었다: devicePixelRatio 2인 큰 화면(발표를 넓게 띄워놓는 상황일수록
+        // available이 커서 더 잘 걸림)에서 캡이 걸리면 화면에 보이는 슬라이드
+        // 폭이 1600 / ratio = 800px로 뚝 떨어졌다 — "학생 화면 PPT가 작게
+        // 보인다"는 보고의 원인. 캡은 아래 renderViewport(해상도)에만 적용하고
+        // 화면 크기는 항상 displayViewport를 쓰도록 분리해서 고쳤다.
         const MAX_CANVAS_SIDE = 1600
-        const longestSide = Math.max(viewport.width, viewport.height)
+        const longestSide = Math.max(renderViewport.width, renderViewport.height)
         if (longestSide > MAX_CANVAS_SIDE) {
-          viewport = target.getViewport({ scale: (scale * ratio * MAX_CANVAS_SIDE) / longestSide })
+          renderViewport = target.getViewport({
+            scale: (scale * ratio * MAX_CANVAS_SIDE) / longestSide,
+          })
         }
 
-        canvas.width = viewport.width
-        canvas.height = viewport.height
-        canvas.style.width = `${viewport.width / ratio}px`
-        canvas.style.height = `${viewport.height / ratio}px`
+        canvas.width = renderViewport.width
+        canvas.height = renderViewport.height
+        canvas.style.width = `${displayViewport.width}px`
+        canvas.style.height = `${displayViewport.height}px`
 
         pushDebug('PdfViewer 렌더 시작', {
           page,
           containerClientWidth: container.clientWidth,
           canvasWidth: canvas.width,
           canvasHeight: canvas.height,
+          cssWidth: displayViewport.width,
+          cssHeight: displayViewport.height,
           ratio,
           cappedByMaxSide: longestSide > MAX_CANVAS_SIDE,
         })
 
-        const task = target.render({ canvas, viewport })
+        const task = target.render({ canvas, viewport: renderViewport })
         renderTaskRef.current = task
 
         try {
