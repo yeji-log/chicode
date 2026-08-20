@@ -110,13 +110,17 @@ Google 로그인 → Firestore teachers/{이메일} 존재? → 교사 페이지
 
 ```
 GitHub Actions (매일 KST 05:00, .github/workflows/daily-news.yml)
-  → scripts/fetch-news.mjs 가 국내외 공식/기업 블로그 RSS 수집
+  → scripts/fetch-news.mjs 가 국내외 공식 기업 블로그·과학기술 전문 매체 RSS 수집
   → 키워드로 분야 태깅(안 맞으면 버림)
   → 영어 소스만 한글로 번역(국내 소스는 이미 한글이라 건너뜀)
+  → 명백한 제외 신호 거르기(주가·루머·경품이벤트 등)
+  → 같은 사건을 보도한 항목을 이슈 단위로 묶기(여러 출처를 sources 배열에)
   → 중복 제거(이번 배치 내 + 최근 14일 발행분과 대조)
+  → 중요도 점수 계산(정렬용 힌트, 자동 제외 기준 아님) + 국내/해외 태그
   → Firebase Admin SDK로 newsCandidates 에 기록 (교사만 읽음)
         ↓
-  교사가 /teacher → "오늘의 뉴스" 탭에서 후보 중 골라 요약 작성 후 승인
+  교사가 /teacher → "오늘의 뉴스" 탭에서 점수 높은 순으로 후보를 보고 골라
+  요약 작성 후 승인
         ↓
   newsIssues 로 이동 (읽기 공개) → /news 페이지에 카드로 노출
 ```
@@ -132,17 +136,33 @@ GitHub Actions (매일 KST 05:00, .github/workflows/daily-news.yml)
   않지만 교사가 발행 전에 다듬는다는 전제로 초안 용도로는 충분하다.
 - **RSS 소스는 실제로 curl 로 하나하나 확인한 것만 넣었다** (`scripts/fetch-news.mjs`
   상단 주석 참고). 해외: OpenAI·Google DeepMind·Google AI Blog·NVIDIA·Meta·Amazon
-  Science·Hugging Face·GitHub Blog. 국내: 네이버 D2·카카오·우아한형제들·쿠팡·토스·
-  뱅크샐러드·LY Corp(LINE)·삼성 뉴스룸·SK hynix 뉴스룸·왓챠·무신사 기술블로그·
-  하이퍼커넥트·NHN Cloud Meetup·원티드. Anthropic 공식 블로그·Microsoft AI 블로그·
-  SOCAR·컬리·LG 계열은 확인 시점에 RSS가 없거나(404) 막혀 있거나(403/410) HTML
-  페이지만 나와서 뺐다 — 나중에 다시 확인해서 추가할 수 있다. 우아한형제들은
-  로컬에서는 되는데 GitHub Actions 러너에서만 403이 나는 게 확인돼서, 소스는
-  남겨뒀지만 실제로는 잘 안 잡힐 수 있다.
+  Science·Hugging Face·GitHub Blog·ScienceDaily(AI). 국내: 네이버 D2·카카오·
+  우아한형제들·쿠팡·토스·뱅크샐러드·LY Corp(LINE)·삼성 뉴스룸·SK hynix 뉴스룸·왓챠·
+  무신사 기술블로그·하이퍼커넥트·NHN Cloud Meetup·원티드·헬로디디. Anthropic 공식
+  블로그·Microsoft AI 블로그·SOCAR·컬리·LG 계열은 확인 시점에 RSS가 없거나(404) 막혀
+  있거나(403/410) HTML 페이지만 나와서 뺐다 — 나중에 다시 확인해서 추가할 수 있다.
+  우아한형제들·SK hynix 뉴스룸은 로컬에서는 되는데 GitHub Actions 러너에서만 403이
+  나는 게 확인돼서, 소스는 남겨뒀지만 실제로는 잘 안 잡힐 수 있다.
+  - 처음엔 기업 블로그 20곳뿐이었는데, 실제로 돌려보니 ai-science/robotics/it
+    카테고리가 전부 0건으로 나왔다(2026-08-20 확인) — 기업 블로그 위주라 과학
+    연구·로봇공학 뉴스 자체가 잘 안 올라와서다. ScienceDaily(AI)·헬로디디(대덕특구·
+    카이스트·출연연 중심 과학기술 매체)를 추가하고 `ai-science` 키워드 사전을
+    8개→24개로 넓혀서 해결했다.
 - 분야 태깅 키워드 사전(`CATEGORY_KEYWORDS`)은 영어·한글을 함께 담고, 단어 경계를
   로마자·숫자 기준으로만 판단하는 lookaround 매칭을 쓴다 — 처음엔 정규식 `\b` 를
   썼는데 `\b` 는 한글을 "단어 문자"로 인정하지 않아 한글 키워드가 단 하나도 안
-  걸리는 버그가 있었다(직접 돌려서 확인).
+  걸리는 버그가 있었다(직접 돌려서 확인). 카테고리는 "가장 먼저 매칭된 것"이 아니라
+  "가장 구체적인(긴) 키워드로 매칭된 것"을 고른다 — 안 그러면 ai 카테고리의 범용
+  키워드 `'ai'`가 항상 먼저 걸려서 "AI 반도체" 같은 구체적 키워드가 있는 카테고리로
+  못 간다(이것도 직접 돌려서 확인).
+- 후보에는 `score`(0~100 근사 중요도, 정렬 힌트일 뿐 자동 제외 기준 아님)·
+  `region`(국내/해외)·`sources`(같은 사건을 보도한 출처 전체) 필드도 함께 기록된다.
+  중요도 점수는 사람이 문맥을 읽고 채점해야 하는 걸 LLM 없이 근사한 것이라 —
+  키워드 등급·경과 시간·보도 소스 수·생활연결 키워드·발췌 길이로 계산한다
+  (`computeScore` 참고).
+- 명백한 제외 신호(주가 급등락, 루머, 경품 이벤트 등 `EXCLUDE_PATTERNS`)는 문자열
+  매칭만으로 안전하게 판단 가능한 것만 걸러낸다 — 문맥이 필요한 항목(단순 기업 홍보
+  등)은 오탐 위험이 더 크다고 보고 자동화하지 않았다.
 - 이 워크플로가 실제로 동작하려면 **GitHub 저장소 Secret**
   `FIREBASE_SERVICE_ACCOUNT_KEY` 를 등록해야 한다. Firebase 콘솔 → 프로젝트 설정 →
   서비스 계정 → "새 비공개 키 생성" 으로 받은 JSON 파일 전체 내용을 그대로 붙여넣는다.
