@@ -1,12 +1,15 @@
 import PolicyArticle from '../components/PolicyArticle'
 
-export const PRIVACY_POLICY_EFFECTIVE_DATE = '2026. 8. 20.'
+export const PRIVACY_POLICY_EFFECTIVE_DATE = '2026. 8. 21.'
 
 /**
  * chicode 코드베이스(Firebase 인증 · Firestore · Pyodide 실행 방식 · 동아리(Lab)
- * 유튜브 영상 임베드)를 실제로 확인하고 작성한 개인정보처리방침이다. 법률 자문을 거친
- * 문서는 아니므로, 서비스가 커지거나 학생 개인정보를 다루게 되면 전문가 검토를 받는
- * 것을 권한다.
+ * 유튜브 영상 임베드 · 수업기록 학생 명단/참여 기록)를 실제로 확인하고 작성한
+ * 개인정보처리방침이다. 법률 자문을 거친 문서는 아니다 — 2026.8.21 수업기록
+ * 기능으로 학생 개인정보(학번·이름·참여 기록)를 처음 다루게 됐는데, 이건 애초에
+ * 이 파일에 "서비스가 커지거나 학생 개인정보를 다루게 되면 전문가 검토를
+ * 받으라"고 스스로 남겨뒀던 그 시점이다 — 미성년자 개인정보인 만큼 전문가
+ * 검토를 받는 것을 권한다.
  */
 export default function PrivacyPolicy() {
   return (
@@ -18,8 +21,10 @@ export default function PrivacyPolicy() {
 
       <PolicyArticle num="제1조" title="수집하는 개인정보 항목">
         <p>
-          <strong>학생</strong> — 학생은 회원가입이나 로그인 없이 서비스를 이용합니다.
-          CHICODE는 학생의 이름, 이메일 등 어떠한 개인정보도 수집하지 않습니다.
+          <strong>학생</strong> — 학생은 회원가입이나 로그인 없이 서비스를 이용하며, 직접
+          개인정보를 입력하거나 전송하지 않습니다. 다만 담당 교사가 수업 관리 목적으로
+          학생의 학번·이름과 날짜별 수업 참여 여부를 직접 입력해 관리하는 "수업기록"
+          기능이 있습니다(자세한 내용은 제8조 참고).
         </p>
         <p>
           <strong>교사</strong> — 교사가 Google 계정으로 로그인하면, Google이 제공하는
@@ -51,6 +56,7 @@ export default function PrivacyPolicy() {
             자료·이슈 등록자 관리 — 수업자료·동아리(Lab) 활동자료·오늘의 이슈를 누가
             올리고 고쳤는지 기록해 문제 발생 시 확인
           </li>
+          <li>수업기록 관리 — 담당 교사가 학생의 수업 참여 여부를 날짜별로 기록·관리</li>
         </ol>
       </PolicyArticle>
 
@@ -59,6 +65,11 @@ export default function PrivacyPolicy() {
           교사 계정 정보는 교사 권한 등록이 유지되는 동안 보유하며, 서비스 운영자가 등록을
           해제하면 그 즉시 삭제합니다. 별도의 정액 보유기간을 두지 않고, 목적 달성 시(등록
           해제 시)까지 보유하는 방식을 채택하고 있습니다.
+        </p>
+        <p>
+          수업기록(학생 학번·이름·참여 기록)은 한 학기 동안 수업 관리 목적으로 보유하며,
+          학기가 끝나면 담당 교사가 "기록" 화면에서 반 단위로 직접 삭제합니다. 자동으로
+          삭제되는 기능은 없으며, 삭제 시점과 실행은 담당 교사의 운영 방침을 따릅니다.
         </p>
       </PolicyArticle>
 
@@ -80,8 +91,8 @@ export default function PrivacyPolicy() {
               <tr className="border-t border-cream-deep align-top">
                 <td className="px-3 py-2">Google Firebase</td>
                 <td className="px-3 py-2">
-                  로그인 인증(Authentication), 수업자료·동아리(Lab) 활동자료·오늘의 이슈
-                  저장(Firestore)
+                  로그인 인증(Authentication), 수업자료·동아리(Lab) 활동자료·오늘의 이슈·
+                  수업기록(학생 학번·이름·참여 기록) 저장(Firestore)
                 </td>
                 <td className="px-3 py-2 text-ink-500">
                   Firestore는 서울(asia-northeast3) 리전, Authentication은 Google 글로벌
@@ -178,12 +189,19 @@ export default function PrivacyPolicy() {
           교사 계정의 등록 해제, 등록된 개인정보의 열람·정정·삭제를 원하시면 제10조의
           연락처로 문의해 주세요.
         </p>
+        <p>
+          학생 또는 보호자가 수업기록에 등록된 정보(학번·이름·참여 기록)의 열람·정정·삭제를
+          원하시면 담당 교사 또는 제10조의 연락처로 요청하실 수 있습니다.
+        </p>
       </PolicyArticle>
 
       <PolicyArticle num="제8조" title="아동의 개인정보">
         <p>
-          학생 이용자를 포함해 만 14세 미만 아동으로부터는 어떠한 개인정보도 수집하지
-          않습니다. 향후 아동의 개인정보를 수집하는 기능이 추가될 경우, 관련 법령에 따라
+          학생이 서비스에 직접 개인정보를 입력하거나 전송하는 경우는 없습니다. 다만 담당
+          교사가 수업 운영 목적으로 학생의 학번·이름과 날짜별 수업 참여 여부를 직접 입력해
+          관리하는 "수업기록" 기능이 있습니다. 이 정보는 로그인한 교사만 열람·수정할 수
+          있고 학생은 접근할 수 없으며, 담당 교사가 직접 삭제하기 전까지 보관됩니다(제3조
+          참고). 이 밖에 아동의 개인정보를 수집하는 기능이 추가될 경우, 관련 법령에 따라
           법정대리인의 동의를 받는 절차를 먼저 마련한 뒤 이 방침에 반영하겠습니다.
         </p>
       </PolicyArticle>
@@ -203,6 +221,10 @@ export default function PrivacyPolicy() {
             이메일이 등록자 정보로 함께 저장되며, 이 데이터는 다른 공개 콘텐츠와
             마찬가지로 읽기 권한이 열려 있습니다. 화면에 노출하지는 않지만, 개발자도구로
             조회하면 확인할 수 있는 정보라는 점을 알려드립니다.
+          </li>
+          <li>
+            수업기록(학생 학번·이름·참여 기록)은 위와 달리 읽기 권한도 로그인한 교사로
+            제한되어 있어, 학생을 포함해 로그인하지 않은 누구도 열람할 수 없습니다.
           </li>
         </ul>
       </PolicyArticle>
