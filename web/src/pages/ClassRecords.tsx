@@ -345,7 +345,7 @@ function StudentAddPanel({
         <textarea
           value={bulkText}
           onChange={(event) => setBulkText(event.target.value)}
-          placeholder={'20116\t손유환\n20217\t우하람\n20230\t최하준'}
+          placeholder={'20116\t김길동\n20217\t이길동\n20230\t홍길동'}
           rows={4}
           className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-mono text-xs text-ink-900"
         />
