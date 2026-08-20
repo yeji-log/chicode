@@ -72,6 +72,51 @@ function checkCanvasBlank(canvas: HTMLCanvasElement): string {
 }
 
 /**
+ * 갤럭시 탭 발표 화면 한글 깨짐을 진단하려고 넣었다 — 이 기기의 pdf.js가
+ * 실제로 폰트를 어떻게 로드했는지(임베드 폰트가 이 런타임에서도 정상
+ * 파싱됐는지) 직접 확인한다. Node 로 이 앱 밖에서 미리 검증했을 때와 같은
+ * 방식이다. commonObjs/getOperatorList 는 공식 타입 선언에 없는 내부
+ * API라 필요한 부분만 any 로 접근한다 — 진단 전용이라 실패해도 무시한다.
+ */
+async function logFontDiagnostics(page: unknown): Promise<void> {
+  try {
+    const p = page as {
+      getOperatorList: () => Promise<unknown>
+      commonObjs: { get: (key: string) => unknown }
+      objs: { get: (key: string) => unknown }
+    }
+    await p.getOperatorList()
+    const fontKeys = new Set<string>()
+    // pdf.js 는 g_d0_f1 처럼 g_d{n}_f{n} 형태로 폰트 키를 붙인다. commonObjs
+    // 내부 맵을 공식적으로 순회하는 API가 없어서, 흔한 범위를 그냥 다 찔러본다.
+    for (let d = 0; d < 3; d++) {
+      for (let f = 1; f <= 12; f++) fontKeys.add(`g_d${d}_f${f}`)
+    }
+    const fonts: Record<string, unknown> = {}
+    for (const key of fontKeys) {
+      try {
+        const font = p.commonObjs.get(key) as
+          | { name?: string; fallbackName?: string; missingFile?: boolean; isType3Font?: boolean }
+          | undefined
+        if (font && typeof font === 'object' && 'name' in font) {
+          fonts[key] = {
+            name: font.name,
+            fallbackName: font.fallbackName,
+            missingFile: font.missingFile,
+            isType3Font: font.isType3Font,
+          }
+        }
+      } catch {
+        // 아직 안 실린 키 — 그냥 건너뛴다.
+      }
+    }
+    pushDebug('PdfViewer 폰트 진단', fonts)
+  } catch (caught) {
+    pushDebug('PdfViewer 폰트 진단 실패', caught)
+  }
+}
+
+/**
  * page/onPageChange 를 주면 "제어되는" 뷰어가 된다 — 발표 모드에서 교사의
  * 조작(또는 실시간으로 받은 슬라이드 번호)을 그대로 반영해야 해서 추가했다.
  * 안 주면 예전처럼 내부 상태로 알아서 페이지를 넘긴다(SubjectMaterials 등
@@ -234,6 +279,8 @@ export default function PdfViewer({
 
         const target = await pdf.getPage(page)
         if (generation !== generationRef.current) return
+
+        await logFontDiagnostics(target)
 
         const base = target.getViewport({ scale: 1 })
 
