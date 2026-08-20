@@ -10,7 +10,7 @@
  * (firestore.rules 의 timetable 규칙 참고) — "가벼운 잠금"이 아니라 진짜로
  * 로그인한 교사만 볼 수 있다.
  */
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 
 import { db } from './firebase'
 
@@ -56,14 +56,31 @@ export async function getTimetable(): Promise<TimetableData> {
 }
 
 /**
- * 칸 하나만 저장한다. dot-notation 필드 경로(`cells.${key}`)를 키로 써서
- * merge:true 와 함께 보내면 그 칸만 정확히 덮어쓰고 다른 칸은 그대로 남는다
- * — {cells: {[key]: cell}} 형태로 보내면 Firestore가 cells 필드 전체를
- * 새 값으로 교체해버려 다른 교사가 채운 칸이 지워질 수 있다. 문서가 아직
- * 없어도 setDoc(merge:true)는 새로 만들어주므로 별도 존재 확인이 필요 없다.
+ * 칸 하나만 저장한다.
+ *
+ * 처음엔 setDoc(..., {[`cells.${key}`]: cell}, {merge: true}) 로 썼는데, 실제
+ * 저장은 성공(에러 없음)해도 새로고침하면 값이 사라지는 버그가 있었다 — 원인은
+ * setDoc + merge:true 에서 점(.)이 든 키는 updateDoc 과 달리 중첩 경로로 안
+ * 풀리고 "cells.0-1" 이라는 점이 그대로 들어간 별도의 최상위 필드로 저장돼서다
+ * (실제 프로덕션 프로젝트에 임시 스크래치 컬렉션을 만들어 setDoc vs updateDoc
+ * 결과를 직접 비교해 확인함 — cells 맵 자체는 안 건드려지고 "cells.0-1"이라는
+ * 필드가 새로 생겼다). updateDoc 은 점 표기를 진짜 중첩 경로로 해석해서 그
+ * 칸만 정확히 덮어쓰고 다른 칸은 그대로 둔다 — 이게 맞는 방법이다.
+ *
+ * 다만 updateDoc 은 문서가 아직 없으면 not-found 로 실패한다(이것도 같은
+ * 방식으로 실측함). 시간표를 처음 쓰는 순간(문서가 아직 없을 때)만 setDoc +
+ * 진짜 중첩 객체({cells: {[key]: cell}}, merge:true) 로 새로 만든다 — 이
+ * 형태(점 표기 키가 아니라 실제 JS 중첩 객체)는 merge:true 와 함께 써도 다른
+ * 칸을 안 지운다는 것도 같은 실측에서 확인했다.
  */
 export async function saveCell(key: string, cell: TimetableCell): Promise<void> {
-  await setDoc(doc(db, TIMETABLE, DOC_ID), { [`cells.${key}`]: cell }, { merge: true })
+  const ref = doc(db, TIMETABLE, DOC_ID)
+  try {
+    await updateDoc(ref, { [`cells.${key}`]: cell })
+  } catch (caught) {
+    if ((caught as { code?: string }).code !== 'not-found') throw caught
+    await setDoc(ref, { cells: { [key]: cell } }, { merge: true })
+  }
 }
 
 export async function clearCell(key: string): Promise<void> {
