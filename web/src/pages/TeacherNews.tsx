@@ -93,8 +93,9 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
         <div>
           <h2 className="font-bold text-ink-900">검토 대기 후보 ({candidates.length})</h2>
           <p className="text-sm text-ink-500">
-            매일 아침 자동으로 모인 원문입니다. 3~5개를 골라 요약과 "왜 중요한가"를 직접 쓰고
-            승인해야 학생 화면에 뜹니다.
+            매일 아침 자동으로 모인 원문입니다(중요도 점수 높은 순). 3~5개를 골라 요약과 "왜
+            중요한가"를 직접 쓰고 승인해야 학생 화면에 뜹니다. 중요도 점수는 참고용 힌트일 뿐,
+            최종 선정은 직접 판단해 주세요.
           </p>
         </div>
 
@@ -113,8 +114,19 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
                   <span className="w-fit rounded-full bg-cheese-100 px-2.5 py-1 text-xs font-bold text-cheese-600">
                     {CATEGORY_LABELS[candidate.category]}
                   </span>
+                  <span className="w-fit rounded-full bg-cream-deep px-2.5 py-1 text-xs font-semibold text-ink-700">
+                    {candidate.region}
+                  </span>
+                  {/* 정답이 아니라 검토 순서 힌트다 — 툴팁으로 오해를 미리 막는다. */}
+                  <span
+                    className="w-fit rounded-full border border-cheese-300 px-2.5 py-1 text-xs font-semibold text-ink-700"
+                    title="자동 계산된 참고용 중요도 점수입니다. 최종 판단은 직접 해주세요."
+                  >
+                    중요도 {candidate.score}
+                  </span>
                   <span className="text-xs text-ink-500">
                     {formatRelativeTime(candidate.publishedAt)} · {candidate.sourceName}
+                    {candidate.sources.length > 1 && ` 외 ${candidate.sources.length - 1}곳`}
                   </span>
                   <a
                     href={candidate.sourceUrl}
@@ -129,6 +141,24 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
                 <p className="mt-2 font-semibold text-ink-900">{candidate.title}</p>
                 {candidate.excerpt && (
                   <p className="mt-1 text-sm text-ink-700">{candidate.excerpt}</p>
+                )}
+                {candidate.sources.length > 1 && (
+                  <p className="mt-1 flex flex-wrap gap-x-2 text-xs text-ink-500">
+                    같은 소식을 보도한 다른 곳:
+                    {candidate.sources
+                      .filter((source) => source.url !== candidate.sourceUrl)
+                      .map((source) => (
+                        <a
+                          key={source.url}
+                          href={source.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline underline-offset-2 hover:text-cheese-600"
+                        >
+                          {source.name}
+                        </a>
+                      ))}
+                  </p>
                 )}
 
                 <div className="mt-3 flex gap-2">

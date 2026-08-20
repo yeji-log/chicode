@@ -59,10 +59,16 @@ export interface NewsCandidate {
   excerpt: string
   sourceName: string
   sourceUrl: string
+  /** sourceName/sourceUrl과 같은 사건을 보도한 출처 전체(대표 출처 포함, 1개 이상). fetch-news.mjs가 이슈 단위로 묶는다. */
+  sources: { name: string; url: string }[]
   publishedAt: number
   fetchedAt: number
   category: NewsCategory
   keywords: string[]
+  /** 0~100 근사 중요도 점수 — 정답이 아니라 검토 순서를 정하는 힌트. LLM 없이 키워드·경과시간·보도 소스 수 등으로 근사했다(fetch-news.mjs의 computeScore 참고). 자동 제외 기준으로 쓰지 않는다. */
+  score: number
+  /** 출처 소재지 근사 — 소스가 국내(lang: 'ko')인지 아닌지로만 구분한다. */
+  region: '국내' | '해외'
 }
 
 /** 교사가 승인해 학생 화면에 실제로 뜨는 카드. */
@@ -84,9 +90,9 @@ export interface NewsIssue {
 const CANDIDATES = 'newsCandidates'
 const ISSUES = 'newsIssues'
 
-/** 교사 페이지에서 검토 대기 중인 후보 전체를 최신순으로. */
+/** 교사 페이지에서 검토 대기 중인 후보 전체를 중요도 점수 높은 순으로(참고용 힌트, TeacherNews.tsx 안내문 참고). */
 export async function listCandidates(): Promise<NewsCandidate[]> {
-  const snapshot = await getDocs(query(collection(db, CANDIDATES), orderBy('publishedAt', 'desc')))
+  const snapshot = await getDocs(query(collection(db, CANDIDATES), orderBy('score', 'desc')))
   return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as NewsCandidate)
 }
 
