@@ -131,6 +131,7 @@ export default function PdfViewer({
   file,
   filename,
   page: controlledPage,
+  initialPage,
   onPageChange,
   onPageCountChange,
   hideControls,
@@ -138,6 +139,10 @@ export default function PdfViewer({
   file: Blob
   filename: string
   page?: number
+  /** 제어되지 않는(훑어보기) 뷰어가 문서를 처음 열 때 보여줄 쪽. 안 주면
+   *  예전처럼 1쪽부터. page(제어 모드)와는 무관 — 발표 모드는 항상 page를
+   *  준다. */
+  initialPage?: number
   onPageChange?: (page: number) => void
   onPageCountChange?: (pageCount: number) => void
   hideControls?: boolean
@@ -234,8 +239,9 @@ export default function PdfViewer({
         setPageCount(loaded.numPages)
         onPageCountChange?.(loaded.numPages)
         if (!isControlled) {
-          setInternalPage(1)
-          onPageChange?.(1)
+          const start = Math.max(1, Math.min(loaded.numPages, initialPage ?? 1))
+          setInternalPage(start)
+          onPageChange?.(start)
         }
         setLoading(false)
       } catch (caught) {

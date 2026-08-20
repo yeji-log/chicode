@@ -23,11 +23,16 @@ export default function PptxSlideViewer({
   pptxFile,
   pdfFile,
   filename,
+  initialPage,
   onPageChange,
 }: {
   pptxFile: Blob | null
   pdfFile: Blob | null
   filename: string
+  /** 문서를 처음 열 때 보여줄 쪽 — 안 주면 1쪽부터. "발표 시작"을 마지막으로
+   *  발표를 종료한 자리부터 재개하려는 용도(LabActivityDetail/
+   *  SubjectMaterials가 마운트 시점에만 한 번 넘긴다). */
+  initialPage?: number
   /** 지금 보고 있는 쪽 번호가 바뀔 때마다 알려준다 — "발표 시작"이 지금
    *  보고 있는 쪽에서 그대로 이어지게 하려는 용도(LabActivityDetail). */
   onPageChange?: (page: number) => void
@@ -68,8 +73,12 @@ export default function PptxSlideViewer({
 
         if (!viewer.slideCount) throw new Error('슬라이드를 찾지 못함')
         setSlideCount(viewer.slideCount)
-        setSlideIndex(1)
-        onPageChange?.(1)
+        // preview()는 항상 1번째 슬라이드(index 0)를 먼저 그린다 — 다른
+        // 쪽에서 시작해야 하면 한 번 더 그려서 덮는다.
+        const start = Math.max(1, Math.min(viewer.slideCount, initialPage ?? 1))
+        if (start !== 1) viewer.renderSingleSlide(start - 1)
+        setSlideIndex(start)
+        onPageChange?.(start)
         setState('pptx-ok')
       } catch (caught) {
         console.error('pptx 렌더링 실패, PDF로 대체합니다', caught)
@@ -87,7 +96,14 @@ export default function PptxSlideViewer({
   }, [pptxFile, pdfFile])
 
   if (state === 'fallback' && pdfFile) {
-    return <PdfViewer file={pdfFile} filename={filename} onPageChange={onPageChange} />
+    return (
+      <PdfViewer
+        file={pdfFile}
+        filename={filename}
+        initialPage={initialPage}
+        onPageChange={onPageChange}
+      />
+    )
   }
 
   if (state === 'failed') {
