@@ -405,7 +405,11 @@ function OtMaterialItem({
   const showFollowerOverlay = presentation.active && !isPresenting && !!slideFiles.pdf
 
   async function handleStartPresenting() {
-    await startPresentation(slideId)
+    const resumeSlide = await startPresentation(slideId)
+    // onSnapshot 구독이 따라잡을 때까지 기다리면 LabPresenter가 잠깐
+    // 이전 currentSlide(1쪽)로 마운트됐다가 튀는 깜빡임이 생긴다 — 이미
+    // 알고 있는 값이니 로컬 상태를 바로 맞춰서 첫 렌더부터 정확하게 한다.
+    setPresentation((current) => ({ ...current, active: true, currentSlide: resumeSlide }))
     setIsPresenting(true)
   }
 
