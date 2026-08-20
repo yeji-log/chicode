@@ -82,35 +82,40 @@ async function logFontDiagnostics(page: unknown): Promise<void> {
   try {
     const p = page as {
       getOperatorList: () => Promise<unknown>
+      getTextContent: () => Promise<{ items: Array<{ fontName?: string }> }>
       commonObjs: { get: (key: string) => unknown }
-      objs: { get: (key: string) => unknown }
     }
     await p.getOperatorList()
-    const fontKeys = new Set<string>()
-    // pdf.js 는 g_d0_f1 처럼 g_d{n}_f{n} 형태로 폰트 키를 붙인다. commonObjs
-    // 내부 맵을 공식적으로 순회하는 API가 없어서, 흔한 범위를 그냥 다 찔러본다.
-    for (let d = 0; d < 3; d++) {
-      for (let f = 1; f <= 12; f++) fontKeys.add(`g_d${d}_f${f}`)
-    }
+
+    // g_d0_f1 같은 패턴을 추측해서 찔러보던 첫 버전은 실기기에서 전부
+    // 비어(`{}`) 나왔다 — 추측이 틀렸다는 뜻이라, 대신 이 페이지가 실제로
+    // 쓴 폰트 이름을 getTextContent 로 직접 받아온다.
+    const textContent = await p.getTextContent()
+    const usedKeys = new Set(
+      textContent.items.map((item) => item.fontName).filter((name): name is string => !!name),
+    )
+
     const fonts: Record<string, unknown> = {}
-    for (const key of fontKeys) {
+    let firstGetError: string | null = null
+    for (const key of usedKeys) {
       try {
         const font = p.commonObjs.get(key) as
           | { name?: string; fallbackName?: string; missingFile?: boolean; isType3Font?: boolean }
           | undefined
-        if (font && typeof font === 'object' && 'name' in font) {
-          fonts[key] = {
-            name: font.name,
-            fallbackName: font.fallbackName,
-            missingFile: font.missingFile,
-            isType3Font: font.isType3Font,
-          }
-        }
-      } catch {
-        // 아직 안 실린 키 — 그냥 건너뛴다.
+        fonts[key] = font
+          ? {
+              name: font.name,
+              fallbackName: font.fallbackName,
+              missingFile: font.missingFile,
+              isType3Font: font.isType3Font,
+            }
+          : '(commonObjs.get 이 값을 안 줌 — undefined)'
+      } catch (caught) {
+        fonts[key] = `(commonObjs.get 실패: ${caught})`
+        firstGetError ??= String(caught)
       }
     }
-    pushDebug('PdfViewer 폰트 진단', fonts)
+    pushDebug('PdfViewer 폰트 진단', { usedKeys: [...usedKeys], fonts, firstGetError })
   } catch (caught) {
     pushDebug('PdfViewer 폰트 진단 실패', caught)
   }
