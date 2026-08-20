@@ -1,6 +1,6 @@
 import PolicyArticle from '../components/PolicyArticle'
 
-export const TERMS_OF_SERVICE_EFFECTIVE_DATE = '2026. 8. 19.'
+export const TERMS_OF_SERVICE_EFFECTIVE_DATE = '2026. 8. 21.'
 
 export default function TermsOfService() {
   return (
@@ -64,6 +64,7 @@ export default function TermsOfService() {
                 오늘의 AI·IT 이슈 열람 — 매일 자동 수집된 AI·IT 소식 중 교사가 검토해
                 승인한 것만 공개
               </li>
+              <li>일정 관리 — 시간표, 수업기록(반별 학생 참여 기록) (교사 전용)</li>
               <li>향후 제공 예정 — 프로젝트, Pico 2 W 실습 등</li>
             </ul>
           </li>
@@ -111,6 +112,11 @@ export default function TermsOfService() {
             등록한 교사에게 있으며, 서비스 운영자는 이에 대한 책임을 지지 않습니다.
           </li>
         </ol>
+        <p>
+          교사가 수업기록 기능에 학생의 학번·이름 등 정보를 입력·관리할 때는 소속
+          학교의 개인정보 처리 방침 및 관련 법령을 준수해야 하며, 입력한 정보의
+          정확성과 관리(보관·삭제 포함)에 대한 책임은 해당 교사에게 있습니다.
+        </p>
       </PolicyArticle>
 
       <PolicyArticle num="제7조" title="이용자의 의무">
