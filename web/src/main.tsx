@@ -6,6 +6,10 @@ import '@fontsource/jua'
 import './index.css'
 import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
+import { installMapUpsertPolyfill } from './lib/mapUpsertPolyfill'
+
+// pdf.js(PdfViewer.tsx)가 나중에 동적으로 로드되기 전에 먼저 채워둬야 한다.
+installMapUpsertPolyfill()
 import Home from './pages/Home'
 import News from './pages/News'
 import Materials from './pages/Materials'

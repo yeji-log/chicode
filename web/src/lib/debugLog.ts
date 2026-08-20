@@ -11,7 +11,33 @@
  */
 export type DebugEntry = { time: string; label: string; detail: string }
 
-const entries: DebugEntry[] = []
+const STORAGE_KEY = 'chicode-debug-log'
+
+/**
+ * 처음엔 메모리 배열 하나뿐이었는데, signInWithRedirect 는 페이지 전체를
+ * 이동시켰다가 되돌아온다 — 그 사이 메모리는 완전히 새로 시작해서 "누르기
+ * 전" 로그가 통째로 사라졌다(실사용 진단에서 실제로 겪음). sessionStorage 에
+ * 같이 남겨서 페이지 이동을 넘어 로그가 이어지게 한다.
+ */
+function loadEntries(): DebugEntry[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as DebugEntry[]) : []
+  } catch {
+    return []
+  }
+}
+
+function saveEntries(list: DebugEntry[]): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+  } catch {
+    // 저장 용량 초과 등은 무시한다 — 진단 도구라 화면 표시(메모리)는 이미 됐다.
+  }
+}
+
+const entries: DebugEntry[] = loadEntries()
 const listeners = new Set<() => void>()
 
 function safeStringify(value: unknown): string {
@@ -35,11 +61,18 @@ export function pushDebug(label: string, detail?: unknown): void {
   const time = new Date().toTimeString().slice(0, 8)
   entries.push({ time, label, detail: detail === undefined ? '' : safeStringify(detail) })
   if (entries.length > 300) entries.shift()
+  saveEntries(entries)
   listeners.forEach((fn) => fn())
 }
 
 export function getDebugEntries(): DebugEntry[] {
   return entries
+}
+
+export function clearDebugEntries(): void {
+  entries.length = 0
+  saveEntries(entries)
+  listeners.forEach((fn) => fn())
 }
 
 export function subscribeDebug(fn: () => void): () => void {
