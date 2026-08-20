@@ -18,6 +18,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore'
 
 import { auth, db, googleProvider } from '../lib/firebase'
+import { pushDebug } from '../lib/debugLog'
 
 /**
  * 교사 인증.
@@ -86,17 +87,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    pushDebug('AuthProvider 마운트', { isAndroid: isAndroid() })
+
     // signInWithRedirect 로 나갔다가 돌아온 경우, 그 과정에서 난 오류는
     // onAuthStateChanged 로는 안 잡히고 이걸로만 잡힌다.
-    getRedirectResult(auth).catch((caught) => {
-      const code = (caught as { code?: string }).code ?? ''
-      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return
-      setError(explainAuthError(code))
-    })
+    getRedirectResult(auth)
+      .then((result) => {
+        pushDebug('getRedirectResult 완료', { hasUser: !!result?.user, email: result?.user?.email })
+      })
+      .catch((caught) => {
+        pushDebug('getRedirectResult 실패', caught)
+        const code = (caught as { code?: string }).code ?? ''
+        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return
+        setError(explainAuthError(code))
+      })
   }, [])
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (nextUser) => {
+      pushDebug('onAuthStateChanged', { email: nextUser?.email ?? null })
       setUser(nextUser)
 
       if (!nextUser?.email) {
@@ -107,10 +116,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState('loading')
       try {
         const snapshot = await getDoc(doc(db, 'teachers', nextUser.email.toLowerCase()))
+        pushDebug('teachers 문서 조회', { exists: snapshot.exists() })
         setState(snapshot.exists() ? 'teacher' : 'not-allowed')
       } catch (caught) {
         // 규칙상 본인 문서만 읽을 수 있으므로, 실패는 보통 목록에 없다는 뜻이다.
         console.error('교사 확인 실패', caught)
+        pushDebug('teachers 문서 조회 실패', caught)
         setState('not-allowed')
       }
     })
@@ -118,13 +129,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async () => {
     setError(null)
+    const android = isAndroid()
+    pushDebug('signIn 클릭', {
+      isAndroid: android,
+      ua: navigator.userAgent,
+      maxTouchPoints: navigator.maxTouchPoints,
+    })
     try {
-      if (isAndroid()) {
+      if (android) {
         await signInWithRedirect(auth, googleProvider)
         return
       }
       await signInWithPopup(auth, googleProvider)
     } catch (caught) {
+      pushDebug('signIn 실패', caught)
       const code = (caught as { code?: string }).code ?? ''
 
       // 사용자가 직접 창을 닫은 경우는 오류가 아니다.

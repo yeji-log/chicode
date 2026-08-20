@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 import { useAuth } from './auth/AuthProvider'
+import DebugPanel from './components/DebugPanel'
 import PolicyModal from './components/PolicyModal'
 import LabRules from './content/LabRules'
 import PrivacyPolicy, { PRIVACY_POLICY_EFFECTIVE_DATE } from './content/PrivacyPolicy'
@@ -133,6 +134,8 @@ export default function App() {
           <LabRules />
         </PolicyModal>
       )}
+
+      <DebugPanel />
     </div>
   )
 }
