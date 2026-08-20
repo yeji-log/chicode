@@ -106,6 +106,11 @@ function TimetableBoard() {
   const [periodsInput, setPeriodsInput] = useState(DEFAULT_PERIODS)
   const [periodsBusy, setPeriodsBusy] = useState(false)
   const [selected, setSelected] = useState<{ dayIndex: number; period: number } | null>(null)
+  // 칸 하나를 복사해뒀다가 다른 칸에 붙여넣기 위한 클립보드(사용자 요청) —
+  // 매주 반복되는 같은 수업을 여러 칸에 옮겨 적을 때 매번 다시 타이핑하지
+  // 않아도 되게 한다. 브라우저 클립보드가 아니라 이 페이지를 벗어나면
+  // 사라지는 컴포넌트 상태일 뿐이다 — 새로고침하면 비워진다.
+  const [clipboard, setClipboard] = useState<TimetableCell | null>(null)
   // 기본은 보기 전용이다 — 그리드를 훑어보다 실수로 칸을 눌러 값이 바뀌는 걸
   // 막으려고, 실제로 고치려면 이 스위치를 먼저 켜야 칸이 눌리게 했다(사용자
   // 요청). 새로고침하면 다시 꺼지는 편이 안전해서 페이지를 벗어나도 기억하지
@@ -262,6 +267,8 @@ function TimetableBoard() {
           cell={data.cells[cellKey(selected.dayIndex, selected.period)]}
           onClose={() => setSelected(null)}
           onSaved={handleSaved}
+          clipboard={clipboard}
+          onCopy={setClipboard}
         />
       )}
     </div>
@@ -274,12 +281,16 @@ function CellEditor({
   cell,
   onClose,
   onSaved,
+  clipboard,
+  onCopy,
 }: {
   dayIndex: number
   period: number
   cell: TimetableCell | undefined
   onClose: () => void
   onSaved: (key: string, cell: TimetableCell) => void
+  clipboard: TimetableCell | null
+  onCopy: (cell: TimetableCell) => void
 }) {
   const key = cellKey(dayIndex, period)
   const [subject, setSubject] = useState(cell?.subject ?? '')
@@ -324,20 +335,25 @@ function CellEditor({
     }
   }
 
+  // 지금 입력창에 있는 값을 그대로 복사해둔다 — 저장 여부와 무관하게, 눈에
+  // 보이는 값을 그대로 가져가는 게 직관적이라고 판단함. 실제 저장은 붙여넣은
+  // 뒤 다른 칸에서 "저장"을 눌러야 반영된다(자동 저장 안 함 — 붙여넣고 나서
+  // 값을 확인·수정할 여지를 남겨두려고).
+  function handleCopy() {
+    onCopy({ subject: subject.trim(), className: className.trim(), room: room.trim(), note: note.trim() })
+  }
+
+  function handlePaste() {
+    if (!clipboard) return
+    setSubject(clipboard.subject)
+    setClassName(clipboard.className)
+    setRoom(clipboard.room)
+    setNote(clipboard.note)
+  }
+
   return (
     <PolicyModal title={`${TIMETABLE_DAYS[dayIndex]}요일 ${period}교시`} onClose={onClose}>
       <form onSubmit={handleSave} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-semibold text-ink-700">과목</span>
-          <input
-            value={subject}
-            onChange={(event) => setSubject(event.target.value)}
-            placeholder="예: 정보"
-            className="rounded-lg border border-cream-deep bg-white px-3 py-2 text-ink-900"
-            autoFocus
-          />
-        </label>
-
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-semibold text-ink-700">반</span>
           <input
@@ -345,6 +361,7 @@ function CellEditor({
             onChange={(event) => setClassName(event.target.value)}
             placeholder="예: 2-3반"
             className="rounded-lg border border-cream-deep bg-white px-3 py-2 text-ink-900"
+            autoFocus
           />
         </label>
 
@@ -354,6 +371,16 @@ function CellEditor({
             value={room}
             onChange={(event) => setRoom(event.target.value)}
             placeholder="예: 컴퓨터실1"
+            className="rounded-lg border border-cream-deep bg-white px-3 py-2 text-ink-900"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-semibold text-ink-700">과목</span>
+          <input
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+            placeholder="예: 정보"
             className="rounded-lg border border-cream-deep bg-white px-3 py-2 text-ink-900"
           />
         </label>
@@ -371,13 +398,38 @@ function CellEditor({
 
         {saveError && <p className="text-sm text-red-700">{saveError}</p>}
 
-        <div className="flex items-center gap-2">
+        {clipboard && !isEmptyCell(clipboard) && (
+          <p className="text-xs text-ink-500">
+            복사해둔 내용:{' '}
+            <span className="font-semibold text-ink-700">
+              {[clipboard.className, clipboard.room, clipboard.subject].filter(Boolean).join(' · ')}
+            </span>
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="submit"
             disabled={busy}
             className="rounded-lg bg-cheese-400 px-4 py-2 font-bold text-ink-900 transition-colors hover:bg-cheese-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? '저장 중…' : '저장'}
+          </button>
+          <button
+            type="button"
+            onClick={handleCopy}
+            disabled={busy}
+            className="rounded-lg border border-cream-deep px-4 py-2 font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            복사
+          </button>
+          <button
+            type="button"
+            onClick={handlePaste}
+            disabled={busy || !clipboard}
+            className="rounded-lg border border-cream-deep px-4 py-2 font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            붙여넣기
           </button>
           <button
             type="button"
