@@ -371,7 +371,6 @@ function OtMaterialItem({
   const [notes, setNotes] = useState<string[]>([])
   const [presentation, setPresentation] = useState<LabPresentationState>(IDLE_PRESENTATION)
   const [isPresenting, setIsPresenting] = useState(false)
-  const [browsePage, setBrowsePage] = useState(1)
 
   useEffect(() => {
     let cancelled = false
@@ -406,7 +405,7 @@ function OtMaterialItem({
   const showFollowerOverlay = presentation.active && !isPresenting && !!slideFiles.pdf
 
   async function handleStartPresenting() {
-    await startPresentation(slideId, browsePage)
+    await startPresentation(slideId)
     setIsPresenting(true)
   }
 
@@ -459,7 +458,7 @@ function OtMaterialItem({
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-ink-500">지금 보는 {browsePage}쪽부터</span>
+                  <span className="text-xs text-ink-500">{presentation.currentSlide}쪽부터 시작</span>
                   <button
                     onClick={handleStartPresenting}
                     className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
@@ -473,7 +472,6 @@ function OtMaterialItem({
             pptxFile={slideFiles.pptx}
             pdfFile={slideFiles.pdf}
             filename={entry.title}
-            onPageChange={setBrowsePage}
           />
         </>
       )}
