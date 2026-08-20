@@ -106,4 +106,20 @@ if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
     pushDebug('처리 안 된 Promise 거부', event.reason)
   })
+
+  // pdf.js 같은 라이브러리는 폰트 파싱 실패 등을 예외로 던지지 않고 그냥
+  // console.warn/error 로만 남기고 조용히 대체 렌더링으로 넘어가는 경우가
+  // 있다 — 발표 화면 한글 깨짐처럼 "에러는 없는데 결과만 이상한" 문제를
+  // 진단하려면 이것도 잡아야 한다. 원래 console 호출도 그대로 하되, 켜져
+  // 있을 때만 진단 로그에도 남긴다.
+  const originalWarn = console.warn.bind(console)
+  const originalError = console.error.bind(console)
+  console.warn = (...args: unknown[]) => {
+    originalWarn(...args)
+    if (isDebugEnabled()) pushDebug('console.warn', args.map(String).join(' '))
+  }
+  console.error = (...args: unknown[]) => {
+    originalError(...args)
+    if (isDebugEnabled()) pushDebug('console.error', args.map(String).join(' '))
+  }
 }
