@@ -40,6 +40,15 @@ export default function ClassRecords() {
   const [classes, setClasses] = useState<ClassRecordMeta[] | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
+  // "+ 학생추가" 토글은 반 삭제/이름 수정과 같은 줄에 나란히 있어야 해서
+  // (사용자 요청) ClassPicker/ClassRoster 둘 다에서 쓸 수 있도록 여기(공통
+  // 부모)로 끌어올렸다. 다른 반 탭을 누르면 자동으로 닫는다 — 안 그러면
+  // A반에서 열어둔 추가 폼이 B반으로 넘어가서도 열려 있어 혼동을 준다.
+  const [showStudentAdd, setShowStudentAdd] = useState(false)
+
+  useEffect(() => {
+    setShowStudentAdd(false)
+  }, [selectedClassId])
 
   useEffect(() => {
     listClasses()
@@ -117,10 +126,12 @@ export default function ClassRecords() {
         onCreate={handleCreateClass}
         onRename={selectedClass ? (name) => handleRenameClass(selectedClass, name) : undefined}
         onDelete={selectedClass ? () => handleDeleteClass(selectedClass) : undefined}
+        showStudentAdd={showStudentAdd}
+        onToggleStudentAdd={selectedClass ? () => setShowStudentAdd((value) => !value) : undefined}
       />
 
       {selectedClass ? (
-        <ClassRoster key={selectedClass.id} classMeta={selectedClass} />
+        <ClassRoster key={selectedClass.id} classMeta={selectedClass} showStudentAdd={showStudentAdd} />
       ) : (
         <p className="text-sm text-ink-500">
           반이 없습니다. 위에서 새 반을 만들어 주세요(예: "2학년 1반").
@@ -138,6 +149,8 @@ function ClassPicker({
   onCreate,
   onRename,
   onDelete,
+  showStudentAdd,
+  onToggleStudentAdd,
 }: {
   classes: ClassRecordMeta[]
   selectedClassId: string | null
@@ -146,6 +159,8 @@ function ClassPicker({
   onCreate: (name: string, bulkText: string) => Promise<void>
   onRename: ((name: string) => Promise<void>) | undefined
   onDelete: (() => void) | undefined
+  showStudentAdd: boolean
+  onToggleStudentAdd: (() => void) | undefined
 }) {
   const [showAddForm, setShowAddForm] = useState(false)
 
@@ -255,6 +270,19 @@ function ClassPicker({
               className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-red-300 hover:text-red-600"
             >
               반 삭제
+            </button>
+          )}
+          {onToggleStudentAdd && (
+            <button
+              onClick={onToggleStudentAdd}
+              className={[
+                'rounded-lg border border-dashed px-3 py-2 text-sm font-bold transition-colors',
+                showStudentAdd
+                  ? 'border-cheese-300 bg-cheese-50 text-cheese-700'
+                  : 'border-cream-deep text-ink-500 hover:border-cheese-300 hover:text-ink-700',
+              ].join(' ')}
+            >
+              + 학생추가
             </button>
           )}
         </div>
@@ -413,7 +441,13 @@ function AddClassForm({
   )
 }
 
-function ClassRoster({ classMeta }: { classMeta: ClassRecordMeta }) {
+function ClassRoster({
+  classMeta,
+  showStudentAdd,
+}: {
+  classMeta: ClassRecordMeta
+  showStudentAdd: boolean
+}) {
   const [students, setStudents] = useState<Student[] | null>(null)
   const [dates, setDates] = useState<DateRecord[] | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -493,14 +527,15 @@ function ClassRoster({ classMeta }: { classMeta: ClassRecordMeta }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <StudentAddSection
-        classId={classMeta.id}
-        onAdded={handleStudentAdded}
-        onBulkAdded={handleStudentsBulkAdded}
-      />
+      {/* "+ 학생추가" 토글 버튼 자체는 반 삭제 옆(ClassPicker의 통제 줄)에
+          있다(사용자 요청) — 여기서는 그 상태(showStudentAdd)를 부모에게서
+          받아 패널만 그린다. */}
+      {showStudentAdd && (
+        <StudentAddPanel classId={classMeta.id} onAdded={handleStudentAdded} onBulkAdded={handleStudentsBulkAdded} />
+      )}
 
       {students.length === 0 ? (
-        <p className="text-sm text-ink-500">학생이 없습니다. 위의 "+ 학생추가"로 추가해 주세요.</p>
+        <p className="text-sm text-ink-500">학생이 없습니다. "+ 학생추가"로 추가해 주세요.</p>
       ) : (
         <>
           <DateSummary students={students} dates={dates} />
@@ -510,39 +545,6 @@ function ClassRoster({ classMeta }: { classMeta: ClassRecordMeta }) {
       )}
 
       <ClassMemo classId={classMeta.id} memo={classMeta.memo ?? ''} />
-    </div>
-  )
-}
-
-/** 학생 추가 폼을 작은 토글 버튼 뒤에 숨겨둔다(사용자 요청 — "생성된 반
- *  탭에서는 작은 +학생추가 기능으로"). 학생을 이미 다 등록해둔 반에서는
- *  이 자리를 계속 큰 폼이 차지할 이유가 없어서, 반 만들기 폼(AddClassForm)과
- *  같은 토글 방식으로 맞췄다. */
-function StudentAddSection({
-  classId,
-  onAdded,
-  onBulkAdded,
-}: {
-  classId: string
-  onAdded: (student: Student) => void
-  onBulkAdded: (added: Student[]) => void
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="flex flex-col gap-3">
-      <button
-        onClick={() => setOpen((value) => !value)}
-        className={[
-          'self-start rounded-lg border border-dashed px-3 py-1.5 text-sm font-bold transition-colors',
-          open
-            ? 'border-cheese-300 bg-cheese-50 text-cheese-700'
-            : 'border-cream-deep text-ink-500 hover:border-cheese-300 hover:text-ink-700',
-        ].join(' ')}
-      >
-        + 학생추가
-      </button>
-      {open && <StudentAddPanel classId={classId} onAdded={onAdded} onBulkAdded={onBulkAdded} />}
     </div>
   )
 }
