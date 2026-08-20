@@ -61,12 +61,6 @@ export default function LabActivityDetail() {
   /** 이 브라우저 탭에서 "발표 시작"을 눌러 지금 직접 조작 중인지. Firestore의
    *  active 플래그와 별개다 — 다른 기기가 이미 발표 중이면 이 탭은 false다. */
   const [isPresenting, setIsPresenting] = useState(false)
-  /** "발표 시작"을 누르면 몇 페이지부터 시작할지 — 교사가 발표를 시작하기
-   *  전 "수업 자료" 섹션에서 지금 훑어보고 있는(browsing) 쪽 그대로 이어진다.
-   *  별도로 번호를 입력하게 했었는데, 지금 보고 있는 자리와 자동으로
-   *  맞아떨어지길 원한다는 요청으로 PptxSlideViewer의 onPageChange를 받아
-   *  이 값을 계속 갱신한다. */
-  const [browsePage, setBrowsePage] = useState(1)
 
   useEffect(() => {
     if (!id) return
@@ -88,7 +82,6 @@ export default function LabActivityDetail() {
   useEffect(() => {
     if (!id) return
     let cancelled = false
-    setBrowsePage(1)
 
     getSlideSet(id).then(async (meta) => {
       if (!meta.pptx && !meta.pdf) {
@@ -146,7 +139,7 @@ export default function LabActivityDetail() {
 
   async function handleStartPresenting() {
     if (!id) return
-    await startPresentation(id, browsePage)
+    await startPresentation(id)
     setIsPresenting(true)
   }
 
@@ -227,7 +220,9 @@ export default function LabActivityDetail() {
                     </button>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink-500">지금 보는 {browsePage}쪽부터</span>
+                      <span className="text-xs text-ink-500">
+                        {presentation.currentSlide}쪽부터 시작
+                      </span>
                       <button
                         onClick={handleStartPresenting}
                         className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
@@ -241,7 +236,6 @@ export default function LabActivityDetail() {
                 pptxFile={slideFiles.pptx}
                 pdfFile={slideFiles.pdf}
                 filename={section.title}
-                onPageChange={setBrowsePage}
               />
             </section>
           )

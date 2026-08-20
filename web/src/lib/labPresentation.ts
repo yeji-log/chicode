@@ -14,7 +14,7 @@
  * (발표 모드는 PDF 필수라 labSlides.ts 에서 강제한다).
  */
 
-import { doc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
 
 import { db } from './firebase'
 
@@ -42,10 +42,22 @@ export function subscribePresentation(
   })
 }
 
-export async function startPresentation(activityId: string, atSlide = 1): Promise<void> {
-  await setDoc(presentationDoc(activityId), {
+/**
+ * 발표를 시작한다 — 시작 페이지는 항상 "지난번에 발표를 종료한 자리"부터
+ * 이어진다. (한때는 교사가 시작 직전 훑어보던 페이지에서 시작했는데,
+ * "종료한 페이지부터 재개"를 원한다는 요청으로 바꿨다. stopPresentation이
+ * currentSlide를 건드리지 않고 종료하므로 그 값을 그대로 읽어와 이어쓰면
+ * 된다 — 한 번도 발표한 적 없어 문서가 없으면 1쪽부터.)
+ */
+export async function startPresentation(activityId: string): Promise<void> {
+  const ref = presentationDoc(activityId)
+  const existing = await getDoc(ref)
+  const resumeSlide = existing.exists()
+    ? (existing.data() as LabPresentationState).currentSlide
+    : 1
+  await setDoc(ref, {
     active: true,
-    currentSlide: atSlide,
+    currentSlide: resumeSlide || 1,
     updatedAt: Date.now(),
   } satisfies LabPresentationState)
 }
