@@ -1,6 +1,6 @@
 import PolicyArticle from '../components/PolicyArticle'
 
-export const PRIVACY_POLICY_EFFECTIVE_DATE = '2026. 8. 19.'
+export const PRIVACY_POLICY_EFFECTIVE_DATE = '2026. 8. 20.'
 
 /**
  * chicode 코드베이스(Firebase 인증 · Firestore · Pyodide 실행 방식 · 동아리(Lab)
@@ -119,9 +119,9 @@ export default function PrivacyPolicy() {
           youtube-nocookie.com 도메인으로 임베드합니다.
         </p>
         <p>
-          오늘의 AI·IT 이슈는 매일 아침 GitHub Actions가 국내외 공식 기술 블로그의
-          공개 RSS를 자동으로 수집해 후보로 쌓아 둡니다. 이 과정에서 수집되는 것은
-          기사 제목·요약·링크 등 공개된 정보뿐이며, 이용자의 개인정보는 포함되지
+          오늘의 AI·IT 이슈는 매일 아침 GitHub Actions가 국내외 공식 기업 블로그·과학기술
+          전문 매체의 공개 RSS를 자동으로 수집해 후보로 쌓아 둡니다. 이 과정에서 수집되는
+          것은 기사 제목·요약·링크 등 공개된 정보뿐이며, 이용자의 개인정보는 포함되지
           않습니다. 교사가 이 중 일부를 골라 직접 요약과 설명을 써서 승인해야만
           학생 화면에 공개됩니다.
         </p>
