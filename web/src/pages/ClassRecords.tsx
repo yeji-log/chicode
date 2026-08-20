@@ -1,4 +1,8 @@
-import { useEffect, useState } from 'react'
+import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   addStudent,
@@ -12,7 +16,9 @@ import {
   listDates,
   listStudents,
   renameClass,
+  reorderClasses,
   setAttendance,
+  setClassMemo,
   type BulkAddResult,
   type ClassRecordMeta,
   type DateRecord,
@@ -47,10 +53,18 @@ export default function ClassRecords() {
       })
   }, [])
 
-  async function handleCreateClass(name: string) {
+  // 새 반 만들기는 이름 입력과 학생 명단 붙여넣기를 한 폼에서 같이 받는다
+  // (사용자 요청 — "새 반 추가 기능은 따로 빼서 학생 추가를 할 수 있게").
+  // 학생 명단은 선택 사항이라 비어 있으면 반만 만든다.
+  async function handleCreateClass(name: string, bulkText: string) {
     const created = await createClass(name)
     setClasses((prev) => [...(prev ?? []), created])
     setSelectedClassId(created.id)
+    if (bulkText.trim()) {
+      await addStudentsBulk(created.id, bulkText)
+      // ClassRoster가 classMeta.id를 key로 마운트되면서 학생 목록을 새로
+      // 불러오므로, 여기서 따로 상태를 안 채워도 화면에 바로 반영된다.
+    }
   }
 
   async function handleDeleteClass(target: ClassRecordMeta) {
@@ -66,6 +80,17 @@ export default function ClassRecords() {
     setClasses((prev) =>
       (prev ?? []).map((entry) => (entry.id === target.id ? { ...entry, name: name.trim() } : entry)),
     )
+  }
+
+  // 드래그로 옮긴 순서를 낙관적으로 먼저 반영하고, 저장은 뒤에서 조용히
+  // 진행한다 — Teacher.tsx의 과목 탭 드래그 정렬과 같은 패턴(실패해도
+  // 새로고침하면 저장된 순서로 돌아오니 별도 롤백은 안 함).
+  function handleReorderClasses(reordered: ClassRecordMeta[]) {
+    setClasses(reordered)
+    reorderClasses(reordered.map((entry) => entry.id)).catch((caught) => {
+      console.error('반 순서 저장 실패', caught)
+      alert('반 순서를 저장하지 못했습니다. 새로고침 후 다시 시도해 주세요.')
+    })
   }
 
   if (loadError) {
@@ -88,6 +113,7 @@ export default function ClassRecords() {
         classes={classes}
         selectedClassId={selectedClassId}
         onSelect={setSelectedClassId}
+        onReorder={handleReorderClasses}
         onCreate={handleCreateClass}
         onRename={selectedClass ? (name) => handleRenameClass(selectedClass, name) : undefined}
         onDelete={selectedClass ? () => handleDeleteClass(selectedClass) : undefined}
@@ -108,6 +134,7 @@ function ClassPicker({
   classes,
   selectedClassId,
   onSelect,
+  onReorder,
   onCreate,
   onRename,
   onDelete,
@@ -115,13 +142,12 @@ function ClassPicker({
   classes: ClassRecordMeta[]
   selectedClassId: string | null
   onSelect: (id: string) => void
-  onCreate: (name: string) => Promise<void>
+  onReorder: (reordered: ClassRecordMeta[]) => void
+  onCreate: (name: string, bulkText: string) => Promise<void>
   onRename: ((name: string) => Promise<void>) | undefined
   onDelete: (() => void) | undefined
 }) {
-  const [newName, setNewName] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
+  const [showAddForm, setShowAddForm] = useState(false)
 
   // 이름 수정은 선택된 반이 바뀌면(다른 탭을 누르면) 자동으로 닫는다 — 안
   // 그러면 A반 수정 폼이 열린 채로 B반 탭을 눌렀을 때 어느 반을 고치는
@@ -136,21 +162,22 @@ function ClassPicker({
 
   const selected = classes.find((entry) => entry.id === selectedClassId) ?? null
 
-  async function handleCreate(event: React.FormEvent) {
-    event.preventDefault()
-    const trimmed = newName.trim()
-    if (!trimmed) return
-    setCreating(true)
-    setCreateError(null)
-    try {
-      await onCreate(trimmed)
-      setNewName('')
-    } catch (caught) {
-      console.error('반 생성 실패', caught)
-      setCreateError('만들지 못했습니다. 다시 시도해 주세요.')
-    } finally {
-      setCreating(false)
-    }
+  // 탭도 Teacher.tsx의 과목 탭과 같은 @dnd-kit 조합(PointerSensor에
+  // activationConstraint distance 4) — 살짝만 눌렀다 떼는 보통의 "탭 클릭"과
+  // 실제 드래그를 구분해서, 버튼 자체를 드래그 핸들로 써도 클릭 선택이 안
+  // 깨지게 한다(사용자 요청 — 반별 탭 드래그 이동).
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = classes.findIndex((entry) => entry.id === active.id)
+    const newIndex = classes.findIndex((entry) => entry.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+    onReorder(arrayMove(classes, oldIndex, newIndex))
   }
 
   function startRename() {
@@ -175,94 +202,214 @@ function ClassPicker({
     }
   }
 
+  async function handleCreateSubmit(name: string, bulkText: string) {
+    await onCreate(name, bulkText)
+    setShowAddForm(false)
+  }
+
   return (
     <div className="flex flex-col gap-3">
       {/* 반마다 탭 하나 — 드롭다운 대신 탭으로 둬서 반을 오갈 때마다 그
           반의 출결(참여) 기록을 바로 누르며 확인할 수 있게 했다(사용자
-          요청). Teacher.tsx의 섹션 탭과 같은 스타일. */}
+          요청). Teacher.tsx의 섹션 탭과 같은 스타일 + 드래그 정렬. */}
       <nav className="flex flex-wrap items-center gap-2 border-b border-cream-deep pb-3">
         {classes.length === 0 && <span className="px-2 py-2 text-sm text-ink-500">반 없음</span>}
-        {classes.map((entry) => (
-          <button
-            key={entry.id}
-            onClick={() => onSelect(entry.id)}
-            className={[
-              'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-              entry.id === selectedClassId
-                ? 'bg-cheese-400 text-ink-900'
-                : 'text-ink-700 hover:bg-cheese-100',
-            ].join(' ')}
-          >
-            {entry.name}
-          </button>
-        ))}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={classes.map((entry) => entry.id)} strategy={horizontalListSortingStrategy}>
+            {classes.map((entry) => (
+              <SortableClassTab
+                key={entry.id}
+                classMeta={entry}
+                active={entry.id === selectedClassId}
+                onSelect={() => onSelect(entry.id)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+        <button
+          onClick={() => setShowAddForm((value) => !value)}
+          className={[
+            'rounded-lg border border-dashed px-4 py-2 text-sm font-bold transition-colors',
+            showAddForm
+              ? 'border-cheese-300 bg-cheese-50 text-cheese-700'
+              : 'border-cream-deep text-ink-500 hover:border-cheese-300 hover:text-ink-700',
+          ].join(' ')}
+        >
+          + 새 반
+        </button>
       </nav>
 
-      <div className="flex flex-wrap items-center gap-3">
-        {selected && !renaming && (
-          <>
-            <button
-              onClick={startRename}
-              className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
-            >
-              이름 수정
-            </button>
-            {onDelete && (
-              <button
-                onClick={onDelete}
-                className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-red-300 hover:text-red-600"
-              >
-                반 삭제
-              </button>
-            )}
-          </>
-        )}
+      {showAddForm && <AddClassForm onCreated={handleCreateSubmit} onCancel={() => setShowAddForm(false)} />}
 
-        {selected && renaming && (
-          <form onSubmit={handleRenameSubmit} className="flex items-center gap-2">
-            <input
-              value={renameValue}
-              onChange={(event) => setRenameValue(event.target.value)}
-              className="w-36 rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm text-ink-900"
-              autoFocus
-            />
+      {selected && !renaming && (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={startRename}
+            className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+          >
+            이름 수정
+          </button>
+          {onDelete && (
             <button
-              type="submit"
-              disabled={renameBusy || !renameValue.trim()}
-              className="rounded-lg bg-cheese-400 px-3 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-500 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={onDelete}
+              className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-red-300 hover:text-red-600"
             >
-              저장
+              반 삭제
             </button>
-            <button
-              type="button"
-              onClick={() => setRenaming(false)}
-              disabled={renameBusy}
-              className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
-            >
-              취소
-            </button>
-          </form>
-        )}
+          )}
+        </div>
+      )}
 
-        <form onSubmit={handleCreate} className="flex items-center gap-2">
+      {selected && renaming && (
+        <form onSubmit={handleRenameSubmit} className="flex items-center gap-2">
           <input
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            placeholder="예: 2학년 1반"
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.target.value)}
             className="w-36 rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm text-ink-900"
+            autoFocus
           />
           <button
             type="submit"
-            disabled={creating || !newName.trim()}
-            className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={renameBusy || !renameValue.trim()}
+            className="rounded-lg bg-cheese-400 px-3 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {creating ? '만드는 중…' : '+ 새 반'}
+            저장
+          </button>
+          <button
+            type="button"
+            onClick={() => setRenaming(false)}
+            disabled={renameBusy}
+            className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+          >
+            취소
           </button>
         </form>
+      )}
+    </div>
+  )
+}
+
+/** 드래그로 순서를 바꿀 수 있는 반 탭 하나. 버튼 자체가 드래그 핸들이다 —
+ *  Teacher.tsx의 SortableSubjectTab과 같은 패턴. */
+function SortableClassTab({
+  classMeta,
+  active,
+  onSelect,
+}: {
+  classMeta: ClassRecordMeta
+  active: boolean
+  onSelect: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: classMeta.id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <button
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={onSelect}
+      className={[
+        'touch-none rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+        active ? 'bg-cheese-400 text-ink-900' : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
+      ].join(' ')}
+    >
+      {classMeta.name}
+    </button>
+  )
+}
+
+/** 반 만들기 폼 — 이름과 학생 명단(선택)을 한 번에 받는다(사용자 요청).
+ *  Teacher.tsx의 AddSubjectForm과 같은 토글+폼 패턴. */
+function AddClassForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (name: string, bulkText: string) => Promise<void>
+  onCancel: () => void
+}) {
+  const [name, setName] = useState('')
+  const [bulkText, setBulkText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setBusy(true)
+    setError(null)
+    try {
+      await onCreated(trimmed, bulkText)
+    } catch (caught) {
+      console.error('반 생성 실패', caught)
+      setError('만들지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-3 rounded-2xl border border-dashed border-cheese-300 bg-cheese-50 p-5"
+    >
+      <div>
+        <h2 className="font-bold text-ink-900">새 반 만들기</h2>
+        <p className="text-xs text-ink-500">
+          반 이름을 정하고, 필요하면 학생 명단도 바로 붙여넣으세요. 명단은 나중에 추가해도 됩니다.
+        </p>
       </div>
 
-      {createError && <p className="text-sm text-red-700">{createError}</p>}
-    </div>
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="font-semibold text-ink-700">반 이름</span>
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="예: 2학년 1반"
+          className="w-full max-w-xs rounded-lg border border-cream-deep bg-white px-3 py-2 text-ink-900"
+          autoFocus
+        />
+      </label>
+
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="font-semibold text-ink-700">학생 명단(선택)</span>
+        <textarea
+          value={bulkText}
+          onChange={(event) => setBulkText(event.target.value)}
+          placeholder={'20116\t김길동\n20217\t이길동\n20230\t홍길동'}
+          rows={4}
+          className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-mono text-xs text-ink-900"
+        />
+      </label>
+
+      {error && <p className="text-sm text-red-700">{error}</p>}
+
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={busy || !name.trim()}
+          className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? '만드는 중…' : '만들기'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="rounded-lg border border-cream-deep px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+        >
+          취소
+        </button>
+      </div>
+    </form>
   )
 }
 
@@ -346,14 +493,14 @@ function ClassRoster({ classMeta }: { classMeta: ClassRecordMeta }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <StudentAddPanel
+      <StudentAddSection
         classId={classMeta.id}
         onAdded={handleStudentAdded}
         onBulkAdded={handleStudentsBulkAdded}
       />
 
       {students.length === 0 ? (
-        <p className="text-sm text-ink-500">학생이 없습니다. 위에서 학번·이름을 추가해 주세요.</p>
+        <p className="text-sm text-ink-500">학생이 없습니다. 위의 "+ 학생추가"로 추가해 주세요.</p>
       ) : (
         <>
           <DateSummary students={students} dates={dates} />
@@ -361,6 +508,41 @@ function ClassRoster({ classMeta }: { classMeta: ClassRecordMeta }) {
           <RecordTable students={students} dates={dates} onDelete={handleDeleteStudent} onToggle={handleToggle} />
         </>
       )}
+
+      <ClassMemo classId={classMeta.id} memo={classMeta.memo ?? ''} />
+    </div>
+  )
+}
+
+/** 학생 추가 폼을 작은 토글 버튼 뒤에 숨겨둔다(사용자 요청 — "생성된 반
+ *  탭에서는 작은 +학생추가 기능으로"). 학생을 이미 다 등록해둔 반에서는
+ *  이 자리를 계속 큰 폼이 차지할 이유가 없어서, 반 만들기 폼(AddClassForm)과
+ *  같은 토글 방식으로 맞췄다. */
+function StudentAddSection({
+  classId,
+  onAdded,
+  onBulkAdded,
+}: {
+  classId: string
+  onAdded: (student: Student) => void
+  onBulkAdded: (added: Student[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="flex flex-col gap-3">
+      <button
+        onClick={() => setOpen((value) => !value)}
+        className={[
+          'self-start rounded-lg border border-dashed px-3 py-1.5 text-sm font-bold transition-colors',
+          open
+            ? 'border-cheese-300 bg-cheese-50 text-cheese-700'
+            : 'border-cream-deep text-ink-500 hover:border-cheese-300 hover:text-ink-700',
+        ].join(' ')}
+      >
+        + 학생추가
+      </button>
+      {open && <StudentAddPanel classId={classId} onAdded={onAdded} onBulkAdded={onBulkAdded} />}
     </div>
   )
 }
@@ -636,6 +818,46 @@ function RecordTable({
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+/** 반 전체에 대한 자유 메모(사용자 요청) — 특정 학생·날짜에 매이지 않는
+ *  일반 메모라 기록 표 맨 아래에 둔다. 포커스를 벗어날 때 저장한다(교시
+ *  시간 입력과 같은 패턴). ClassRoster가 classMeta.id를 key로 반마다
+ *  새로 마운트되므로, 반을 바꾸면 이 컴포넌트도 다시 만들어져 그 반의
+ *  메모로 자연히 초기화된다 — 별도 useEffect 리셋이 필요 없다. */
+function ClassMemo({ classId, memo }: { classId: string; memo: string }) {
+  const [value, setValue] = useState(memo)
+  const [busy, setBusy] = useState(false)
+  const lastSavedRef = useRef(memo)
+
+  async function handleBlur() {
+    if (value === lastSavedRef.current) return
+    setBusy(true)
+    try {
+      await setClassMemo(classId, value)
+      lastSavedRef.current = value
+    } catch (caught) {
+      console.error('메모 저장 실패', caught)
+      alert('메모를 저장하지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-semibold text-ink-700">메모</span>
+      <textarea
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={handleBlur}
+        placeholder="이 반에 대한 메모를 자유롭게 적어두세요."
+        rows={3}
+        disabled={busy}
+        className="rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm text-ink-900 disabled:opacity-60"
+      />
     </div>
   )
 }

@@ -43,6 +43,9 @@ export interface ClassRecordMeta {
   id: string
   name: string
   order: number
+  /** 반 전체에 대한 자유 메모(사용자 요청) — 특정 학생·날짜에 매이지 않는
+   *  일반 메모. 기존에 만든 반에는 이 필드가 아예 없을 수 있어 optional. */
+  memo?: string
 }
 
 export interface Student {
@@ -81,6 +84,24 @@ export async function renameClass(classId: string, name: string): Promise<void> 
   const trimmed = name.trim()
   if (!trimmed) return
   await updateDoc(doc(db, CLASS_RECORDS, classId), { name: trimmed })
+}
+
+/** 반 전체에 대한 자유 메모를 저장한다(사용자 요청) — 특정 학생·날짜에
+ *  매이지 않는 일반 메모라 dot-notation 없이 필드 하나만 통째로 갱신한다. */
+export async function setClassMemo(classId: string, memo: string): Promise<void> {
+  await updateDoc(doc(db, CLASS_RECORDS, classId), { memo: memo.trim() })
+}
+
+/**
+ * 반 탭을 드래그로 정렬한 뒤 새 순서를 저장한다 — subjects.ts의
+ * reorderSubjects와 같은 패턴(writeBatch로 한 번에 커밋).
+ */
+export async function reorderClasses(orderedIds: string[]): Promise<void> {
+  const batch = writeBatch(db)
+  orderedIds.forEach((id, index) => {
+    batch.update(doc(db, CLASS_RECORDS, id), { order: index })
+  })
+  await batch.commit()
 }
 
 /**
