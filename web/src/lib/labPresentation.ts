@@ -48,18 +48,24 @@ export function subscribePresentation(
  * "종료한 페이지부터 재개"를 원한다는 요청으로 바꿨다. stopPresentation이
  * currentSlide를 건드리지 않고 종료하므로 그 값을 그대로 읽어와 이어쓰면
  * 된다 — 한 번도 발표한 적 없어 문서가 없으면 1쪽부터.)
+ *
+ * 실제로 이어서 시작한 페이지 번호를 반환한다 — 호출한 쪽(LabActivityDetail
+ * 등)이 이 값으로 로컬 상태를 즉시 맞춰줘야, onSnapshot 구독이 따라잡기 전
+ * 첫 렌더에 PdfViewer가 잠깐 1쪽으로 그렸다가 4쪽으로 튀는 깜빡임 없이
+ * 바로 정확한 페이지로 뜬다.
  */
-export async function startPresentation(activityId: string): Promise<void> {
+export async function startPresentation(activityId: string): Promise<number> {
   const ref = presentationDoc(activityId)
   const existing = await getDoc(ref)
   const resumeSlide = existing.exists()
-    ? (existing.data() as LabPresentationState).currentSlide
+    ? (existing.data() as LabPresentationState).currentSlide || 1
     : 1
   await setDoc(ref, {
     active: true,
-    currentSlide: resumeSlide || 1,
+    currentSlide: resumeSlide,
     updatedAt: Date.now(),
   } satisfies LabPresentationState)
+  return resumeSlide
 }
 
 export async function stopPresentation(activityId: string): Promise<void> {
