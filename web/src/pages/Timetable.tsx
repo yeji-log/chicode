@@ -245,15 +245,18 @@ function TimetableBoard() {
                   const key = cellKey(dayIndex, period)
                   const cell = data.cells[key]
                   const empty = isEmptyCell(cell)
+                  // 반이 과목 자리(굵고 큰 헤드라인)를, 과목이 반 자리(작은
+                  // 보조 텍스트)를 대신한다(사용자 요청) — 실제로 칸을 훑어볼
+                  // 때는 "몇 반 수업인지"가 먼저 눈에 들어와야 한다고 판단.
                   const content = empty ? (
                     editMode && <span className="m-auto text-lg">+</span>
                   ) : (
                     <>
-                      <span className="w-full truncate font-bold text-ink-900">
-                        {cell!.subject || '—'}
+                      <span className="w-full truncate text-base font-bold text-ink-900">
+                        {cell!.className || '—'}
                       </span>
                       <span className="w-full truncate text-xs text-ink-600">
-                        {[cell!.className, cell!.room].filter(Boolean).join(' · ')}
+                        {[cell!.room, cell!.subject].filter(Boolean).join(' · ')}
                       </span>
                     </>
                   )
