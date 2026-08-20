@@ -11,6 +11,7 @@ import {
   listClasses,
   listDates,
   listStudents,
+  renameClass,
   setAttendance,
   type BulkAddResult,
   type ClassRecordMeta,
@@ -60,6 +61,13 @@ export default function ClassRecords() {
     setSelectedClassId((prev) => (prev === target.id ? null : prev))
   }
 
+  async function handleRenameClass(target: ClassRecordMeta, name: string) {
+    await renameClass(target.id, name)
+    setClasses((prev) =>
+      (prev ?? []).map((entry) => (entry.id === target.id ? { ...entry, name: name.trim() } : entry)),
+    )
+  }
+
   if (loadError) {
     return (
       <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -81,6 +89,7 @@ export default function ClassRecords() {
         selectedClassId={selectedClassId}
         onSelect={setSelectedClassId}
         onCreate={handleCreateClass}
+        onRename={selectedClass ? (name) => handleRenameClass(selectedClass, name) : undefined}
         onDelete={selectedClass ? () => handleDeleteClass(selectedClass) : undefined}
       />
 
@@ -100,17 +109,32 @@ function ClassPicker({
   selectedClassId,
   onSelect,
   onCreate,
+  onRename,
   onDelete,
 }: {
   classes: ClassRecordMeta[]
   selectedClassId: string | null
   onSelect: (id: string) => void
   onCreate: (name: string) => Promise<void>
+  onRename: ((name: string) => Promise<void>) | undefined
   onDelete: (() => void) | undefined
 }) {
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+
+  // 이름 수정은 선택된 반이 바뀌면(다른 탭을 누르면) 자동으로 닫는다 — 안
+  // 그러면 A반 수정 폼이 열린 채로 B반 탭을 눌렀을 때 어느 반을 고치는
+  // 건지 헷갈린다.
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameBusy, setRenameBusy] = useState(false)
+
+  useEffect(() => {
+    setRenaming(false)
+  }, [selectedClassId])
+
+  const selected = classes.find((entry) => entry.id === selectedClassId) ?? null
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault()
@@ -129,46 +153,113 @@ function ClassPicker({
     }
   }
 
+  function startRename() {
+    if (!selected) return
+    setRenameValue(selected.name)
+    setRenaming(true)
+  }
+
+  async function handleRenameSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    const trimmed = renameValue.trim()
+    if (!trimmed || !onRename) return
+    setRenameBusy(true)
+    try {
+      await onRename(trimmed)
+      setRenaming(false)
+    } catch (caught) {
+      console.error('반 이름 수정 실패', caught)
+      alert('이름을 바꾸지 못했습니다. 다시 시도해 주세요.')
+    } finally {
+      setRenameBusy(false)
+    }
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <select
-        value={selectedClassId ?? ''}
-        onChange={(event) => onSelect(event.target.value)}
-        disabled={classes.length === 0}
-        className="rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm font-semibold text-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {classes.length === 0 && <option value="">반 없음</option>}
+    <div className="flex flex-col gap-3">
+      {/* 반마다 탭 하나 — 드롭다운 대신 탭으로 둬서 반을 오갈 때마다 그
+          반의 출결(참여) 기록을 바로 누르며 확인할 수 있게 했다(사용자
+          요청). Teacher.tsx의 섹션 탭과 같은 스타일. */}
+      <nav className="flex flex-wrap items-center gap-2 border-b border-cream-deep pb-3">
+        {classes.length === 0 && <span className="px-2 py-2 text-sm text-ink-500">반 없음</span>}
         {classes.map((entry) => (
-          <option key={entry.id} value={entry.id}>
+          <button
+            key={entry.id}
+            onClick={() => onSelect(entry.id)}
+            className={[
+              'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+              entry.id === selectedClassId
+                ? 'bg-cheese-400 text-ink-900'
+                : 'text-ink-700 hover:bg-cheese-100',
+            ].join(' ')}
+          >
             {entry.name}
-          </option>
+          </button>
         ))}
-      </select>
+      </nav>
 
-      {onDelete && (
-        <button
-          onClick={onDelete}
-          className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-red-300 hover:text-red-600"
-        >
-          반 삭제
-        </button>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        {selected && !renaming && (
+          <>
+            <button
+              onClick={startRename}
+              className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+            >
+              이름 수정
+            </button>
+            {onDelete && (
+              <button
+                onClick={onDelete}
+                className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-red-300 hover:text-red-600"
+              >
+                반 삭제
+              </button>
+            )}
+          </>
+        )}
 
-      <form onSubmit={handleCreate} className="flex items-center gap-2">
-        <input
-          value={newName}
-          onChange={(event) => setNewName(event.target.value)}
-          placeholder="예: 2학년 1반"
-          className="w-36 rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm text-ink-900"
-        />
-        <button
-          type="submit"
-          disabled={creating || !newName.trim()}
-          className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {creating ? '만드는 중…' : '+ 새 반'}
-        </button>
-      </form>
+        {selected && renaming && (
+          <form onSubmit={handleRenameSubmit} className="flex items-center gap-2">
+            <input
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              className="w-36 rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm text-ink-900"
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={renameBusy || !renameValue.trim()}
+              className="rounded-lg bg-cheese-400 px-3 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              저장
+            </button>
+            <button
+              type="button"
+              onClick={() => setRenaming(false)}
+              disabled={renameBusy}
+              className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+            >
+              취소
+            </button>
+          </form>
+        )}
+
+        <form onSubmit={handleCreate} className="flex items-center gap-2">
+          <input
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            placeholder="예: 2학년 1반"
+            className="w-36 rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm text-ink-900"
+          />
+          <button
+            type="submit"
+            disabled={creating || !newName.trim()}
+            className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {creating ? '만드는 중…' : '+ 새 반'}
+          </button>
+        </form>
+      </div>
 
       {createError && <p className="text-sm text-red-700">{createError}</p>}
     </div>

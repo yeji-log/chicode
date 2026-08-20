@@ -77,6 +77,12 @@ export async function createClass(name: string): Promise<ClassRecordMeta> {
   return { id, ...meta }
 }
 
+export async function renameClass(classId: string, name: string): Promise<void> {
+  const trimmed = name.trim()
+  if (!trimmed) return
+  await updateDoc(doc(db, CLASS_RECORDS, classId), { name: trimmed })
+}
+
 /**
  * 반을 통째로 지운다. Firestore는 상위 문서를 지워도 하위 컬렉션(students,
  * dates)이 자동으로 지워지지 않는다 — 개인정보가 안 남게 직접 다 지운다.
