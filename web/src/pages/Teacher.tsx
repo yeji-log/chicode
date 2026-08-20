@@ -1086,13 +1086,13 @@ function SubjectSettings({
   )
 }
 
-function Centered({ children }: { children: React.ReactNode }) {
+export function Centered({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-4 py-20 text-center">{children}</div>
   )
 }
 
-function GoogleMark() {
+export function GoogleMark() {
   return (
     <svg viewBox="0 0 18 18" className="size-5" aria-hidden="true">
       <path

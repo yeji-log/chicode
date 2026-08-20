@@ -125,6 +125,14 @@ service cloud.firestore {
       allow create, update, delete: if isTeacher();
     }
 
+    // 교사 시간표(요일 x 교시). 학생에게 보여줄 이유가 없는 업무용 정보(반 이름,
+    // 교실 등)라 subjects/materials 와 달리 읽기도 isTeacher() 로 막는다 — "가벼운
+    // 잠금"이 아니라 진짜로 로그인한 교사만 볼 수 있다. 문서 하나("default")만
+    // 쓰는 싱글턴(labSettings 와 같은 패턴).
+    match /timetable/{docId} {
+      allow read, write: if isTeacher();
+    }
+
     // 활동 항목(section) 하나하나에 붙는 첨부파일(이미지·PDF·PPT·엑셀).
     // labSlides 와 같은 조각 저장 구조지만, 다운로드를 막을 이유가 없는
     // 일반 수업자료라 성격은 materials 에 더 가깝다.

@@ -21,6 +21,7 @@ import LabRoadmap from './pages/LabRoadmap'
 import LabActivities from './pages/LabActivities'
 import LabActivityDetail from './pages/LabActivityDetail'
 import Teacher from './pages/Teacher'
+import Timetable from './pages/Timetable'
 import ComingSoon from './pages/ComingSoon'
 import PicoGate from './pages/PicoGate'
 import NotFound from './pages/NotFound'
@@ -95,6 +96,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="activities/:id" element={<LabActivityDetail />} />
             </Route>
             <Route path="teacher" element={<Teacher />} />
+            <Route path="timetable" element={<Timetable />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
