@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { asset } from '../lib/asset'
 import { pushDebug } from '../lib/debugLog'
 
 /**
@@ -133,7 +134,19 @@ export default function PdfViewer({
         pdfjs.GlobalWorkerOptions.workerSrc = workerUrl.default
 
         const data = new Uint8Array(await file.arrayBuffer())
-        const task = pdfjs.getDocument({ data }) as unknown as PdfLoadingTask
+        // cMap/표준 폰트 데이터 없이 열면, 한글처럼 폰트가 통짜로 임베드되지
+        // 않고 CID 매핑이 필요하거나(예: 시스템 폰트로 대체되는 경우) 표준
+        // 폰트로 대체해야 하는 글자가 깨져서(네모/엉뚱한 글자) 나온다 — 갤럭시
+        // 탭에서 발표 화면 크래시(mapUpsertPolyfill.ts)를 고치고 나서야 실제로
+        // 확인된 증상이다. scripts/sync-pdfjs-assets.mjs 가 node_modules 안의
+        // pdfjs-dist 데이터를 그대로 public/pdfjs 로 복사해둔다(외부 CDN 금지
+        // 원칙과 같은 이유로 자체 호스팅).
+        const task = pdfjs.getDocument({
+          data,
+          cMapUrl: asset('pdfjs/cmaps/'),
+          cMapPacked: true,
+          standardFontDataUrl: asset('pdfjs/standard_fonts/'),
+        }) as unknown as PdfLoadingTask
         loadingTaskRef.current = task
 
         // 일부 기기(모듈 워커를 못 돌리는 구형 브라우저 등)는 여기서 에러를
