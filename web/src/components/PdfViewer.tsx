@@ -141,11 +141,23 @@ export default function PdfViewer({
         // 확인된 증상이다. scripts/sync-pdfjs-assets.mjs 가 node_modules 안의
         // pdfjs-dist 데이터를 그대로 public/pdfjs 로 복사해둔다(외부 CDN 금지
         // 원칙과 같은 이유로 자체 호스팅).
+        //
+        // 이걸로도 안 되는 경우가 있었다 — 실제 OT 발표 파일로 확인해보니
+        // 폰트는 정상적으로 임베드돼 있는데도(missingFile: false, node로 직접
+        // 검증함) 갤럭시 탭 발표 화면에서만 한글이 네모/엉뚱한 글자로 나왔다.
+        // pdf.js 는 기본으로 브라우저 네이티브 @font-face 로 임베드 폰트를
+        // 그리는데, 안드로이드 Chrome/WebView 에는 특정 임베드 폰트를 이
+        // 경로로 그리면 깨지는 알려진 버그가 여럿 있다
+        // (mozilla/pdf.js#19672, #20143, #3466 등). disableFontFace: true 로
+        // 두면 브라우저 폰트 API를 거치지 않고 pdf.js 가 임베드된 폰트의
+        // 글리프를 직접 그린다 — 이 앱이 다루는 발표자료는 폰트가 다 임베드돼
+        // 있어서(시스템 폰트로 대체할 일이 없어서) 이 설정으로 잃을 게 없다.
         const task = pdfjs.getDocument({
           data,
           cMapUrl: asset('pdfjs/cmaps/'),
           cMapPacked: true,
           standardFontDataUrl: asset('pdfjs/standard_fonts/'),
+          disableFontFace: true,
         }) as unknown as PdfLoadingTask
         loadingTaskRef.current = task
 
