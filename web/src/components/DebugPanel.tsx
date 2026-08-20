@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { getDebugEntries, isDebugEnabled, subscribeDebug } from '../lib/debugLog'
+import { clearDebugEntries, getDebugEntries, isDebugEnabled, subscribeDebug } from '../lib/debugLog'
 
 /**
  * 임시 진단 패널. URL에 ?debug=1 을 붙였을 때만 화면 구석에 작은 버튼으로
@@ -54,6 +54,12 @@ export default function DebugPanel() {
                 className="rounded-md bg-cheese-400 px-2.5 py-1 text-xs font-bold text-ink-900"
               >
                 {copied ? '복사됨!' : '전체 복사'}
+              </button>
+              <button
+                onClick={clearDebugEntries}
+                className="rounded-md border border-cream-deep px-2.5 py-1 text-xs font-semibold text-ink-700"
+              >
+                지우기
               </button>
               <button
                 onClick={() => setOpen(false)}
