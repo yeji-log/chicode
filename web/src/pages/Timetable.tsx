@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { useAuth } from '../auth/AuthProvider'
 import PolicyModal from '../components/PolicyModal'
+import ToggleSwitch from '../components/ToggleSwitch'
 import { asset } from '../lib/asset'
 import { isFirebaseConfigured } from '../lib/firebase'
 import {
@@ -105,6 +106,11 @@ function TimetableBoard() {
   const [periodsInput, setPeriodsInput] = useState(DEFAULT_PERIODS)
   const [periodsBusy, setPeriodsBusy] = useState(false)
   const [selected, setSelected] = useState<{ dayIndex: number; period: number } | null>(null)
+  // 기본은 보기 전용이다 — 그리드를 훑어보다 실수로 칸을 눌러 값이 바뀌는 걸
+  // 막으려고, 실제로 고치려면 이 스위치를 먼저 켜야 칸이 눌리게 했다(사용자
+  // 요청). 새로고침하면 다시 꺼지는 편이 안전해서 페이지를 벗어나도 기억하지
+  // 않는다 — sessionStorage 등에 남기지 않음.
+  const [editMode, setEditMode] = useState(false)
 
   useEffect(() => {
     getTimetable()
@@ -158,25 +164,34 @@ function TimetableBoard() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">시간표</h1>
           <p className="text-sm text-ink-500">
-            칸을 눌러 과목·반·교실을 입력하세요. 로그인한 교사 누구나 수정할 수 있습니다.
+            {editMode
+              ? '칸을 눌러 과목·반·교실을 입력하세요. 로그인한 교사 누구나 수정할 수 있습니다.'
+              : '보기 전용입니다. 훑어보다 실수로 바뀌지 않도록, 고치려면 편집 모드를 켜주세요.'}
           </p>
         </div>
 
-        <div className="ml-auto flex items-center gap-2 text-sm">
-          <label htmlFor="periods" className="font-semibold text-ink-700">
-            교시 수
-          </label>
-          <input
-            id="periods"
-            type="number"
-            min={MIN_PERIODS}
-            max={MAX_PERIODS}
-            value={periodsInput}
-            disabled={periodsBusy}
-            onChange={(event) => setPeriodsInput(Number(event.target.value))}
-            onBlur={(event) => applyPeriods(Number(event.target.value))}
-            className="w-16 rounded-lg border border-cream-deep bg-white px-2 py-1.5 text-center text-ink-900"
-          />
+        <div className="ml-auto flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-ink-700">편집 모드</span>
+            <ToggleSwitch checked={editMode} onChange={() => setEditMode((prev) => !prev)} label="시간표 편집 모드" />
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <label htmlFor="periods" className="font-semibold text-ink-700">
+              교시 수
+            </label>
+            <input
+              id="periods"
+              type="number"
+              min={MIN_PERIODS}
+              max={MAX_PERIODS}
+              value={periodsInput}
+              disabled={!editMode || periodsBusy}
+              onChange={(event) => setPeriodsInput(Number(event.target.value))}
+              onBlur={(event) => applyPeriods(Number(event.target.value))}
+              className="w-16 rounded-lg border border-cream-deep bg-white px-2 py-1.5 text-center text-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
         </div>
       </header>
 
@@ -207,30 +222,35 @@ function TimetableBoard() {
                   const key = cellKey(dayIndex, period)
                   const cell = data.cells[key]
                   const empty = isEmptyCell(cell)
+                  const content = empty ? (
+                    editMode && <span className="m-auto text-lg">+</span>
+                  ) : (
+                    <>
+                      <span className="w-full truncate font-bold text-ink-900">
+                        {cell!.subject || '—'}
+                      </span>
+                      <span className="w-full truncate text-xs text-ink-600">
+                        {[cell!.className, cell!.room].filter(Boolean).join(' · ')}
+                      </span>
+                    </>
+                  )
+                  const cellClass = [
+                    'flex h-16 w-full flex-col items-start gap-0.5 rounded-lg px-2 py-1.5 text-left transition-colors',
+                    empty ? 'text-ink-300' : 'bg-cheese-100',
+                    editMode && (empty ? 'hover:bg-cheese-100' : 'hover:bg-cheese-200'),
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+
                   return (
                     <td key={key} className="border-b border-l border-cream-deep p-1.5 align-top">
-                      <button
-                        onClick={() => setSelected({ dayIndex, period })}
-                        className={[
-                          'flex h-16 w-full flex-col items-start gap-0.5 rounded-lg px-2 py-1.5 text-left transition-colors',
-                          empty
-                            ? 'text-ink-300 hover:bg-cheese-100'
-                            : 'bg-cheese-100 hover:bg-cheese-200',
-                        ].join(' ')}
-                      >
-                        {empty ? (
-                          <span className="m-auto text-lg">+</span>
-                        ) : (
-                          <>
-                            <span className="w-full truncate font-bold text-ink-900">
-                              {cell!.subject || '—'}
-                            </span>
-                            <span className="w-full truncate text-xs text-ink-600">
-                              {[cell!.className, cell!.room].filter(Boolean).join(' · ')}
-                            </span>
-                          </>
-                        )}
-                      </button>
+                      {editMode ? (
+                        <button onClick={() => setSelected({ dayIndex, period })} className={cellClass}>
+                          {content}
+                        </button>
+                      ) : (
+                        <div className={cellClass}>{content}</div>
+                      )}
                     </td>
                   )
                 })}
