@@ -197,17 +197,23 @@ export default function PdfViewer({
         // 검증함) 갤럭시 탭 발표 화면에서만 한글이 네모/엉뚱한 글자로 나왔다.
         // pdf.js 는 기본으로 브라우저 네이티브 @font-face 로 임베드 폰트를
         // 그리는데, 안드로이드 Chrome/WebView 에는 특정 임베드 폰트를 이
-        // 경로로 그리면 깨지는 알려진 버그가 여럿 있다
-        // (mozilla/pdf.js#19672, #20143, #3466 등). disableFontFace: true 로
-        // 두면 브라우저 폰트 API를 거치지 않고 pdf.js 가 임베드된 폰트의
-        // 글리프를 직접 그린다 — 이 앱이 다루는 발표자료는 폰트가 다 임베드돼
-        // 있어서(시스템 폰트로 대체할 일이 없어서) 이 설정으로 잃을 게 없다.
+        // 경로로 그리면 깨지는 알려진 버그가 여럿 있다길래
+        // (mozilla/pdf.js#19672, #20143, #3466 등) disableFontFace: true 로
+        // 바꿔봤는데, 이것도 틀렸다 — 실기기 진단 로그(logFontDiagnostics)로
+        // 확인해보니 disableFontFace: true 를 켠 채로는 이 기기에서 모든
+        // 폰트가 missingFile: true 로 나왔다. pdf.js 가 브라우저 폰트 API 없이
+        // 직접 폰트를 파싱하는 이 경로 자체가 이 기기의 자바스크립트 엔진에서
+        // 실패해서, 진짜 한글 폰트 대신 monospace/sans-serif 같은 대체
+        // 폰트(fallbackName)로 그려버리고 있었다 — 그래서 엉뚱한 글자가
+        // 나온 것이었다. 그래서 disableFontFace 는 다시 뺐다(기본값 false,
+        // 브라우저 네이티브 @font-face 사용). 위 mozilla 이슈들이 걱정한
+        // "네이티브 렌더링이 깨지는" 경우와는 다른 기기·다른 폰트일 수 있어서
+        // 여기 있는 실제 진단 데이터를 더 신뢰한다.
         const task = pdfjs.getDocument({
           data,
           cMapUrl: asset('pdfjs/cmaps/'),
           cMapPacked: true,
           standardFontDataUrl: asset('pdfjs/standard_fonts/'),
-          disableFontFace: true,
         }) as unknown as PdfLoadingTask
         loadingTaskRef.current = task
 
