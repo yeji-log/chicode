@@ -195,7 +195,7 @@ export default function PrivacyPolicy() {
         </p>
       </PolicyArticle>
 
-      <PolicyArticle num="제8조" title="만 14세 미만 아동의 개인정보 보호">
+      <PolicyArticle num="제8조" title="아동의 개인정보 보호">
         <p>
           CHICODE는 고등학생을 대상으로 하는 서비스이며, 만 14세 미만 아동의 이용을
           예정하고 있지 않습니다. 학생이 서비스에 직접 개인정보를 입력하거나 전송하는
