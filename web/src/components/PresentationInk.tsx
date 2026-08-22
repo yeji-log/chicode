@@ -110,6 +110,11 @@ export default function PresentationInk({
 
   function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!editable || !active) return
+    // 아이패드(애플펜슬)에서 iOS Safari가 이 드래그를 텍스트 선택
+    // 제스처로 오인해서 "복사하기/찾아보기/번역" 메뉴를 띄우는 걸 막는다.
+    // touch-action: none만으로는 이 롱프레스 콜아웃 메뉴까지는 안 막혀서
+    // (그건 스크롤/줌 제스처만 막는다), preventDefault를 같이 불러야 한다.
+    event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     drawingRef.current = true
     pointsRef.current = [toNormalized(event)]
@@ -153,6 +158,11 @@ export default function PresentationInk({
         touchAction: editable && active ? 'none' : undefined,
         pointerEvents: editable && active ? 'auto' : 'none',
         cursor: editable && active ? 'crosshair' : undefined,
+        // preventDefault만으로는 아이패드에서 부족했다 — 이 두 속성도 같이
+        // 줘야 롱프레스 시 "복사하기/찾아보기/번역" 콜아웃이 아예 안 뜬다.
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
       }}
     />
   )

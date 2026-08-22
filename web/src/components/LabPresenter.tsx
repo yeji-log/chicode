@@ -136,8 +136,17 @@ export default function LabPresenter({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
-        <div className="h-[60vh] overflow-hidden rounded-xl border border-cream-deep">
+      {/* 펜이 켜져 있는 동안은 대본을 볼 일보다 그릴 공간이 더 급하다 —
+          대본 패널을 잠시 접고 슬라이드가 가로폭을 전부 쓰게 한다. 펜을
+          끄면 원래 나란히 배치로 돌아온다. 대본 입력값(noteDraft)은
+          컴포넌트 state라 패널이 잠깐 안 보여도 그대로 남아있다. */}
+      <div className={penActive ? 'flex flex-col gap-4' : 'grid gap-4 lg:grid-cols-[3fr_2fr]'}>
+        <div
+          className={
+            (penActive ? 'h-[80vh]' : 'h-[60vh]') +
+            ' overflow-hidden rounded-xl border border-cream-deep'
+          }
+        >
           <PdfViewer
             file={pdfFile}
             filename="발표자료"
@@ -156,18 +165,20 @@ export default function LabPresenter({
           />
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-semibold text-ink-700">
-            대본 <span className="font-normal text-ink-500">(학생 화면엔 안 보입니다)</span>
-          </label>
-          <textarea
-            value={noteDraft}
-            onChange={(event) => handleNoteChange(event.target.value)}
-            onBlur={flushPending}
-            placeholder="PPT에 발표자 노트가 없으면 여기 바로 적어도 됩니다."
-            className="min-h-[60vh] flex-1 rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm leading-relaxed text-ink-900 focus:border-cheese-300 focus:outline-none"
-          />
-        </div>
+        {!penActive && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-ink-700">
+              대본 <span className="font-normal text-ink-500">(학생 화면엔 안 보입니다)</span>
+            </label>
+            <textarea
+              value={noteDraft}
+              onChange={(event) => handleNoteChange(event.target.value)}
+              onBlur={flushPending}
+              placeholder="PPT에 발표자 노트가 없으면 여기 바로 적어도 됩니다."
+              className="min-h-[60vh] flex-1 rounded-lg border border-cream-deep bg-white px-3 py-2 text-sm leading-relaxed text-ink-900 focus:border-cheese-300 focus:outline-none"
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-center gap-4">
