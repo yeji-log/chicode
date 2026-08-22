@@ -31,8 +31,12 @@ Firebase Google 로그인 기반 교사 인증. 학생은 회원가입 없이 �
 | 실습 선택 | `/practice` | Python / C언어 / Pico(준비중) 카드 |
 | Python 실습 | `/practice/python` | Pyodide(WASM CPython), Web Worker, 무한루프 중지 가능 |
 | C 실습 | `/practice/c` | **진짜 clang을 브라우저에서 실행**. 아래 "C 실습 구조" 참고 |
-| 프로젝트 / Lab | `/projects`, `/lab` | 아직 내용 없음, ComingSoon 자리표시자 |
-| 교사 인증 | `/teacher` | Firebase Auth(Google) + Firestore `teachers` 컬렉션 화이트리스트 |
+| Pico 2 W 실습 | `/practice/pico` | 회로 캔버스 + 코드 에디터(`PicoLab.tsx`). `PicoGate.tsx`가 교사/학생(설정 공개 여부)로 게이트. Monaco는 진입 시 동적 로드 |
+| Lab (활동/발표) | `/lab` | 핀 게이트(`LabGate.tsx`) 아래 홈·로드맵(시즌 카드)·활동 목록·활동 상세. `/materials/:subjectId`에도 로드맵·활동 화면이 과목별로 재마운트됨(`useLabScope`). 교사용 보드 에디터는 `LabBoardEditor.tsx` |
+| 시간표 / 수업기록 | `/timetable` | 그리드(`TimetableBoard`)와 반별 수업기록(`ClassRecords.tsx`, 반 탭 드래그 정렬·학생 참여 기록·메모)을 탭 전환 |
+| 뉴스 | `/news` | 홈 히어로 "오늘의 AI·IT 이슈" 버튼에서 진입하는 공개 페이지. 교사는 `/teacher`의 뉴스 탭(`TeacherNews.tsx`)에서 후보 관리 |
+| 프로젝트 | `/projects` | 아직 내용 없음, ComingSoon 자리표시자 |
+| 교사 인증 | `/teacher` | Firebase Auth(Google) + Firestore `teachers` 컬렉션 화이트리스트. Lab/뉴스/과목별 자료 관리 탭도 이 페이지 안에 있음 |
 | 정책 팝업 | 풋터 | 개인정보처리방침 / 이용약관, 실제 데이터 처리 방식 검증 후 작성함 |
 
 배포: **Vercel**(`chico-edu.vercel.app`, 메인)과 **GitHub Pages**
