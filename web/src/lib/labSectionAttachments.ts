@@ -1,11 +1,11 @@
 /**
- * Lab 활동의 각 항목(section)에 붙이는 첨부파일(이미지·동영상·PDF·PPT·엑셀).
+ * Lab 활동의 각 항목(section)에 붙이는 첨부파일(이미지·동영상·PDF·PPT·엑셀·CSV).
  *
  * labSlides.ts 의 발표자료(PPT/PDF)와는 성격이 다르다 — 그쪽은 "다운로드
  * 금지, 뷰어로만" 이라는 요구사항 때문에 pptx-preview·PdfViewer를 동원한
  * 전용 뷰어가 필요했지만, 이 첨부파일은 그냥 수업자료 성격이라 다운로드를
  * 막을 이유가 없다. 그래서 훨씬 단순하다 — 이미지면 화면에 바로 보여주고,
- * 그 외(PDF/PPT/엑셀)는 다운로드 링크 하나만 둔다.
+ * 그 외(PDF/PPT/엑셀/CSV)는 다운로드 링크 하나만 둔다.
  *
  * 저장 방식은 chunkedFile.ts(Firestore 문서 조각) 그대로 재사용 — Storage가
  * 유료 플랜을 요구하는 이유는 materials.ts 상단 설명 참고.
@@ -47,6 +47,7 @@ const ALLOWED_EXTENSIONS = [
   'pptx',
   'xls',
   'xlsx',
+  'csv',
   'mp4',
 ]
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
@@ -67,7 +68,7 @@ function assertValid(file: File) {
   const ext = extensionOf(file.name)
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
     throw new SectionAttachmentError(
-      `지원하지 않는 형식입니다 (.${ext || '확장자 없음'}). 허용: 이미지·동영상(mp4)·PDF·PPT·엑셀`,
+      `지원하지 않는 형식입니다 (.${ext || '확장자 없음'}). 허용: 이미지·동영상(mp4)·PDF·PPT·엑셀·CSV`,
     )
   }
   const maxSize = VIDEO_EXTENSIONS.includes(ext) ? MAX_VIDEO_SIZE : MAX_ATTACHMENT_SIZE
