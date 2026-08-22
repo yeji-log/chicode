@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
+import { EMPTY_INK_STROKES, type InkStroke } from '../lib/labPresentation'
 import PdfViewer from './PdfViewer'
+import PresentationInk from './PresentationInk'
 
 /**
  * 학생(또는 발표를 직접 조작하지 않는 교사) 화면에서 발표가 시작되면 자동으로
@@ -20,12 +22,16 @@ export default function LabPresentationOverlay({
   pdfFile,
   currentSlide,
   filename,
+  ink,
   isTeacherViewer,
   onTakeControl,
 }: {
   pdfFile: Blob
   currentSlide: number
   filename: string
+  /** 슬라이드별 펜 획(Firestore 구독 값 그대로) — 읽기 전용으로만 그린다,
+   *  여기서는 그릴 수 없다(교사 화면=LabPresenter에서만 그린다). */
+  ink?: Record<number, InkStroke[]>
   isTeacherViewer: boolean
   onTakeControl: () => void
 }) {
@@ -41,7 +47,19 @@ export default function LabPresentationOverlay({
 
   return createPortal(
     <div ref={containerRef} className="fixed inset-0 z-50 bg-ink-900">
-      <PdfViewer file={pdfFile} filename={filename} page={currentSlide} hideControls />
+      <PdfViewer
+        file={pdfFile}
+        filename={filename}
+        page={currentSlide}
+        hideControls
+        overlay={
+          <PresentationInk
+            strokes={ink?.[currentSlide] ?? EMPTY_INK_STROKES}
+            editable={false}
+            active={false}
+          />
+        }
+      />
       {isTeacherViewer && (
         <button
           onClick={onTakeControl}

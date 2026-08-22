@@ -14,15 +14,43 @@
  * (발표 모드는 PDF 필수라 labSlides.ts 에서 강제한다).
  */
 
-import { doc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
+import {
+  arrayUnion,
+  deleteField,
+  doc,
+  onSnapshot,
+  setDoc,
+  updateDoc,
+  type Unsubscribe,
+} from 'firebase/firestore'
 
 import { db } from './firebase'
+
+export interface InkPoint {
+  x: number
+  y: number
+}
+
+/** 슬라이드 한 쪽 안에서 펜을 누르고 뗄 때까지의 궤적 하나. 색·굵기는 지금은
+ *  고정값(PresentationInk.tsx)이라 따로 안 담는다 — 나중에 색을 고르게
+ *  하려면 여기 필드를 늘리면 된다. */
+export interface InkStroke {
+  points: InkPoint[]
+}
 
 export interface LabPresentationState {
   active: boolean
   currentSlide: number
   updatedAt: number
+  /** 슬라이드 번호(1부터) → 그 쪽에 그려진 펜 획들. Firestore 맵 필드라 키는
+   *  실제로는 문자열이지만, 자바스크립트 대괄호 접근은 숫자를 문자열로 자동
+   *  변환해주므로 호출부에서는 숫자로 그냥 읽고 쓰면 된다. 발표를 시작한
+   *  적 없거나 아직 아무도 안 그렸으면 필드 자체가 없다. */
+  ink?: Record<number, InkStroke[]>
 }
+
+/** strokes prop이 없을 때 매번 새 배열을 만들지 않기 위한 공유 빈 배열. */
+export const EMPTY_INK_STROKES: InkStroke[] = []
 
 const LAB_PRESENTATIONS = 'labPresentations'
 
@@ -58,10 +86,17 @@ export async function startPresentation(activityId: string, atSlide: number): Pr
   } satisfies LabPresentationState)
 }
 
+/**
+ * 발표를 끝낸다 — 파워포인트 펜처럼, 그동안 그린 펜 자국은 여기서 전부
+ * 폐기한다("잉크 유지할까요?" 같은 저장 옵션은 안 둔다, 사용자와 합의한
+ * 동작). deleteField()는 merge:true 안에서도 그 필드 자체를 지운다(값을
+ * 빈 객체로 덮어쓰는 것과 달리, merge가 중첩 맵을 깊이 병합해버리는 문제를
+ * 피할 수 있다).
+ */
 export async function stopPresentation(activityId: string): Promise<void> {
   await setDoc(
     presentationDoc(activityId),
-    { active: false, updatedAt: Date.now() },
+    { active: false, updatedAt: Date.now(), ink: deleteField() },
     { merge: true },
   )
 }
@@ -72,4 +107,27 @@ export async function setCurrentSlide(activityId: string, slide: number): Promis
     { currentSlide: slide, updatedAt: Date.now() },
     { merge: true },
   )
+}
+
+/**
+ * 지금 그은 획 하나를 그 슬라이드에 추가한다. 마우스가 움직일 때마다 쓰지
+ * 않고 펜을 뗀 시점에 한 번만 부른다(PresentationInk.tsx) — Firestore 무료
+ * 쓰기 한도를 지키기 위한 이 프로젝트의 원칙과 같은 이유다.
+ */
+export async function addInkStroke(
+  activityId: string,
+  slide: number,
+  stroke: InkStroke,
+): Promise<void> {
+  await updateDoc(presentationDoc(activityId), {
+    [`ink.${slide}`]: arrayUnion(stroke),
+  })
+}
+
+/** 슬라이드 넘길 때는 유지하고(파워포인트 펜과 같은 동작), "지우기" 버튼을
+ *  눌렀을 때만 그 쪽의 펜 자국을 지운다. */
+export async function clearInkForSlide(activityId: string, slide: number): Promise<void> {
+  await updateDoc(presentationDoc(activityId), {
+    [`ink.${slide}`]: deleteField(),
+  })
 }
