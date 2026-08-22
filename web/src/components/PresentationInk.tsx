@@ -2,7 +2,20 @@ import { useEffect, useRef } from 'react'
 
 import type { InkPoint, InkStroke } from '../lib/labPresentation'
 
-const PEN_COLOR = '#e11d48'
+/** 무지개 7색 — 색을 고르는 툴바(LabPresenter)와 여기 렌더링이 같은
+ *  목록을 쓴다. 맨 앞(빨강)이 기본값이자, 색 정보가 없는 옛 획(색 선택
+ *  기능 추가 전에 그려진 것)의 대체색이기도 하다. */
+export const PEN_COLORS = [
+  { name: '빨강', hex: '#ef4444' },
+  { name: '주황', hex: '#f97316' },
+  { name: '노랑', hex: '#eab308' },
+  { name: '초록', hex: '#22c55e' },
+  { name: '파랑', hex: '#3b82f6' },
+  { name: '남색', hex: '#4f46e5' },
+  { name: '보라', hex: '#a855f7' },
+] as const
+
+const DEFAULT_PEN_COLOR = PEN_COLORS[0].hex
 const PEN_WIDTH_CSS_PX = 3
 
 /**
@@ -22,23 +35,32 @@ export default function PresentationInk({
   strokes,
   editable,
   active,
+  color = DEFAULT_PEN_COLOR,
   onStrokeComplete,
 }: {
-  /** 지금 슬라이드에 이미 저장된 획들. */
+  /** 지금 슬라이드에 이미 저장된 획들. 각 획은 그릴 때 골랐던 색을 그대로
+   *  들고 있다(stroke.color) — 지금 고른 색(color prop)과는 무관하다. */
   strokes: InkStroke[]
   /** 이 화면이 그릴 수 있는 화면인지(교사 화면만 true). */
   editable: boolean
   /** 펜 도구가 켜져 있는지 — editable && active일 때만 입력을 받는다. */
   active: boolean
+  /** 지금부터 그릴 획에 적용할 색(PEN_COLORS 중 하나). 읽기 전용 화면에는
+   *  의미 없다 — 저장된 각 획은 stroke.color로 자기 색을 이미 갖고 있다. */
+  color?: string
   onStrokeComplete?: (stroke: InkStroke) => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawingRef = useRef(false)
   const pointsRef = useRef<InkPoint[]>([])
+  // handlePointerMove가 pointerdown 시점의 색으로 계속 그리도록 고정한다
+  // — 그리는 도중 color prop이 바뀌어도(있을 법하지 않지만) 이미 시작한
+  // 획의 색은 안 바뀌어야 한다.
+  const drawingColorRef = useRef(color)
 
-  function applyPenStyle(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
+  function applyPenStyle(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, strokeColor: string) {
     const dpr = canvas.clientWidth ? canvas.width / canvas.clientWidth : 1
-    ctx.strokeStyle = PEN_COLOR
+    ctx.strokeStyle = strokeColor
     ctx.lineWidth = PEN_WIDTH_CSS_PX * dpr
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
@@ -57,8 +79,10 @@ export default function PresentationInk({
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    applyPenStyle(ctx, canvas)
-    for (const stroke of strokes) drawStroke(ctx, stroke.points, canvas.width, canvas.height)
+    for (const stroke of strokes) {
+      applyPenStyle(ctx, canvas, stroke.color ?? DEFAULT_PEN_COLOR)
+      drawStroke(ctx, stroke.points, canvas.width, canvas.height)
+    }
   }
 
   // 오버레이 캔버스는 PdfViewer가 그린 실제 PDF 캔버스와 같은 박스를 감싼
@@ -117,6 +141,7 @@ export default function PresentationInk({
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     drawingRef.current = true
+    drawingColorRef.current = color
     pointsRef.current = [toNormalized(event)]
   }
 
@@ -131,7 +156,7 @@ export default function PresentationInk({
     const prev = points[points.length - 1]
     points.push(point)
 
-    applyPenStyle(ctx, canvas)
+    applyPenStyle(ctx, canvas, drawingColorRef.current)
     ctx.beginPath()
     ctx.moveTo(prev.x * canvas.width, prev.y * canvas.height)
     ctx.lineTo(point.x * canvas.width, point.y * canvas.height)
@@ -143,7 +168,7 @@ export default function PresentationInk({
     drawingRef.current = false
     const points = pointsRef.current
     pointsRef.current = []
-    if (points.length >= 2) onStrokeComplete?.({ points })
+    if (points.length >= 2) onStrokeComplete?.({ points, color: drawingColorRef.current })
   }
 
   return (

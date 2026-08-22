@@ -10,7 +10,7 @@ import {
 } from '../lib/labPresentation'
 import { updateNote } from '../lib/labSlides'
 import PdfViewer from './PdfViewer'
-import PresentationInk from './PresentationInk'
+import PresentationInk, { PEN_COLORS } from './PresentationInk'
 
 /**
  * 교사용 발표 화면 — PDF(현재 슬라이드)와 대본을 나란히 보여주고, 넘기는
@@ -51,6 +51,10 @@ export default function LabPresenter({
    *  켜야 한다. 슬라이드를 넘겨도 켜둔 채로 유지한다(계속 필기하며
    *  넘기는 흐름이 자연스러워서). */
   const [penActive, setPenActive] = useState(false)
+  /** 지금부터 그릴 획에 쓸 색. 기본은 무지개 목록 맨 앞(빨강) — 이미
+   *  그려둔 획들은 각자 커밋될 때의 색을 그대로 갖고 있어서 이후에 색을
+   *  바꿔도 안 변한다. */
+  const [penColor, setPenColor] = useState<string>(PEN_COLORS[0].hex)
   const currentSlideInk = ink?.[currentSlide] ?? EMPTY_INK_STROKES
 
   const saveTimerRef = useRef<number | undefined>(undefined)
@@ -120,6 +124,24 @@ export default function LabPresenter({
           >
             🖊️ 펜 {penActive ? '끄기' : '켜기'}
           </button>
+          {penActive && (
+            <div className="flex items-center gap-1" role="group" aria-label="펜 색">
+              {PEN_COLORS.map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  onClick={() => setPenColor(c.hex)}
+                  aria-label={c.name}
+                  aria-pressed={penColor === c.hex}
+                  className={
+                    'size-6 shrink-0 rounded-full ring-offset-2 transition-shadow' +
+                    (penColor === c.hex ? ' ring-2 ring-ink-900' : ' ring-1 ring-cream-deep')
+                  }
+                  style={{ backgroundColor: c.hex }}
+                />
+              ))}
+            </div>
+          )}
           <button
             onClick={() => void clearInkForSlide(activityId, currentSlide)}
             disabled={currentSlideInk.length === 0}
@@ -159,6 +181,7 @@ export default function LabPresenter({
                 strokes={currentSlideInk}
                 editable
                 active={penActive}
+                color={penColor}
                 onStrokeComplete={(stroke) => void addInkStroke(activityId, currentSlide, stroke)}
               />
             }

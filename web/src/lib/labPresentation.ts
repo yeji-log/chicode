@@ -31,11 +31,12 @@ export interface InkPoint {
   y: number
 }
 
-/** 슬라이드 한 쪽 안에서 펜을 누르고 뗄 때까지의 궤적 하나. 색·굵기는 지금은
- *  고정값(PresentationInk.tsx)이라 따로 안 담는다 — 나중에 색을 고르게
- *  하려면 여기 필드를 늘리면 된다. */
+/** 슬라이드 한 쪽 안에서 펜을 누르고 뗄 때까지의 궤적 하나. 굵기는 아직
+ *  고정값(PresentationInk.tsx)이라 따로 안 담는다. color가 없으면(색
+ *  선택 기능 추가 전에 그려진 획) 렌더링 쪽에서 기본색으로 대체한다. */
 export interface InkStroke {
   points: InkPoint[]
+  color?: string
 }
 
 export interface LabPresentationState {
