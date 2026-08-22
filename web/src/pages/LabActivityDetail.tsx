@@ -187,6 +187,7 @@ export default function LabActivityDetail() {
           pdfFile={slideFiles.pdf}
           currentSlide={presentation.currentSlide}
           filename={slidesTitle}
+          ink={presentation.ink}
           isTeacherViewer={isTeacherViewer}
           onTakeControl={() => setIsPresenting(true)}
         />
@@ -221,6 +222,7 @@ export default function LabActivityDetail() {
                 pdfFile={slideFiles.pdf}
                 currentSlide={presentation.currentSlide}
                 notes={notes}
+                ink={presentation.ink}
                 onNoteSaved={(slideIndex, text) =>
                   setNotes((current) => {
                     const next = [...current]

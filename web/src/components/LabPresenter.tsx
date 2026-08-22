@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { setCurrentSlide, stopPresentation } from '../lib/labPresentation'
+import {
+  addInkStroke,
+  clearInkForSlide,
+  EMPTY_INK_STROKES,
+  setCurrentSlide,
+  stopPresentation,
+  type InkStroke,
+} from '../lib/labPresentation'
 import { updateNote } from '../lib/labSlides'
 import PdfViewer from './PdfViewer'
+import PresentationInk from './PresentationInk'
 
 /**
  * 교사용 발표 화면 — PDF(현재 슬라이드)와 대본을 나란히 보여주고, 넘기는
@@ -20,6 +28,7 @@ export default function LabPresenter({
   pdfFile,
   currentSlide,
   notes,
+  ink,
   onNoteSaved,
   onExit,
 }: {
@@ -27,6 +36,9 @@ export default function LabPresenter({
   pdfFile: Blob
   currentSlide: number
   notes: string[]
+  /** 슬라이드별 펜 획(Firestore 구독 값 그대로) — 발표를 시작한 적 없으면
+   *  undefined. */
+  ink?: Record<number, InkStroke[]>
   /** 대본이 저장될 때마다 호출 — 부모(LabActivityDetail)가 notes 배열을
    *  최신으로 들고 있어야, 발표를 나갔다 다시 들어와도 방금 고친 내용이
    *  보인다(부모의 notes 는 처음 마운트될 때 한 번만 불러오기 때문). */
@@ -35,6 +47,11 @@ export default function LabPresenter({
 }) {
   const [pageCount, setPageCount] = useState(0)
   const [noteDraft, setNoteDraft] = useState(notes[currentSlide - 1] ?? '')
+  /** 펜 도구 on/off. 기본은 꺼짐 — 파워포인트도 발표 시작할 때마다 다시
+   *  켜야 한다. 슬라이드를 넘겨도 켜둔 채로 유지한다(계속 필기하며
+   *  넘기는 흐름이 자연스러워서). */
+  const [penActive, setPenActive] = useState(false)
+  const currentSlideInk = ink?.[currentSlide] ?? EMPTY_INK_STROKES
 
   const saveTimerRef = useRef<number | undefined>(undefined)
   const pendingRef = useRef<{ slide: number; text: string } | null>(null)
@@ -91,12 +108,32 @@ export default function LabPresenter({
         <h2 className="font-bold text-ink-900">
           🔴 발표 중 · {currentSlide} / {pageCount || '?'}
         </h2>
-        <button
-          onClick={handleExit}
-          className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
-        >
-          발표 종료
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPenActive((current) => !current)}
+            aria-pressed={penActive}
+            className={
+              penActive
+                ? 'rounded-lg border border-cheese-400 bg-cheese-100 px-3 py-1.5 text-sm font-semibold text-ink-900'
+                : 'rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300'
+            }
+          >
+            🖊️ 펜 {penActive ? '끄기' : '켜기'}
+          </button>
+          <button
+            onClick={() => void clearInkForSlide(activityId, currentSlide)}
+            disabled={currentSlideInk.length === 0}
+            className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:opacity-40"
+          >
+            지우기
+          </button>
+          <button
+            onClick={handleExit}
+            className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
+          >
+            발표 종료
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
@@ -108,6 +145,14 @@ export default function LabPresenter({
             onPageChange={goTo}
             onPageCountChange={setPageCount}
             hideControls
+            overlay={
+              <PresentationInk
+                strokes={currentSlideInk}
+                editable
+                active={penActive}
+                onStrokeComplete={(stroke) => void addInkStroke(activityId, currentSlide, stroke)}
+              />
+            }
           />
         </div>
 

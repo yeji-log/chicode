@@ -452,6 +452,7 @@ function OtMaterialItem({
           pdfFile={slideFiles.pdf}
           currentSlide={presentation.currentSlide}
           filename={entry.title}
+          ink={presentation.ink}
           isTeacherViewer={isTeacherViewer}
           onTakeControl={() => setIsPresenting(true)}
         />
@@ -463,6 +464,7 @@ function OtMaterialItem({
           pdfFile={slideFiles.pdf}
           currentSlide={presentation.currentSlide}
           notes={notes}
+          ink={presentation.ink}
           onNoteSaved={(slideIndex, text) =>
             setNotes((current) => {
               const next = [...current]

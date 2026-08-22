@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { asset } from '../lib/asset'
 import { pushDebug } from '../lib/debugLog'
@@ -135,6 +135,7 @@ export default function PdfViewer({
   onPageChange,
   onPageCountChange,
   hideControls,
+  overlay,
 }: {
   file: Blob
   filename: string
@@ -146,6 +147,11 @@ export default function PdfViewer({
   onPageChange?: (page: number) => void
   onPageCountChange?: (pageCount: number) => void
   hideControls?: boolean
+  /** 실제로 그려진 PDF 캔버스 위에 정확히 겹쳐 그릴 내용(펜 오버레이 등).
+   *  이 캔버스를 감싸는 wrapper가 캔버스 크기에 딱 맞게 shrink-wrap되어
+   *  있어서(className="w-fit"), 위치·크기를 따로 재지 않아도 항상 캔버스와
+   *  겹친다. */
+  overlay?: ReactNode
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -417,7 +423,10 @@ export default function PdfViewer({
             ⏳ {filename} 여는 중…
           </p>
         ) : (
-          <canvas ref={canvasRef} className="mx-auto block bg-white shadow-md" />
+          <div className="relative mx-auto w-fit">
+            <canvas ref={canvasRef} className="block bg-white shadow-md" />
+            {overlay}
+          </div>
         )}
       </div>
 
