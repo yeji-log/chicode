@@ -169,6 +169,18 @@ export default function LabActivityDetail() {
   const showFollowerOverlay = presentation.active && !isPresenting && !!slideFiles?.pdf
   const slidesTitle = activity.sections.find(isSlidesSection)?.title ?? '수업 자료'
 
+  // 목록으로 돌아갈 때 방금 보던 시즌 탭이 그대로 선택되어 있게 한다.
+  // ?season= 없이 activitiesPath 로만 돌아가면 LabActivities 가 "첫 번째
+  // 시즌"으로 보정해버려서, 세 번째 시즌의 활동을 보다 나왔는데 첫 시즌
+  // 목록이 열리는 일이 생긴다.
+  //
+  // 시즌 id 는 활동 문서(activity.seasonId)에서 그때그때 읽는다 — 시즌 목록을
+  // 코드에 나열하지 않으므로 나중에 교사가 새 시즌을 만들어도 그대로 동작한다.
+  // 시즌에 넣지 않은 활동은 돌려보낼 시즌 자체가 없으니 원래대로 둔다.
+  const activitiesListPath = activity.seasonId
+    ? `${scope.activitiesPath}?season=${encodeURIComponent(activity.seasonId)}`
+    : scope.activitiesPath
+
   async function handleStartPresenting() {
     if (!id) return
     await startPresentation(id, browsePage)
@@ -213,7 +225,7 @@ export default function LabActivityDetail() {
       )}
 
       <header className="flex flex-col gap-2">
-        <Link to={scope.activitiesPath} className="text-sm font-semibold text-ink-500 underline">
+        <Link to={activitiesListPath} className="text-sm font-semibold text-ink-500 underline">
           ← {scope.activityNoun} 목록
         </Link>
         <div className="flex items-center gap-2">
