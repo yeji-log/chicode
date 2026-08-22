@@ -138,10 +138,16 @@ export default function LabActivityDetail() {
 
   if (loading) return <p className="text-ink-500">불러오는 중…</p>
 
-  // published 가 아니거나 소속 시즌이 아직 "준비중"이면 직접 링크로 와도
-  // "존재하지 않음" 취급한다 — Firestore 규칙상 읽기는 공개라 완전한 차단은
-  // 아니지만, 화면은 안 보여준다.
-  if (!activity || !activity.published || seasonPreparing) {
+  // published 가 아니거나 소속 시즌이 아직 "준비중"이면 학생에게는 아직 열지
+  // 않은 활동이다.
+  const hiddenFromStudents = !activity?.published || seasonPreparing
+
+  // 학생은 직접 링크로 와도 "존재하지 않음" 취급한다 — Firestore 규칙상 읽기는
+  // 공개라 완전한 차단은 아니지만, 화면은 안 보여준다. 교사는 예외로 그대로
+  // 연다 — 공개 전에 학생이 볼 화면 그대로를 확인해야 하고, LabActivities.tsx
+  // 의 카드도 교사에게는 링크로 열어두므로 여기서 막으면 그 링크가 곧바로
+  // "존재하지 않는 활동"으로 떨어진다. 대신 아래에 비공개 안내 띠를 얹는다.
+  if (!activity || (hiddenFromStudents && !isTeacherViewer)) {
     return (
       <div className="rounded-2xl border border-dashed border-cream-deep px-6 py-14 text-center">
         <p className="text-4xl">🤔</p>
@@ -190,6 +196,20 @@ export default function LabActivityDetail() {
           isTeacherViewer={isTeacherViewer}
           onTakeControl={() => setIsPresenting(true)}
         />
+      )}
+
+      {/* 여기가 보인다는 건 교사라는 뜻이다 — 학생은 위 게이트에서 이미 걸러졌다.
+          공개 여부는 화면만 봐서는 알 수 없어서(내용이 그대로 다 보이니까) 왜
+          아직 학생에게 안 보이는지까지 적어 준다. */}
+      {hiddenFromStudents && (
+        <p className="rounded-xl border border-dashed border-cheese-300 bg-cheese-50 px-4 py-3 text-sm font-semibold text-cheese-700">
+          🚧 아직 학생에게 공개되지 않은 {scope.activityNoun}입니다 — 교사에게만 보입니다.
+          {seasonPreparing
+            ? // seasonNoun 은 '시즌'(받침 있음)과 '수업목차'(받침 없음) 둘 다라
+              // 뒤에 조사를 직접 붙이면 한쪽이 틀린다 — "자체가"로 받아 넘긴다.
+              ` (${scope.seasonNoun} 자체가 "준비중" 상태입니다)`
+            : ' (교사 페이지에서 공개로 바꿀 수 있습니다)'}
+        </p>
       )}
 
       <header className="flex flex-col gap-2">

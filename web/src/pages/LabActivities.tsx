@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthProvider'
 import { useLabScope } from '../lib/labScope'
 import { listActivities, listSeasons, type LabActivity, type LabSeason } from '../lib/labs'
 
@@ -19,6 +20,8 @@ import { listActivities, listSeasons, type LabActivity, type LabSeason } from '.
  */
 export default function LabActivities() {
   const scope = useLabScope()
+  const { state: authState } = useAuth()
+  const isTeacherViewer = authState === 'teacher'
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedSeasonId = searchParams.get('season') ?? ''
 
@@ -107,8 +110,17 @@ export default function LabActivities() {
 
       {isPreparingSeason && !loading && activities.length > 0 && (
         <p className="rounded-xl bg-cream-deep/60 px-4 py-3 text-sm text-ink-500">
-          🔒 아직 준비 중인 {scope.seasonNoun}예요. 어떤 {scope.activityNoun}이 있는지만 미리 볼
-          수 있고, 열리면 들어갈 수 있습니다.
+          {isTeacherViewer ? (
+            <>
+              🚧 아직 준비 중인 {scope.seasonNoun}입니다. 교사로 로그인해 있어 그대로 들어가
+              확인할 수 있고, 학생 화면에는 제목만 잠긴 카드로 보입니다.
+            </>
+          ) : (
+            <>
+              🔒 아직 준비 중인 {scope.seasonNoun}예요. 어떤 {scope.activityNoun}이 있는지만 미리
+              볼 수 있고, 열리면 들어갈 수 있습니다.
+            </>
+          )}
         </p>
       )}
 
@@ -124,14 +136,23 @@ export default function LabActivities() {
         </p>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {activities.map((activity) =>
+          {activities.map((activity) => {
             // 시즌 자체가 "준비중"이거나, 시즌은 열렸어도 이 활동만 아직
-            // 비공개(임시저장)면 똑같이 잠긴 카드로 보여준다 — 어떤 활동이
-            // 있는지 제목만 미리 보여주고 실제 내용은 숨긴다. 링크를 아예
-            // 안 걸어서 클릭해도 들어가지지 않는다(들어가더라도
-            // LabActivityDetail 이 activity.published/seasonPreparing 검사로
-            // 다시 막는다 — 이중 방어).
-            isPreparingSeason || !activity.published ? (
+            // 비공개(임시저장)면 학생에게는 아직 열지 않은 항목이다.
+            const hiddenFromStudents = isPreparingSeason || !activity.published
+            // 교사는 그 항목도 그대로 들어간다 — 공개 전에 학생이 볼 화면을
+            // 그대로 확인하려면 들어가져야 하고, 자기가 만들어 둔 자료를
+            // 자기가 못 여는 것도 앞뒤가 안 맞는다(Materials.tsx 의 준비중
+            // 과목, LabGate 의 핀 건너뛰기와 같은 판단). 대신 아래 배지로
+            // "아직 학생에게는 안 보인다"를 항상 붙인다 — 안 그러면 이미
+            // 공개된 것으로 착각한 채 수업에 들어갈 수 있다.
+            //
+            // 학생에게는 제목만 미리 보여주고 링크를 아예 안 건다(직접 URL로
+            // 들어가더라도 LabActivityDetail 이 같은 검사로 다시 막는다 —
+            // 이중 방어).
+            const isLocked = hiddenFromStudents && !isTeacherViewer
+
+            return isLocked ? (
               <li
                 key={activity.id}
                 className="flex h-full cursor-not-allowed flex-col gap-2 rounded-2xl border border-dashed border-cream-deep bg-white/40 p-5 opacity-70"
@@ -163,13 +184,20 @@ export default function LabActivities() {
                       {activity.sections[0].content}
                     </p>
                   )}
-                  <span className="mt-auto pt-2 text-xs text-ink-500">
+                  <span className="mt-auto flex flex-wrap items-center gap-2 pt-2 text-xs text-ink-500">
                     {difficultyStars(activity.difficulty)}
+                    {/* 여기까지 왔다는 건 교사라는 뜻이다 — isLocked 가 아니면서
+                        학생에게 안 보이는 경우는 교사뿐이다(위 isLocked 계산 참고). */}
+                    {hiddenFromStudents && (
+                      <span className="rounded-full bg-cream-deep px-2 py-0.5 font-semibold text-ink-500">
+                        🚧 학생에게 비공개
+                      </span>
+                    )}
                   </span>
                 </Link>
               </li>
-            ),
-          )}
+            )
+          })}
         </ul>
       )}
     </div>
