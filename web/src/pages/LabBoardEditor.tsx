@@ -451,20 +451,26 @@ type ActivityFormState = {
   materialUrl: string
 }
 
-/** 새 활동은 기존에 쓰던 8개 항목으로 시작한다 — 익숙한 기본값을 주고,
- *  거기서부터 이름을 바꾸거나 지우거나 새로 추가하게 한다. 발표자료 자리는
- *  맨 끝에 하나 있고(교사가 드래그로 옮길 수 있지만 지울 수는 없다), 그
- *  실제 업로드는 아래 별도 SlidesPanel 에서 한다. */
+/**
+ * 새 활동은 구성 항목 하나 + 수업자료 자리 하나로 시작한다.
+ *
+ * 예전엔 goal/learn/prep/circuit/code/practice/mission/challenge 시절의
+ * 습관대로 고정 8개 항목을 미리 채워줬는데, charim(자매 프로젝트)의 과목
+ * 편집 화면은 항목 하나로 시작해서 필요한 만큼 교사가 직접 추가한다 —
+ * 사용자가 그 방식을 요청해서 같은 구조로 바꿨다. 항목은 어차피 배열이라
+ * 처음부터 8개든 1개든 "이름을 바꾸거나 지우거나 새로 추가"할 수 있는 건
+ * 똑같지만, 안 쓸 여섯 개를 매번 지우고 시작하는 것보다 하나부터 필요한
+ * 만큼 늘려가는 쪽이 더 가볍다.
+ *
+ * 발표자료 자리(수업자료)는 여전히 명시적으로 둔다 — 없어도
+ * normalizeActivity(labs.ts)가 저장 시점에 맨 끝에 채워 넣어주지만, 새로
+ * 만드는 순간부터 화면에 보여야 "아, 여기 PPT/PDF를 올리는구나"를 바로
+ * 알 수 있다. 교사가 드래그로 옮길 수 있지만 지울 수는 없고, 실제 업로드는
+ * 아래 별도 SlidesPanel 에서 한다.
+ */
 function defaultSections(): LabActivitySection[] {
   return [
     { id: crypto.randomUUID(), title: '오늘의 목표', content: '', isCode: false },
-    { id: crypto.randomUUID(), title: '오늘 배울 것', content: '', isCode: false },
-    { id: crypto.randomUUID(), title: '준비물', content: '', isCode: false },
-    { id: crypto.randomUUID(), title: '회로', content: '', isCode: false },
-    { id: crypto.randomUUID(), title: '코드', content: '', isCode: true },
-    { id: crypto.randomUUID(), title: '실습', content: '', isCode: false },
-    { id: crypto.randomUUID(), title: 'Mission', content: '', isCode: false },
-    { id: crypto.randomUUID(), title: 'Challenge', content: '', isCode: false },
     makeSlidesSection(),
   ]
 }
