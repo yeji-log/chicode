@@ -5,12 +5,13 @@ import {
   clearInkForSlide,
   EMPTY_INK_STROKES,
   setCurrentSlide,
+  setInkForSlide,
   stopPresentation,
   type InkStroke,
 } from '../lib/labPresentation'
 import { updateNote } from '../lib/labSlides'
 import PdfViewer from './PdfViewer'
-import PresentationInk, { PEN_COLORS } from './PresentationInk'
+import PresentationInk, { NO_CALLOUT_STYLE, PEN_COLORS } from './PresentationInk'
 
 /**
  * 교사용 발표 화면 — PDF(현재 슬라이드)와 대본을 나란히 보여주고, 넘기는
@@ -51,6 +52,9 @@ export default function LabPresenter({
    *  켜야 한다. 슬라이드를 넘겨도 켜둔 채로 유지한다(계속 필기하며
    *  넘기는 흐름이 자연스러워서). */
   const [penActive, setPenActive] = useState(false)
+  /** 펜 켜져 있는 동안 "그리기"인지 "지우개"인지. 펜을 처음 켤 때마다
+   *  그리기로 초기화한다(끄면 리셋되는 게 아니라 이 값 자체가 초기값). */
+  const [tool, setTool] = useState<'draw' | 'erase'>('draw')
   /** 지금부터 그릴 획에 쓸 색. 기본은 무지개 목록 맨 앞(빨강) — 이미
    *  그려둔 획들은 각자 커밋될 때의 색을 그대로 갖고 있어서 이후에 색을
    *  바꿔도 안 변한다. */
@@ -116,6 +120,7 @@ export default function LabPresenter({
           <button
             onClick={() => setPenActive((current) => !current)}
             aria-pressed={penActive}
+            style={NO_CALLOUT_STYLE}
             className={
               penActive
                 ? 'rounded-lg border border-cheese-400 bg-cheese-100 px-3 py-1.5 text-sm font-semibold text-ink-900'
@@ -125,6 +130,36 @@ export default function LabPresenter({
             🖊️ 펜 {penActive ? '끄기' : '켜기'}
           </button>
           {penActive && (
+            <div className="flex items-center gap-1" role="group" aria-label="펜/지우개">
+              <button
+                type="button"
+                onClick={() => setTool('draw')}
+                aria-pressed={tool === 'draw'}
+                style={NO_CALLOUT_STYLE}
+                className={
+                  tool === 'draw'
+                    ? 'rounded-lg border border-cheese-400 bg-cheese-100 px-2.5 py-1.5 text-sm font-semibold text-ink-900'
+                    : 'rounded-lg border border-cream-deep px-2.5 py-1.5 text-sm font-semibold text-ink-700 hover:border-cheese-300'
+                }
+              >
+                🖊️ 그리기
+              </button>
+              <button
+                type="button"
+                onClick={() => setTool('erase')}
+                aria-pressed={tool === 'erase'}
+                style={NO_CALLOUT_STYLE}
+                className={
+                  tool === 'erase'
+                    ? 'rounded-lg border border-cheese-400 bg-cheese-100 px-2.5 py-1.5 text-sm font-semibold text-ink-900'
+                    : 'rounded-lg border border-cream-deep px-2.5 py-1.5 text-sm font-semibold text-ink-700 hover:border-cheese-300'
+                }
+              >
+                🧹 지우개
+              </button>
+            </div>
+          )}
+          {penActive && tool === 'draw' && (
             <div className="flex items-center gap-1" role="group" aria-label="펜 색">
               {PEN_COLORS.map((c) => (
                 <button
@@ -133,11 +168,11 @@ export default function LabPresenter({
                   onClick={() => setPenColor(c.hex)}
                   aria-label={c.name}
                   aria-pressed={penColor === c.hex}
+                  style={{ backgroundColor: c.hex, ...NO_CALLOUT_STYLE }}
                   className={
                     'size-6 shrink-0 rounded-full ring-offset-2 transition-shadow' +
                     (penColor === c.hex ? ' ring-2 ring-ink-900' : ' ring-1 ring-cream-deep')
                   }
-                  style={{ backgroundColor: c.hex }}
                 />
               ))}
             </div>
@@ -147,7 +182,7 @@ export default function LabPresenter({
             disabled={currentSlideInk.length === 0}
             className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300 disabled:opacity-40"
           >
-            지우기
+            전체 지우기
           </button>
           <button
             onClick={handleExit}
@@ -181,8 +216,12 @@ export default function LabPresenter({
                 strokes={currentSlideInk}
                 editable
                 active={penActive}
+                mode={tool}
                 color={penColor}
                 onStrokeComplete={(stroke) => void addInkStroke(activityId, currentSlide, stroke)}
+                onEraseComplete={(remaining) =>
+                  void setInkForSlide(activityId, currentSlide, remaining)
+                }
               />
             }
           />

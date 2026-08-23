@@ -125,10 +125,27 @@ export async function addInkStroke(
   })
 }
 
-/** 슬라이드 넘길 때는 유지하고(파워포인트 펜과 같은 동작), "지우기" 버튼을
- *  눌렀을 때만 그 쪽의 펜 자국을 지운다. */
+/** 슬라이드 넘길 때는 유지하고(파워포인트 펜과 같은 동작), "전체 지우기"
+ *  버튼을 눌렀을 때만 그 쪽의 펜 자국을 전부 지운다. */
 export async function clearInkForSlide(activityId: string, slide: number): Promise<void> {
   await updateDoc(presentationDoc(activityId), {
     [`ink.${slide}`]: deleteField(),
+  })
+}
+
+/**
+ * 지우개로 일부 획만 지운 뒤, 남은 획들로 그 슬라이드를 통째로 덮어쓴다.
+ * addInkStroke(arrayUnion)와 달리 이건 배열 전체를 새로 준다 — 지우개는
+ * "무엇을 지울지"가 아니라 "무엇이 남는지"를 클라이언트가 이미 계산해서
+ * 알고 있어서(지금 구독 중인 값에서 지운 나머지), 그 결과를 그대로 덮어쓰는
+ * 게 맞다.
+ */
+export async function setInkForSlide(
+  activityId: string,
+  slide: number,
+  strokes: InkStroke[],
+): Promise<void> {
+  await updateDoc(presentationDoc(activityId), {
+    [`ink.${slide}`]: strokes,
   })
 }
