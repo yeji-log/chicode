@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useOutletContext, useParams } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthProvider'
@@ -374,6 +374,11 @@ function OtMaterialItem({
    *  한 번 맞추고, 그 뒤로는 교사가 직접 넘기는 대로 따라간다. */
   const [browsePage, setBrowsePage] = useState(1)
   const [presentationLoaded, setPresentationLoaded] = useState(false)
+  /** LabActivityDetail.tsx와 같은 이유(PptxSlideViewer가 initialPage를
+   *  마운트 시점에만 읽는 uncontrolled 컴포넌트) — 발표가 막 끝난 순간처럼
+   *  화면을 강제로 그 자리에 맞춰야 할 때만 이 값을 올려 뷰어를 다시
+   *  마운트시킨다. */
+  const [viewerResetKey, setViewerResetKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -413,6 +418,19 @@ function OtMaterialItem({
     if (presentationLoaded) setBrowsePage(presentation.currentSlide)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presentationLoaded])
+
+  // 발표가 막 끝난 순간(active: true → false)을 감지해서 훑어보기 화면을
+  // "방금까지 보여주던 슬라이드"로 맞춘다 — LabActivityDetail.tsx와 같은
+  // 이유·같은 구조다. presentation 구독 값만 보고 반응하므로 교사·학생
+  // 화면 모두에서 동일하게 동작한다.
+  const wasPresentationActiveRef = useRef(presentation.active)
+  useEffect(() => {
+    if (wasPresentationActiveRef.current && !presentation.active) {
+      setBrowsePage(presentation.currentSlide)
+      setViewerResetKey((key) => key + 1)
+    }
+    wasPresentationActiveRef.current = presentation.active
+  }, [presentation.active, presentation.currentSlide])
 
   // 아직 PPT/PDF를 안 올린 항목(제목만 추가해둔 상태)은 조용히 생략한다 —
   // 교사가 실제로 파일을 첨부해야만 학생 화면에 나타난다.
@@ -476,13 +494,7 @@ function OtMaterialItem({
                   진행 중 · {presentation.currentSlide}쪽
                 </span>
                 <button
-                  onClick={() => {
-                    // 모달을 열지 않은 채로 여기서 바로 끝내는 경우 —
-                    // LabPresenter.tsx의 같은 로직을 못 타므로 여기서 직접
-                    // 훑어보기 위치를 방금까지의 자리로 맞춘다.
-                    setBrowsePage(presentation.currentSlide)
-                    void stopPresentation(slideId)
-                  }}
+                  onClick={() => void stopPresentation(slideId)}
                   className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50"
                 >
                   발표 끝내기
@@ -499,6 +511,7 @@ function OtMaterialItem({
         )}
       </div>
       <PptxSlideViewer
+        key={viewerResetKey}
         pptxFile={slideFiles.pptx}
         pdfFile={slideFiles.pdf}
         filename={entry.title}

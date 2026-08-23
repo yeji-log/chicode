@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthProvider'
@@ -72,6 +72,14 @@ export default function LabActivityDetail() {
    *  1쪽만 보여줄 수 있다. 그래서 훑어보기 화면 자체를 이게 true가 될
    *  때까지 숨긴다(아래 렌더링부). */
   const [presentationLoaded, setPresentationLoaded] = useState(false)
+  /** PptxSlideViewer는 uncontrolled 컴포넌트라 initialPage를 마운트 시점에만
+   *  읽는다 — browsePage가 나중에 바뀌어도 이미 열려 있는 뷰어가 알아서
+   *  그 쪽으로 넘어가 주지 않는다. 그래서 "발표가 막 끝난 순간"처럼 화면을
+   *  강제로 그 자리에 맞춰야 할 때는 이 값을 하나 올려서 key로 넘겨
+   *  PptxSlideViewer를 통째로 다시 마운트시킨다(아래 렌더링부). 평소
+   *  훑어보기 클릭 한 번마다 이걸 올리면 그때마다 다시 마운트돼 버벅이므로,
+   *  "발표 종료" 같은 드문 순간에만 올린다. */
+  const [viewerResetKey, setViewerResetKey] = useState(0)
 
   useEffect(() => {
     if (!id) return
@@ -134,6 +142,26 @@ export default function LabActivityDetail() {
     if (presentationLoaded) setBrowsePage(presentation.currentSlide)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presentationLoaded])
+
+  /**
+   * 발표가 막 끝난 순간(active: true → false)을 감지해서, 훑어보기 화면을
+   * "방금까지 보여주던 슬라이드"로 맞춘다. stopPresentation은 currentSlide를
+   * 안 건드리므로(labPresentation.ts) 이 시점의 값이 정확히 그 자리다.
+   *
+   * 이 effect는 subscribePresentation 구독 값(presentation)만 보고 반응하므로
+   * 교사·학생 화면 모두에서 똑같이 동작한다 — 교사가 발표 화면(모달)의
+   * "발표 끝내기"를 누르든, 목록 옆 압축 버튼으로 끝내든, 다른 기기가 대신
+   * 끝내든 상관없이 이 화면(교사 자료 탭이든 학생 화면이든)이 열려 있는
+   * 모든 곳에서 같은 슬라이드로 맞춰진다.
+   */
+  const wasPresentationActiveRef = useRef(presentation.active)
+  useEffect(() => {
+    if (wasPresentationActiveRef.current && !presentation.active) {
+      setBrowsePage(presentation.currentSlide)
+      setViewerResetKey((key) => key + 1)
+    }
+    wasPresentationActiveRef.current = presentation.active
+  }, [presentation.active, presentation.currentSlide])
 
   if (loading) return <p className="text-ink-500">불러오는 중…</p>
 
@@ -274,14 +302,7 @@ export default function LabActivityDetail() {
                           진행 중 · {presentation.currentSlide}쪽
                         </span>
                         <button
-                          onClick={() => {
-                            if (!id) return
-                            // 모달을 열지 않은 채로 여기서 바로 끝내는 경우 —
-                            // LabPresenter.tsx의 같은 로직을 못 타므로 여기서
-                            // 직접 훑어보기 위치를 방금까지의 자리로 맞춘다.
-                            setBrowsePage(presentation.currentSlide)
-                            void stopPresentation(id)
-                          }}
+                          onClick={() => id && void stopPresentation(id)}
                           className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50"
                         >
                           발표 끝내기
@@ -298,6 +319,7 @@ export default function LabActivityDetail() {
                 )}
               </div>
               <PptxSlideViewer
+                key={viewerResetKey}
                 pptxFile={slideFiles.pptx}
                 pdfFile={slideFiles.pdf}
                 filename={section.title}
