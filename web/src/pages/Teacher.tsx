@@ -834,7 +834,14 @@ function SubjectPanel({
 /**
  * 과목의 "수업목차"(Lab의 시즌/로드맵에 대응) + "내용"(Lab의 활동에 대응)
  * 에디터 — LabBoardEditor.tsx 의 SeasonsPanel/ActivitiesPanel 을 subjectId 만
- * 넘겨서 그대로 재사용한다. TeacherLab.tsx 의 LAB_TABS 와 같은 서브탭 패턴.
+ * 넘겨서 그대로 재사용한다.
+ *
+ * 예전엔 여기서도 "수업목차"/"내용" 서브탭으로 나눠 하나씩만 보여줬는데,
+ * charim(자매 프로젝트)의 과목 편집 화면은 둘을 한 화면에 같이 보여준다 —
+ * 사용자가 그 구조를 요청해서 서브탭을 없앴다. 각 패널 자체가 이제 추가/
+ * 수정을 팝업(Modal)으로 열므로, 두 목록을 세로로 쌓아도 화면이 늘어지지
+ * 않는다(패널 하나가 항상 큰 폼을 펼쳐두던 예전 구조였다면 둘을 한 화면에
+ * 두기 부담스러웠을 것).
  */
 function SubjectOutlineEditor({
   subjectId,
@@ -843,43 +850,14 @@ function SubjectOutlineEditor({
   subjectId: string
   uploaderEmail: string
 }) {
-  const [tab, setTab] = useState<'season' | 'activity'>('season')
-
   return (
-    <div className="flex flex-col gap-6">
-      <nav className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setTab('season')}
-          className={[
-            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-            tab === 'season'
-              ? 'bg-cheese-400 text-ink-900'
-              : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
-          ].join(' ')}
-        >
-          수업목차
-        </button>
-        <button
-          onClick={() => setTab('activity')}
-          className={[
-            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
-            tab === 'activity'
-              ? 'bg-cheese-400 text-ink-900'
-              : 'border border-cream-deep text-ink-700 hover:border-cheese-300',
-          ].join(' ')}
-        >
-          내용
-        </button>
-      </nav>
-
-      {tab === 'season' && <SeasonsPanel subjectId={subjectId} labels={SUBJECT_OUTLINE_LABELS} />}
-      {tab === 'activity' && (
-        <ActivitiesPanel
-          subjectId={subjectId}
-          labels={SUBJECT_OUTLINE_LABELS}
-          uploaderEmail={uploaderEmail}
-        />
-      )}
+    <div className="flex flex-col gap-8">
+      <SeasonsPanel subjectId={subjectId} labels={SUBJECT_OUTLINE_LABELS} />
+      <ActivitiesPanel
+        subjectId={subjectId}
+        labels={SUBJECT_OUTLINE_LABELS}
+        uploaderEmail={uploaderEmail}
+      />
     </div>
   )
 }
