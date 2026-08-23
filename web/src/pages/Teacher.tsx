@@ -566,32 +566,45 @@ function SubjectPanel({
   const [materials, setMaterials] = useState<MaterialMeta[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [file, setFile] = useState<File | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [deletingSubject, setDeletingSubject] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // "자료"(기존 파일 업로드) / "수업목차"(Lab과 같은 시즌+활동 에디터, 이름만
-  // 수업자료용으로 바꿈) 두 탭 — TeacherDashboard의 최상위 section 탭과 같은 자리 원칙.
-  // 기본값은 수업목차 — 학생 화면(SubjectMaterials.tsx)도 과목에 들어가면
-  // 자료보다 수업목차부터 보이게 되어 있어서, 교사 쪽도 같은 순서로 맞췄다.
+  // "기본"(SubjectSettings — 핀·노션 링크·공개 여부·삭제) / "OT" / "수업목차" /
+  // "자료" 네 탭. 예전엔 "기본"이 탭이 아니라 이 nav 위에 항상 떠 있는
+  // 블록이었는데, 그러면 다른 탭(특히 자료)의 내용을 보려고 매번 그 블록을
+  // 지나쳐 스크롤해야 했다 — charim(자매 프로젝트)의 과목 편집 화면이 기본
+  // 설정을 탭 하나로 두는 걸 보고 같은 구조로 바꿨다. 기본값은 여전히
+  // 수업목차 — 학생 화면(SubjectMaterials.tsx)도 과목에 들어가면 자료보다
+  // 수업목차부터 보이게 되어 있어서, 교사 쪽도 같은 순서로 맞췄다.
   // "OT" 탭은 학생 화면과 달리 여기서만 별도로 노출한다 — 교사가 수업 시작
   // 전에 이 화면을 열어 프로젝터로 띄워놓고 진행하려는 용도. otUrl이 설정된
-  // 과목에서만 탭이 보인다(SubjectSettings 아래 참고).
-  const [panelTab, setPanelTab] = useState<'materials' | 'outline' | 'ot'>('outline')
+  // 과목에서만 탭이 보인다.
+  const [panelTab, setPanelTab] = useState<'settings' | 'materials' | 'outline' | 'ot'>('outline')
 
   useEffect(() => {
     listMaterials(subject.id).then(setMaterials)
   }, [subject.id])
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault()
-    if (!file) return
+  /**
+   * 파일을 고르면 바로 올린다 — "올리기" 버튼을 따로 두지 않는다.
+   *
+   * 예전엔 버튼이 있었는데, 바로 위(기존엔 탭 밖) SubjectSettings에도
+   * "설정 저장" 버튼이 있어서 화면에 저장 버튼이 두 개였다. 파일을 고르고
+   * 엉뚱한 저장 버튼을 눌러 아무것도 업로드되지 않았는데 됐다고 믿을 수
+   * 있는 구조였다 — charim이 자료 업로드에서 같은 문제를 실제로 겪고
+   * 고친 걸 보고(TeacherCourseEdit.tsx MaterialManager 주석 참고) 여기도
+   * 버튼을 없앴다. 지금은 SubjectSettings도 별도 탭으로 뺐으니(위 panelTab
+   * 주석) 저장 버튼 자체가 겹칠 일도 없지만, 업로드는 그것과 별개로
+   * "고르면 바로"가 한 단계를 줄여준다.
+   */
+  async function upload(selected: File | undefined) {
+    if (!selected) return
 
     setBusy(true)
     setUploadError(null)
     try {
-      await addMaterial(file, {
+      await addMaterial(selected, {
         title,
         description,
         uploadedBy: uploaderEmail,
@@ -600,8 +613,6 @@ function SubjectPanel({
       setMaterials(await listMaterials(subject.id))
       setTitle('')
       setDescription('')
-      setFile(null)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     } catch (caught) {
       setUploadError(
         caught instanceof MaterialValidationError
@@ -610,6 +621,8 @@ function SubjectPanel({
       )
     } finally {
       setBusy(false)
+      // 같은 파일을 다시 고르면 change 이벤트 자체가 안 뜨므로 값을 비워둔다.
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -661,14 +674,18 @@ function SubjectPanel({
 
   return (
     <div className="flex flex-col gap-6">
-      <SubjectSettings
-        subject={subject}
-        onChange={onSubjectChange}
-        onDelete={handleDeleteSubject}
-        deleting={deletingSubject}
-      />
-
       <nav className="flex gap-2 border-b border-cream-deep pb-3">
+        <button
+          onClick={() => setPanelTab('settings')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            panelTab === 'settings'
+              ? 'bg-cheese-400 text-ink-900'
+              : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          ⚙️ 기본
+        </button>
         {subject.otUrl && (
           <button
             onClick={() => setPanelTab('ot')}
@@ -704,6 +721,15 @@ function SubjectPanel({
         </button>
       </nav>
 
+      {panelTab === 'settings' && (
+        <SubjectSettings
+          subject={subject}
+          onChange={onSubjectChange}
+          onDelete={handleDeleteSubject}
+          deleting={deletingSubject}
+        />
+      )}
+
       {panelTab === 'ot' && (
         <div className="flex flex-col gap-6">
           <OtFrame subject={subject} />
@@ -713,10 +739,7 @@ function SubjectPanel({
 
       {panelTab === 'materials' && (
         <>
-          <form
-            onSubmit={handleSubmit}
-            className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6"
-          >
+          <div className="flex flex-col gap-4 rounded-2xl border border-cream-deep bg-white/70 p-6">
             <h2 className="font-bold text-ink-900">{subject.name} 자료 올리기</h2>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -726,7 +749,8 @@ function SubjectPanel({
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder="비워두면 파일 이름을 사용합니다"
-                  className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+                  disabled={busy}
+                  className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none disabled:opacity-50"
                 />
               </label>
 
@@ -736,7 +760,8 @@ function SubjectPanel({
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   placeholder="예: 3차시 반복문 수업자료"
-                  className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none"
+                  disabled={busy}
+                  className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 focus:border-cheese-300 focus:outline-none disabled:opacity-50"
                 />
               </label>
             </div>
@@ -746,15 +771,15 @@ function SubjectPanel({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.py,.zip"
-                onChange={(event) => {
-                  setFile(event.target.files?.[0] ?? null)
-                  setUploadError(null)
-                }}
-                className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 file:mr-3 file:rounded-md file:border-0 file:bg-cheese-200 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-ink-900"
+                disabled={busy}
+                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.csv,.py,.hwp,.hwpx,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip"
+                onChange={(event) => void upload(event.target.files?.[0])}
+                className="rounded-lg border border-cream-deep bg-white px-3 py-2 font-normal text-ink-900 file:mr-3 file:rounded-md file:border-0 file:bg-cheese-200 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-ink-900 disabled:opacity-50"
               />
               <span className="text-xs font-normal text-ink-500">
-                PDF, 이미지, 텍스트, ZIP · 최대 10MB
+                {busy
+                  ? '올리는 중…'
+                  : '제목을 먼저 입력한 뒤 파일을 고르면 바로 올라갑니다 · PDF, 이미지, 한글/오피스 문서, 텍스트, ZIP · 최대 10MB'}
               </span>
             </label>
 
@@ -763,15 +788,7 @@ function SubjectPanel({
                 {uploadError}
               </p>
             )}
-
-            <button
-              type="submit"
-              disabled={!file || busy}
-              className="self-start rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busy ? '올리는 중…' : '올리기'}
-            </button>
-          </form>
+          </div>
 
           <section className="flex flex-col gap-3">
             <h2 className="font-bold text-ink-900">
