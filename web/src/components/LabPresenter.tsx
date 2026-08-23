@@ -99,6 +99,25 @@ export default function LabPresenter({
     if (!active) setPenActive(false)
   }, [active])
 
+  // 방금 발표 중이었다가(active: true → false) 방송이 꺼진 순간, 훑어보기
+  // 위치를 "방금까지 보여주고 있던 슬라이드"로 맞춘다. stopPresentation은
+  // currentSlide를 안 건드리므로 이 시점의 presentation.currentSlide가
+  // 정확히 그 자리다 — 이걸 안 하면 active가 false로 바뀌자마자
+  // `slide = active ? presentation.currentSlide : browsing`가 browsing으로
+  // 튀는데, browsing은 발표 시작 전(훑어보던 자리)에 멈춰 있던 값이라 "끝낸
+  // 자리"가 아니라 "시작하기 전 자리"로 화면이 돌아가 버린다. 여기서 맞춰야
+  // "끝낸 화면이 그대로 보이고, 그 자리에서 다시 발표를 시작"할 수 있다.
+  // 다른 기기가 대신 끝낸 경우도 이 effect가 active prop 변화만 보고
+  // 반응하므로 똑같이 처리된다.
+  const wasActiveRef = useRef(active)
+  useEffect(() => {
+    if (wasActiveRef.current && !active) {
+      setBrowsing(presentation.currentSlide)
+      onBrowsePageChange(presentation.currentSlide)
+    }
+    wasActiveRef.current = active
+  }, [active, presentation.currentSlide, onBrowsePageChange])
+
   // 동적으로 삽입된 position:fixed 레이어가 일부 모바일 브라우저에서 다음
   // 리플로우 전까지 페인트되지 않는 문제의 방어책
   // (LabPresentationOverlay.tsx와 같은 이유로 여기도 넣는다).
