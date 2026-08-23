@@ -56,7 +56,36 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024
  */
 const CHUNK_BYTES = 512 * 1024
 
-const ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'txt', 'md', 'py', 'zip']
+/**
+ * 한글(HWP/HWPX)·MS오피스 문서를 허용 목록에 추가했다(2026-08-23) — 학교
+ * 현장에서 교사가 수업자료로 가장 흔히 쓰는 형식인데 원래는 빠져 있었다.
+ * kindOf()는 이 확장자들을 'other'로 분류하지만, SubjectMaterials.tsx의
+ * Viewer가 'other'를 이미 "미리보기 대신 다운로드" 흐름으로 처리하고
+ * 있어서(하드코딩된 kind 분기가 pdf/image/text/archive뿐이라 나머지는
+ * 전부 그리로 떨어진다) 화면 쪽은 손댈 게 없었다 — 실제로 코드를 읽어서
+ * 확인했다.
+ */
+const ALLOWED_EXTENSIONS = [
+  'pdf',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'txt',
+  'md',
+  'csv',
+  'py',
+  'hwp',
+  'hwpx',
+  'doc',
+  'docx',
+  'ppt',
+  'pptx',
+  'xls',
+  'xlsx',
+  'zip',
+]
 
 const MATERIALS = 'materials'
 const CHUNKS = 'chunks'
