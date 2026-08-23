@@ -199,7 +199,17 @@ export default function LabPresenter({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col bg-ink-900 text-cream">
+    // 아이패드 콜아웃 메뉴 방지 범위를 이 화면 전체로 넓힌다 — 개별 버튼·
+    // 캔버스마다 NO_CALLOUT_STYLE을 따로 붙였었는데(PresentationInk.tsx
+    // 주석 참고), 이 스타일은 상속되므로 여기 루트에 한 번만 둬도 하위
+    // 전부에 적용된다. 대본 textarea는 예외다 — user-select는 명세상
+    // input/textarea 내부 편집 영역에는 적용되지 않아서 타이핑/선택은
+    // 그대로 된다(직접 확인은 못 했고, 표준 동작에 근거한 판단이다 —
+    // 실기기에서 문제가 남아있으면 알려달라고 안내할 것).
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-ink-900 text-cream"
+      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+    >
       <header className="flex flex-wrap items-center gap-3 border-b border-white/10 px-4 py-3">
         <span className="font-bold">
           {active ? `🔴 발표 중 · ${slide} / ${pageCount || '?'}` : `👀 미리보기 · ${slide} / ${pageCount || '?'}`}
