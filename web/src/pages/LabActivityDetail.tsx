@@ -8,11 +8,7 @@ import LabPresentationOverlay from '../components/LabPresentationOverlay'
 import LabPresenter from '../components/LabPresenter'
 import PptxSlideViewer from '../components/PptxSlideViewer'
 import { useLabScope } from '../lib/labScope'
-import {
-  startPresentation,
-  subscribePresentation,
-  type LabPresentationState,
-} from '../lib/labPresentation'
+import { stopPresentation, subscribePresentation, type LabPresentationState } from '../lib/labPresentation'
 import {
   getSectionAttachmentFile,
   getSectionAttachmentMeta,
@@ -58,14 +54,17 @@ export default function LabActivityDetail() {
   )
   const [notes, setNotes] = useState<string[]>([])
   const [presentation, setPresentation] = useState<LabPresentationState>(IDLE_PRESENTATION)
-  /** 이 브라우저 탭에서 "발표 시작"을 눌러 지금 직접 조작 중인지. Firestore의
-   *  active 플래그와 별개다 — 다른 기기가 이미 발표 중이면 이 탭은 false다. */
+  /** 이 브라우저 탭에서 "발표 화면"(LabPresenter 모달)을 열어두고 있는지.
+   *  Firestore의 active 플래그와 별개다 — 모달을 열었다고 곧바로 방송이
+   *  시작되는 게 아니고(LabPresenter.tsx 참고), 반대로 다른 기기가 방송
+   *  중이어도 이 탭에서 모달을 안 열었으면 false다. */
   const [isPresenting, setIsPresenting] = useState(false)
-  /** "발표 시작"을 누르면 몇 페이지부터 시작할지 — 교사가 지금 훑어보고
+  /** 발표 화면을 열면 몇 페이지부터 훑어볼지 — 교사가 지금 훑어보고
    *  있는(browsing) 쪽 그대로 이어진다. presentation이 처음 로드되면(아래
    *  effect) "마지막으로 발표를 종료한 자리"로 한 번 맞춰 두고, 그 뒤로는
-   *  PptxSlideViewer의 onPageChange가 교사가 직접 넘기는 대로 갱신한다 —
-   *  그래서 가만히 두면 종료 지점에서 재개되고, 옮기면 그 자리부터 된다. */
+   *  PptxSlideViewer/LabPresenter의 onPageChange가 교사가 직접 넘기는 대로
+   *  갱신한다 — 그래서 가만히 두면 종료 지점에서 재개되고, 옮기면 그
+   *  자리부터 된다. */
   const [browsePage, setBrowsePage] = useState(1)
   /** presentation 구독이 처음 응답하기 전까지는 currentSlide가 진짜
    *  "마지막 종료 지점"인지 IDLE 기본값(1)인지 구분할 수 없다 — 그 상태로
@@ -181,20 +180,9 @@ export default function LabActivityDetail() {
     ? `${scope.activitiesPath}?season=${encodeURIComponent(activity.seasonId)}`
     : scope.activitiesPath
 
-  async function handleStartPresenting() {
-    if (!id) return
-    await startPresentation(id, browsePage)
-    // onSnapshot 구독이 따라잡을 때까지 기다리면 LabPresenter가 잠깐
-    // 이전 currentSlide로 마운트됐다가 튀는 깜빡임이 생긴다 — 이미 알고
-    // 있는 값(browsePage)이니 로컬 상태를 바로 맞춰서 첫 렌더부터
-    // 정확하게 한다.
-    setPresentation((current) => ({ ...current, active: true, currentSlide: browsePage }))
-    setIsPresenting(true)
-  }
-
-  /** 이미 다른 기기에서 진행 중인 발표를 이어받을 땐 페이지를 건드리지
-   *  않는다 — "다시 시작"이 아니라 "이어서 조작"이라서. */
-  function handleResumeControl() {
+  /** "발표 화면 열기" — 방송을 시작하는 게 아니라 모달만 연다(LabPresenter.tsx
+   *  주석 참고). 방송 시작은 그 모달 안의 "이 쪽부터 발표 시작" 버튼이 한다. */
+  function handleOpenPresenter() {
     setIsPresenting(true)
   }
 
@@ -208,6 +196,30 @@ export default function LabActivityDetail() {
           ink={presentation.ink}
           isTeacherViewer={isTeacherViewer}
           onTakeControl={() => setIsPresenting(true)}
+        />
+      )}
+
+      {/* 발표 화면 자체는 전체화면 모달이라 섹션 순회 바깥, 페이지 최상단에
+          한 번만 둔다 — 방송 시작 전(훑어보기)에도 열 수 있어야 하므로
+          isPresenting은 presentation.active와 무관하게 켤 수 있다. */}
+      {isPresenting && slideFiles?.pdf && id && (
+        <LabPresenter
+          activityId={id}
+          pdfFile={slideFiles.pdf}
+          filename={slidesTitle}
+          presentation={presentation}
+          initialBrowsePage={browsePage}
+          notes={notes}
+          onBrowsePageChange={setBrowsePage}
+          onNoteSaved={(slideIndex, text) =>
+            setNotes((current) => {
+              const next = [...current]
+              while (next.length < slideIndex) next.push('')
+              next[slideIndex - 1] = text
+              return next
+            })
+          }
+          onClose={() => setIsPresenting(false)}
         />
       )}
 
@@ -245,35 +257,6 @@ export default function LabActivityDetail() {
         // 다른 항목과 같은 위치에서 함께 순회하며 그린다.
         if (isSlidesSection(section)) {
           if (!slideFiles) return null
-
-          if (isPresenting && slideFiles.pdf && id) {
-            return (
-              <LabPresenter
-                key={section.id}
-                activityId={id}
-                pdfFile={slideFiles.pdf}
-                currentSlide={presentation.currentSlide}
-                notes={notes}
-                ink={presentation.ink}
-                onNoteSaved={(slideIndex, text) =>
-                  setNotes((current) => {
-                    const next = [...current]
-                    while (next.length < slideIndex) next.push('')
-                    next[slideIndex - 1] = text
-                    return next
-                  })
-                }
-                onExit={() => {
-                  // 방금 종료한 자리로 훑어보기 페이지를 맞춰둔다 — 그래야
-                  // 다음 "발표 시작"이 이 자리에서 이어진다. presentation은
-                  // 발표 중 goTo가 계속 갱신해온 값이라 여기서 이미 정확하다.
-                  setBrowsePage(presentation.currentSlide)
-                  setIsPresenting(false)
-                }}
-              />
-            )
-          }
-
           if (!presentationLoaded) return null
 
           return (
@@ -283,25 +266,29 @@ export default function LabActivityDetail() {
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-bold text-ink-900">{section.title}</h2>
-                {canPresent &&
-                  (presentation.active ? (
+                {canPresent && (
+                  <div className="flex items-center gap-2">
+                    {presentation.active && (
+                      <>
+                        <span className="rounded-md bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                          진행 중 · {presentation.currentSlide}쪽
+                        </span>
+                        <button
+                          onClick={() => id && void stopPresentation(id)}
+                          className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50"
+                        >
+                          발표 끝내기
+                        </button>
+                      </>
+                    )}
                     <button
-                      onClick={handleResumeControl}
+                      onClick={handleOpenPresenter}
                       className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
                     >
-                      ▶ 발표 제어하기
+                      {presentation.active ? '▶ 발표 화면 다시 열기' : '▶ 발표 화면 열기'}
                     </button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink-500">{browsePage}쪽부터 시작</span>
-                      <button
-                        onClick={handleStartPresenting}
-                        className="rounded-lg bg-cheese-400 px-4 py-2 text-sm font-bold text-ink-900 transition-colors hover:bg-cheese-300"
-                      >
-                        ▶ 발표 시작
-                      </button>
-                    </div>
-                  ))}
+                  </div>
+                )}
               </div>
               <PptxSlideViewer
                 pptxFile={slideFiles.pptx}
