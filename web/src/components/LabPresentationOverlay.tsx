@@ -46,7 +46,17 @@ export default function LabPresentationOverlay({
   }, [])
 
   return createPortal(
-    <div ref={containerRef} className="fixed inset-0 z-50 bg-ink-900">
+    // 아이패드에서 학생이 화면을 터치할 때 콜아웃 메뉴(복사하기·선택 영역
+    // 찾기)가 뜨는 문제 방지 — LabPresenter.tsx와 같은 이유로 여기도 넓게
+    // 적용한다. 이 화면은 읽기 전용(editable=false)이라 펜 오버레이가
+    // 항상 pointerEvents:none 이고, 터치가 그대로 PdfViewer의 PDF
+    // 캔버스로 넘어간다(그 캔버스 자체에도 별도로 적용해뒀다 —
+    // PdfViewer.tsx 참고).
+    <div
+      ref={containerRef}
+      className="fixed inset-0 z-50 bg-ink-900"
+      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+    >
       <PdfViewer
         file={pdfFile}
         filename={filename}

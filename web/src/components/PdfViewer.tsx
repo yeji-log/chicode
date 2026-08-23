@@ -424,7 +424,22 @@ export default function PdfViewer({
           </p>
         ) : (
           <div className="relative mx-auto w-fit">
-            <canvas ref={canvasRef} className="block bg-white shadow-md" />
+            <canvas
+              ref={canvasRef}
+              className="block bg-white shadow-md"
+              // 아이패드(애플펜슬)에서 이 캔버스 위 드래그를 iOS Safari가
+              // 텍스트/이미지 선택 제스처로 오인해서 "복사하기·선택 영역
+              // 찾기" 콜아웃 메뉴를 띄운다는 실사용 보고가 있었다. 발표 펜
+              // (PresentationInk.tsx)이 편집 가능한 상태(active && editable)
+              // 일 때는 그 오버레이 캔버스가 이 캔버스 위를 덮어 포인터
+              // 이벤트를 대신 받지만, 그 전(발표를 아직 시작 안 했을 때)이나
+              // 학생 화면(항상 읽기 전용이라 오버레이가 pointerEvents:none)
+              // 에서는 터치가 이 PDF 캔버스로 그대로 통과해서 그 콜아웃이
+              // 뜬다. PresentationInk.tsx의 NO_CALLOUT_STYLE과 같은 값을
+              // 여기 직접 둔다 — PdfViewer가 더 하위/범용 컴포넌트라 특정
+              // 기능(발표 펜) 컴포넌트를 거꾸로 import하고 싶지 않아서다.
+              style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+            />
             {overlay}
           </div>
         )}
