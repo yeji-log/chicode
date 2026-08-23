@@ -1123,7 +1123,7 @@ function SortableSectionRow({
           checked={section.hasAttachment ?? false}
           onChange={(event) => onChange({ hasAttachment: event.target.checked })}
         />
-        이미지·동영상(mp4)·PDF·PPT·엑셀·CSV 파일 첨부
+        이미지·동영상(mp4)·PDF·한글·워드·PPT·엑셀·CSV 파일 첨부
       </label>
       {section.hasAttachment && (
         <SectionAttachmentUploader activityId={activityId} sectionId={section.id} />
@@ -1226,7 +1226,7 @@ function SectionAttachmentUploader({
         <input
           ref={inputRef}
           type="file"
-          accept=".png,.jpg,.jpeg,.gif,.webp,.mp4,.pdf,.ppt,.pptx,.xls,.xlsx,.csv"
+          accept=".png,.jpg,.jpeg,.gif,.webp,.mp4,.pdf,.hwp,.hwpx,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv"
           disabled={busy}
           onChange={(event) => {
             const file = event.target.files?.[0]

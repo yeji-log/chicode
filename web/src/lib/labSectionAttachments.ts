@@ -36,6 +36,13 @@ const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024
 // 전체를 한 번에 내려받아야 한다 — 스트리밍이 아니다. 그래서 무한정 늘리지
 // 않고 "짧은 시연 클립" 정도로만 쓸 수 있게 50MB로 제한했다.
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024
+/**
+ * 한글(HWP/HWPX)·워드(DOC/DOCX)를 추가했다(2026-08-23) — materials.ts에서
+ * 먼저 고친 것과 같은 구멍이었다. 이미지·동영상이 아닌 나머지 형식은
+ * LabActivityDetail.tsx의 SectionAttachment가 이미 "미리보기 대신
+ * 다운로드 링크"로 렌더링하고 있어서(PDF/PPT/엑셀/CSV와 같은 취급) 화면
+ * 쪽은 손댈 게 없었다.
+ */
 const ALLOWED_EXTENSIONS = [
   'png',
   'jpg',
@@ -43,6 +50,10 @@ const ALLOWED_EXTENSIONS = [
   'gif',
   'webp',
   'pdf',
+  'hwp',
+  'hwpx',
+  'doc',
+  'docx',
   'ppt',
   'pptx',
   'xls',
@@ -68,7 +79,7 @@ function assertValid(file: File) {
   const ext = extensionOf(file.name)
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
     throw new SectionAttachmentError(
-      `지원하지 않는 형식입니다 (.${ext || '확장자 없음'}). 허용: 이미지·동영상(mp4)·PDF·PPT·엑셀·CSV`,
+      `지원하지 않는 형식입니다 (.${ext || '확장자 없음'}). 허용: 이미지·동영상(mp4)·PDF·한글·워드·PPT·엑셀·CSV`,
     )
   }
   const maxSize = VIDEO_EXTENSIONS.includes(ext) ? MAX_VIDEO_SIZE : MAX_ATTACHMENT_SIZE
