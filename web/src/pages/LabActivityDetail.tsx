@@ -274,7 +274,14 @@ export default function LabActivityDetail() {
                           진행 중 · {presentation.currentSlide}쪽
                         </span>
                         <button
-                          onClick={() => id && void stopPresentation(id)}
+                          onClick={() => {
+                            if (!id) return
+                            // 모달을 열지 않은 채로 여기서 바로 끝내는 경우 —
+                            // LabPresenter.tsx의 같은 로직을 못 타므로 여기서
+                            // 직접 훑어보기 위치를 방금까지의 자리로 맞춘다.
+                            setBrowsePage(presentation.currentSlide)
+                            void stopPresentation(id)
+                          }}
                           className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50"
                         >
                           발표 끝내기
