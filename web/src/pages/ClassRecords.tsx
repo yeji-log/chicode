@@ -10,6 +10,7 @@ import {
   createClass,
   createDate,
   deleteClass,
+  deleteDate,
   deleteStudent,
   isParticipating,
   listClasses,
@@ -549,6 +550,18 @@ function ClassRoster({
     setDates((prev) => [...(prev ?? []), dateRecord])
   }
 
+  async function handleDeleteDate(dateRecord: DateRecord) {
+    if (!confirm(`${formatDateShort(dateRecord.date)} 수업 날짜를 지울까요? 그날의 참여 기록도 함께 지워지고 되돌릴 수 없습니다.`))
+      return
+    try {
+      await deleteDate(classMeta.id, dateRecord.id)
+      setDates((prev) => (prev ?? []).filter((entry) => entry.id !== dateRecord.id))
+    } catch (caught) {
+      console.error('수업 날짜 삭제 실패', caught)
+      alert('삭제하지 못했습니다. 다시 시도해 주세요.')
+    }
+  }
+
   async function handleToggle(dateId: string, studentId: string, next: boolean) {
     setDates((prev) =>
       (prev ?? []).map((entry) =>
@@ -595,7 +608,13 @@ function ClassRoster({
         <>
           <DateSummary students={students} dates={dates} />
           <NewDatePanel classId={classMeta.id} studentIds={students.map((entry) => entry.id)} onCreated={handleDateCreated} />
-          <RecordTable students={students} dates={dates} onDelete={handleDeleteStudent} onToggle={handleToggle} />
+          <RecordTable
+            students={students}
+            dates={dates}
+            onDelete={handleDeleteStudent}
+            onToggle={handleToggle}
+            onDeleteDate={handleDeleteDate}
+          />
         </>
       )}
 
@@ -815,11 +834,13 @@ function RecordTable({
   dates,
   onDelete,
   onToggle,
+  onDeleteDate,
 }: {
   students: Student[]
   dates: DateRecord[]
   onDelete: (student: Student) => void
   onToggle: (dateId: string, studentId: string, next: boolean) => void
+  onDeleteDate: (dateRecord: DateRecord) => void
 }) {
   // 날짜가 없어도 표 자체(순서·학번·이름)는 그린다 — 이전엔 여기서 통째로
   // null을 반환해서, 학생을 추가해도 날짜가 하나도 없으면 화면에 아무것도 안
@@ -845,7 +866,16 @@ function RecordTable({
                 key={entry.id}
                 className="w-16 border-b border-l border-cream-deep px-2 py-3 text-xs font-semibold text-ink-500"
               >
-                {formatDateShort(entry.date)}
+                <div className="flex items-center justify-center gap-1">
+                  <span>{formatDateShort(entry.date)}</span>
+                  <button
+                    onClick={() => onDeleteDate(entry)}
+                    aria-label={`${formatDateShort(entry.date)} 날짜 삭제`}
+                    className="shrink-0 rounded px-1 font-normal text-ink-400 transition-colors hover:text-red-600"
+                  >
+                    ×
+                  </button>
+                </div>
               </th>
             ))}
           </tr>
