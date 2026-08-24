@@ -74,6 +74,16 @@ export interface PlacedBreadboard {
   y: number
 }
 
+/** Pico 2 W 보드 하나뿐이라(컴포넌트/브레드보드와 달리 여러 개를 추가·삭제할 수
+ *  없음) id가 없다 — CircuitCanvas가 선택/드래그를 다룰 때 고정 문자열
+ *  하나("pico-board")를 그 대신 쓴다. 옮기고 돌릴 수는 있지만(사용자 요청)
+ *  지울 수는 없다 — 이게 없으면 GPIO 핀 자체가 없어져 회로가 성립하지 않는다. */
+export interface PlacedBoard {
+  x: number
+  y: number
+  rotation?: 0 | 90 | 180 | 270
+}
+
 /** 점퍼선 색 — 실제 브레드보드 배선 관례(전원=빨강, 접지=검정 등)를 그대로 옵션으로
  *  준다. 새로 잇는 전선은 팔레트에서 고른 색을 쓰고, 이미 그은 전선은 오른쪽 클릭으로
  *  바꾼다(왼쪽 클릭은 기존처럼 삭제 — 의미를 안 바꿨다). */
@@ -111,6 +121,9 @@ export interface CircuitSnapshot {
   components: PlacedComponent[]
   breadboards: PlacedBreadboard[]
   wires: Wire[]
+  /** optional — 이 필드가 생기기 전 저장된 회로(localStorage, EXAMPLES)는 없을 수
+   *  있다. 없으면 CircuitCanvas가 board.ts의 DEFAULT_BOARD_X/Y로 채운다. */
+  board?: PlacedBoard
 }
 
 /** 부품 종류별로 고정된 핀 이름 + 부품 기준 상대 좌표. */

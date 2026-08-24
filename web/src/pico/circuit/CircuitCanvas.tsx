@@ -9,7 +9,7 @@ import {
 } from 'react'
 
 import Modal from '../../components/Modal'
-import { BOARD_HEIGHT, BOARD_PINS, BOARD_WIDTH, BOARD_X, BOARD_Y, type BoardPin } from './board'
+import { BOARD_HEIGHT, BOARD_PINS, BOARD_WIDTH, DEFAULT_BOARD_X, DEFAULT_BOARD_Y, type BoardPin } from './board'
 import {
   type BreadboardLayout,
   breadboardAnchor,
@@ -27,6 +27,7 @@ import {
   type ComponentType,
   DEFAULT_WIRE_COLOR,
   type PinRef,
+  type PlacedBoard,
   type PlacedComponent,
   type Point,
   pinRefKey,
@@ -49,10 +50,18 @@ const snap = (v: number) => Math.round(v / GRID) * GRID
 // 처음 들어왔을 때(저장된 회로가 없을 때)는 빈 회로로 시작한다 — 코드도
 // STARTER_CODE(from machine import Pin 하나)뿐이라 앞뒤가 맞아야 한다
 // (PicoLab.tsx 참고). 예제별 회로는 examples.ts 의 circuit 이 맡는다.
+const DEFAULT_BOARD: PlacedBoard = { x: DEFAULT_BOARD_X, y: DEFAULT_BOARD_Y, rotation: 0 }
 const DEFAULT_CIRCUIT: CircuitSnapshot = {
   components: [],
   breadboards: [],
   wires: [],
+  board: DEFAULT_BOARD,
+}
+
+/** board 필드가 있어야 CircuitCanvas 상태에서 항상 안전하게 쓸 수 있다 — 이 필드가
+ *  생기기 전 저장된 회로(localStorage)나 examples.ts 가 안 채워도 여기서 채운다. */
+function withDefaultBoard(snapshot: CircuitSnapshot): CircuitSnapshot {
+  return { ...snapshot, board: snapshot.board ?? DEFAULT_BOARD }
 }
 
 function loadInitial(): CircuitSnapshot {
@@ -61,7 +70,12 @@ function loadInitial(): CircuitSnapshot {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<CircuitSnapshot>
       if (parsed.components && parsed.wires) {
-        return { components: parsed.components, breadboards: parsed.breadboards ?? [], wires: parsed.wires }
+        return withDefaultBoard({
+          components: parsed.components,
+          breadboards: parsed.breadboards ?? [],
+          wires: parsed.wires,
+          board: parsed.board,
+        })
       }
     }
   } catch {
@@ -88,14 +102,19 @@ export interface CircuitCanvasHandle {
   loadCircuit: (circuit: CircuitSnapshot) => void
 }
 
-type DragTarget = { id: string; kind: 'component' | 'breadboard'; dx: number; dy: number }
-type Selection = { id: string; kind: 'component' | 'breadboard' } | null
+/** 보드는 하나뿐이라 id가 따로 없다 — 드래그/선택 상태에서 부품·브레드보드와 같은
+ *  모양으로 다루려고 이 고정 문자열을 그 자리에 쓴다. */
+const BOARD_ID = 'pico-board'
+type DragTarget = { id: string; kind: 'component' | 'breadboard' | 'board'; dx: number; dy: number }
+type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' } | null
 
 function CircuitCanvas(
   { gpioLevels, onButtonChange, locked = false }: CircuitCanvasProps,
   ref: React.Ref<CircuitCanvasHandle>,
 ) {
-  const [{ components, breadboards, wires }, setState] = useState<CircuitSnapshot>(loadInitial)
+  const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
+  // withDefaultBoard가 항상 채워주므로 board는 실제로 항상 있다 — 타입만 optional.
+  const boardPos = board ?? DEFAULT_BOARD
   const [tab, setTab] = useState<ComponentCategory | 'breadboard'>('output')
   const [draft, setDraft] = useState<{ from: PinRef; to: Point } | null>(null)
   const [dragging, setDragging] = useState<DragTarget | null>(null)
@@ -122,8 +141,8 @@ function CircuitCanvas(
   const panStartRef = useRef<{ svg: Point; view: { x: number; y: number; scale: number } } | null>(null)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ components, breadboards, wires }))
-  }, [components, breadboards, wires])
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ components, breadboards, wires, board: boardPos }))
+  }, [components, breadboards, wires, boardPos])
 
   // "예제 불러오기" 가 이 handle 로 회로를 통째로 갈아끼운다. JSON 왕복으로 깊은 복사를
   // 해서, 같은 예제를 두 번 불러오거나 부품을 옮겨도 EXAMPLES 원본 데이터가 오염되지
@@ -132,10 +151,11 @@ function CircuitCanvas(
     ref,
     () => ({
       loadCircuit: (circuit) => {
-        setState(JSON.parse(JSON.stringify(circuit)) as CircuitSnapshot)
+        setState(withDefaultBoard(JSON.parse(JSON.stringify(circuit)) as CircuitSnapshot))
         setDraft(null)
         setDragging(null)
         setActiveInputs(new Set())
+        setSelected(null)
       },
     }),
     [],
@@ -271,21 +291,21 @@ function CircuitCanvas(
     const p = toModelPoint(event.clientX, event.clientY)
     if (draft) setDraft((d) => (d ? { ...d, to: p } : d))
     if (dragging) {
-      setState((s) =>
-        dragging.kind === 'component'
-          ? {
-              ...s,
-              components: s.components.map((c) =>
-                c.id === dragging.id ? { ...c, x: p.x - dragging.dx, y: p.y - dragging.dy } : c,
-              ),
-            }
-          : {
-              ...s,
-              breadboards: s.breadboards.map((b) =>
-                b.id === dragging.id ? { ...b, x: p.x - dragging.dx, y: p.y - dragging.dy } : b,
-              ),
-            },
-      )
+      const nx = p.x - dragging.dx
+      const ny = p.y - dragging.dy
+      setState((s) => {
+        if (dragging.kind === 'component') {
+          return { ...s, components: s.components.map((c) => (c.id === dragging.id ? { ...c, x: nx, y: ny } : c)) }
+        }
+        if (dragging.kind === 'breadboard') {
+          return {
+            ...s,
+            breadboards: s.breadboards.map((b) => (b.id === dragging.id ? { ...b, x: nx, y: ny } : b)),
+          }
+        }
+        // 'board' — 보드는 하나뿐이라 배열에서 찾을 필요 없이 그대로 갱신한다.
+        return { ...s, board: { ...(s.board ?? DEFAULT_BOARD), x: nx, y: ny } }
+      })
     }
   }
 
@@ -295,11 +315,22 @@ function CircuitCanvas(
     panStartRef.current = null
     if (dragging) {
       const target = dragging
-      setState((s) =>
-        target.kind === 'component'
-          ? { ...s, components: s.components.map((c) => (c.id === target.id ? { ...c, x: snap(c.x), y: snap(c.y) } : c)) }
-          : { ...s, breadboards: s.breadboards.map((b) => (b.id === target.id ? { ...b, x: snap(b.x), y: snap(b.y) } : b)) },
-      )
+      setState((s) => {
+        if (target.kind === 'component') {
+          return {
+            ...s,
+            components: s.components.map((c) => (c.id === target.id ? { ...c, x: snap(c.x), y: snap(c.y) } : c)),
+          }
+        }
+        if (target.kind === 'breadboard') {
+          return {
+            ...s,
+            breadboards: s.breadboards.map((b) => (b.id === target.id ? { ...b, x: snap(b.x), y: snap(b.y) } : b)),
+          }
+        }
+        const current = s.board ?? DEFAULT_BOARD
+        return { ...s, board: { ...current, x: snap(current.x), y: snap(current.y) } }
+      })
     }
     setDragging(null)
     setDraft(null) // 빈 곳에서 놓으면 배선 취소
@@ -375,6 +406,16 @@ function CircuitCanvas(
     }))
   }
 
+  /** 보드도 부품과 같은 방식(90도씩)으로 돈다 — 지울 수는 없지만 옮기고 돌리는 건
+   *  된다(사용자 요청). */
+  const rotateBoard = () => {
+    if (locked) return
+    setState((s) => {
+      const current = s.board ?? DEFAULT_BOARD
+      return { ...s, board: { ...current, rotation: (((current.rotation ?? 0) + 90) % 360) as PlacedBoard['rotation'] } }
+    })
+  }
+
   const addBreadboard = (size: BreadboardSize) => {
     if (locked) return
     const id = `bb${Date.now().toString(36)}`
@@ -395,18 +436,27 @@ function CircuitCanvas(
   }
 
   /** 선택된 항목(부품 또는 브레드보드) 하나를 지운다 — 팔레트의 휴지통 버튼과
-   *  Delete/Backspace 키가 둘 다 이 함수를 부른다. */
+   *  Delete/Backspace 키가 둘 다 이 함수를 부른다. 보드는 하나뿐이라 지우면 GPIO
+   *  핀 자체가 없어져 회로가 성립하지 않으므로 삭제 대상에서 뺐다 — 팔레트도
+   *  보드가 선택됐을 땐 휴지통 버튼을 아예 안 보여준다(Palette 참고). */
   const deleteSelected = () => {
-    if (locked || !selected) return
+    if (locked || !selected || selected.kind === 'board') return
     if (selected.kind === 'component') removeComponent(selected.id)
     else removeBreadboard(selected.id)
     setSelected(null)
   }
 
-  // R = 선택한 부품 90도 회전, Delete/Backspace = 선택한 항목 삭제. 코드 에디터(Monaco)
-  // 등 다른 입력창에 포커스가 있을 때 여기서 가로채면 타이핑이 막히므로(예: 변수명에
-  // r이 들어가거나 코드를 지우려고 Delete를 누를 때) input/textarea/contentEditable
-  // 이면 무시한다.
+  const rotateSelected = () => {
+    if (!selected) return
+    if (selected.kind === 'component') rotateComponent(selected.id)
+    else if (selected.kind === 'board') rotateBoard()
+    // 브레드보드는 회전 대상 아님 — rotateComponent와 같은 이유로 범위 밖.
+  }
+
+  // R = 선택한 항목(부품/보드) 90도 회전, Delete/Backspace = 선택한 항목 삭제.
+  // 코드 에디터(Monaco) 등 다른 입력창에 포커스가 있을 때 여기서 가로채면 타이핑이
+  // 막히므로(예: 변수명에 r이 들어가거나 코드를 지우려고 Delete를 누를 때)
+  // input/textarea/contentEditable이면 무시한다.
   useEffect(() => {
     const isTypingTarget = (target: EventTarget | null) => {
       if (!(target instanceof HTMLElement)) return false
@@ -415,7 +465,7 @@ function CircuitCanvas(
     const onKeyDown = (event: KeyboardEvent) => {
       if (locked || !selected || isTypingTarget(event.target)) return
       if (event.key === 'r' || event.key === 'R') {
-        if (selected.kind === 'component') rotateComponent(selected.id)
+        rotateSelected()
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault()
         deleteSelected()
@@ -442,7 +492,12 @@ function CircuitCanvas(
   const pinPoint = (ref: PinRef): Point => {
     if (ref.kind === 'board') {
       const pin = BOARD_PINS.find((p) => p.id === ref.pinId)
-      return pin ? { x: pin.x, y: pin.y } : { x: 0, y: 0 }
+      if (!pin) return { x: 0, y: 0 }
+      // 보드도 부품처럼 옮기고 돌릴 수 있다(사용자 요청) — pin.x/y는 이제 보드 기준
+      // 로컬 좌표(board.ts 참고)라, 컴포넌트 핀과 같은 방식으로 보드의 위치·회전을
+      // 적용해야 실제 화면 위치가 나온다.
+      const offset = rotateOffset(pin.x, pin.y, boardPos.rotation ?? 0)
+      return { x: boardPos.x + offset.x, y: boardPos.y + offset.y }
     }
     if (ref.kind === 'breadboard') {
       const layout = breadboardLayouts.get(ref.boardId)
@@ -553,7 +608,18 @@ function CircuitCanvas(
           })}
 
           <PicoBoard
-            onPinPointerDown={(pin, point) => startWire({ kind: 'board', pinId: pin.id }, point)}
+            board={boardPos}
+            locked={locked}
+            selected={selected?.kind === 'board'}
+            onBodyPointerDown={(event) => {
+              if (locked) return
+              setSelected({ kind: 'board', id: BOARD_ID })
+              const p = toModelPoint(event.clientX, event.clientY)
+              setDragging({ id: BOARD_ID, kind: 'board', dx: p.x - boardPos.x, dy: p.y - boardPos.y })
+            }}
+            onPinPointerDown={(pin) => {
+              startWire({ kind: 'board', pinId: pin.id }, pinPoint({ kind: 'board', pinId: pin.id }))
+            }}
             onPinPointerUp={(pin) => finishWire({ kind: 'board', pinId: pin.id })}
           />
 
@@ -801,7 +867,7 @@ function Palette({
         <span className="text-xs text-ink-500">
           {locked
             ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
-            : '부품/브레드보드는 클릭해서 선택 후 R(회전)·Delete(삭제)나 휴지통 버튼을 씁니다. 핀(원)을 끌어 전선을 잇고, 전선은 클릭(삭제)·오른쪽 클릭(색 바꾸기)합니다.'}
+            : '부품/브레드보드/Pico 보드는 클릭해서 선택 후 R(회전)로 돌리고 끌어서 옮깁니다(보드는 삭제 불가). 삭제는 Delete 키나 휴지통 버튼. 핀(원)을 끌어 전선을 잇고, 전선은 클릭(삭제)·오른쪽 클릭(색 바꾸기)합니다.'}
         </span>
       </div>
     </div>
@@ -1023,57 +1089,93 @@ function BreadboardGlyph({
 }
 
 function PicoBoard({
+  board,
+  locked,
+  selected,
+  onBodyPointerDown,
   onPinPointerDown,
   onPinPointerUp,
 }: {
-  onPinPointerDown: (pin: BoardPin, point: Point) => void
+  board: PlacedBoard
+  locked: boolean
+  selected: boolean
+  onBodyPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
+  onPinPointerDown: (pin: BoardPin) => void
   onPinPointerUp: (pin: BoardPin) => void
 }) {
-  const cx = BOARD_X + BOARD_WIDTH / 2
+  const cx = BOARD_WIDTH / 2
   return (
-    <g style={{ filter: 'url(#chico-shadow)' }}>
-      <rect
-        x={BOARD_X}
-        y={BOARD_Y}
-        width={BOARD_WIDTH}
-        height={BOARD_HEIGHT}
-        rx={10}
-        fill="url(#chico-board-body)"
-        stroke="#0f3d29"
-      />
-      {/* USB 커넥터 */}
-      <rect x={cx - 18} y={BOARD_Y - 6} width={36} height={16} rx={2} fill="#c7cdd6" stroke="#8891a1" />
-      {/* BOOTSEL 버튼 */}
-      <rect x={cx - 12} y={BOARD_Y + 60} width={24} height={24} rx={3} fill="#f8fafc" stroke="#cbd5e1" />
-      <text x={cx} y={BOARD_Y + 90} fontSize={6} fill="#bfe3d2" textAnchor="middle">
-        BOOTSEL
-      </text>
-      {/* 칩 */}
-      <rect x={cx - 22} y={BOARD_Y + 130} width={44} height={44} rx={2} fill="#111827" stroke="#000" />
-      <text
-        x={cx}
-        y={BOARD_Y + BOARD_HEIGHT / 2 + 60}
-        fontSize={13}
-        fill="#bfe3d2"
-        textAnchor="middle"
-        transform={`rotate(90 ${cx} ${BOARD_Y + BOARD_HEIGHT / 2 + 60})`}
-      >
-        Pico 2 W
-      </text>
-      {BOARD_PINS.map((pin) => (
-        <BoardPinDot
-          key={pin.id}
-          pin={pin}
-          onPointerDown={(e) => {
-            e.stopPropagation()
-            onPinPointerDown(pin, { x: pin.x, y: pin.y })
-          }}
-          onPointerUp={(e) => {
-            e.stopPropagation()
-            onPinPointerUp(pin)
-          }}
+    <g transform={`translate(${board.x} ${board.y})`}>
+      {selected && (
+        <rect
+          x={-6}
+          y={-6}
+          width={BOARD_WIDTH + 12}
+          height={BOARD_HEIGHT + 12}
+          rx={13}
+          fill="none"
+          stroke="#2563eb"
+          strokeWidth={2}
+          strokeDasharray="5 3"
         />
-      ))}
+      )}
+      {/* rotation은 몸통·핀만 감싼 안쪽 그룹에만 건다 — pinPoint()가 rotateOffset()으로
+          계산하는 각도와 같은 방향이라야 전선이 실제 보이는 핀 위치에 붙는다. */}
+      <g transform={`rotate(${board.rotation ?? 0})`} style={{ filter: 'url(#chico-shadow)' }}>
+        <rect x={0} y={0} width={BOARD_WIDTH} height={BOARD_HEIGHT} rx={10} fill="url(#chico-board-body)" stroke="#0f3d29" />
+        {/* USB 커넥터 */}
+        <rect x={cx - 18} y={-6} width={36} height={16} rx={2} fill="#c7cdd6" stroke="#8891a1" />
+        {/* BOOTSEL 버튼 */}
+        <rect x={cx - 12} y={60} width={24} height={24} rx={3} fill="#f8fafc" stroke="#cbd5e1" />
+        <text x={cx} y={90} fontSize={6} fill="#bfe3d2" textAnchor="middle">
+          BOOTSEL
+        </text>
+        {/* 내장(온보드) LED — 실제 보드에도 BOOTSEL 옆에 작은 초록 LED가 있다.
+            보드 안쪽(회전 그룹)에 그리므로 보드를 옮기거나 돌리면 같이 움직이고,
+            보드는 삭제 대상이 아니라서 "따로 삭제"할 방법도 없다 — 둘 다 사용자
+            요청대로다. 지금은 장식일 뿐 코드로 켜고 끌 수는 없다(machine.Pin("LED")
+            같은 문자열 핀은 아직 구현 안 함 — 필요하면 별도로 만들 것).  */}
+        <circle cx={cx + 24} cy={72} r={4} fill="#166534" stroke="#0b2f1f" strokeWidth={1} />
+        {/* 칩 */}
+        <rect x={cx - 22} y={130} width={44} height={44} rx={2} fill="#111827" stroke="#000" />
+        <text
+          x={cx}
+          y={BOARD_HEIGHT / 2 + 60}
+          fontSize={13}
+          fill="#bfe3d2"
+          textAnchor="middle"
+          transform={`rotate(90 ${cx} ${BOARD_HEIGHT / 2 + 60})`}
+        >
+          Pico 2 W
+        </text>
+        {/* 몸통 어디를 눌러도 드래그가 시작되도록, 장식(USB/BOOTSEL/칩) 위에 안
+            보이는 히트 영역을 하나 더 깐다 — BreadboardGlyph와 같은 패턴이다.
+            장식 도형 하나하나에 pointerdown을 달면 그 부분만 못 잡게 된다. */}
+        <rect
+          x={0}
+          y={0}
+          width={BOARD_WIDTH}
+          height={BOARD_HEIGHT}
+          rx={10}
+          fill="transparent"
+          className={locked ? '' : 'cursor-grab'}
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+        />
+        {BOARD_PINS.map((pin) => (
+          <BoardPinDot
+            key={pin.id}
+            pin={pin}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              onPinPointerDown(pin)
+            }}
+            onPointerUp={(e) => {
+              e.stopPropagation()
+              onPinPointerUp(pin)
+            }}
+          />
+        ))}
+      </g>
     </g>
   )
 }

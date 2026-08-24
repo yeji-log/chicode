@@ -27,10 +27,16 @@ const RIGHT_LABELS_BOTTOM_TO_TOP = [
   '3V3_EN', 'GND', 'VSYS', 'VBUS',
 ]
 
-export const BOARD_X = 640
-export const BOARD_Y = 70
+/** 보드를 옮기고 돌릴 수 있게 되면서(사용자 요청), 핀 좌표는 더는 캔버스 절대
+ *  좌표가 아니라 보드 자기 자신 기준 로컬 좌표(왼쪽 위를 0,0)로 둔다 — 실제
+ *  화면 위치는 CircuitCanvas가 보드의 x/y/rotation을 적용해서 계산한다
+ *  (컴포넌트 dx/dy와 같은 방식, pinPoint 참고). DEFAULT_BOARD_X/Y는 회로를
+ *  처음 열었을 때(또는 board 필드가 없는 예전 저장 회로) 쓰는 기본 위치다.
+ */
 export const BOARD_WIDTH = 200
 export const BOARD_HEIGHT = 560
+export const DEFAULT_BOARD_X = 640
+export const DEFAULT_BOARD_Y = 70
 const PIN_MARGIN_TOP = 26
 const PIN_GAP = (BOARD_HEIGHT - PIN_MARGIN_TOP * 2) / (LEFT_LABELS.length - 1)
 
@@ -43,16 +49,16 @@ export const BOARD_PINS: BoardPin[] = [
     id: `L${i + 1}`,
     label,
     gpio: gpioOf(label),
-    x: BOARD_X,
-    y: BOARD_Y + PIN_MARGIN_TOP + i * PIN_GAP,
+    x: 0,
+    y: PIN_MARGIN_TOP + i * PIN_GAP,
     side: 'left',
   })),
   ...RIGHT_LABELS_BOTTOM_TO_TOP.map((label, i): BoardPin => ({
     id: `R${21 + i}`,
     label,
     gpio: gpioOf(label),
-    x: BOARD_X + BOARD_WIDTH,
-    y: BOARD_Y + BOARD_HEIGHT - PIN_MARGIN_TOP - i * PIN_GAP,
+    x: BOARD_WIDTH,
+    y: BOARD_HEIGHT - PIN_MARGIN_TOP - i * PIN_GAP,
     side: 'right',
   })),
 ]
