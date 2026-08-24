@@ -15,7 +15,7 @@ export default function PythonLab() {
   const [stdin, setStdin] = useState(() => localStorage.getItem(STDIN_KEY) ?? '')
   const [showStdin, setShowStdin] = useState(() => (localStorage.getItem(STDIN_KEY) ?? '') !== '')
 
-  const { status, output, elapsedMs, bootError, run, stop, clearOutput } = usePython()
+  const { status, output, images, elapsedMs, bootError, run, stop, clearOutput } = usePython()
   const outputRef = useRef<HTMLDivElement>(null)
 
   // 새로고침해도 쓰던 코드가 남아 있도록 (아직 서버 저장은 없다)
@@ -113,7 +113,8 @@ export default function PythonLab() {
       )}
 
       <SupportNote>
-        <li>numpy, pandas, matplotlib 같은 외부 패키지는 사용할 수 없습니다 (표준 라이브러리만 가능)</li>
+        <li>표준 라이브러리 + numpy, pandas, matplotlib 를 사용할 수 있습니다 (처음 import 할 때 내려받아 몇 초 걸릴 수 있어요)</li>
+        <li>matplotlib 그래프는 plt.show() 대신 실행이 끝나면 결과창에 이미지로 나타납니다</li>
         <li>컴퓨터의 실제 파일에는 접근할 수 없습니다</li>
         <li>인터넷에 요청을 보낼 수 없습니다 (requests 등)</li>
       </SupportNote>
@@ -201,6 +202,18 @@ export default function PythonLab() {
                 {line.text}
               </pre>
             ))}
+            {images.length > 0 && (
+              <div className="mt-2 flex flex-col gap-3">
+                {images.map((dataUrl, index) => (
+                  <img
+                    key={index}
+                    src={dataUrl}
+                    alt={`matplotlib 그래프 ${index + 1}`}
+                    className="max-w-full rounded-lg border border-board-light bg-white"
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </section>
       </div>

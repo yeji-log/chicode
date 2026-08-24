@@ -12,6 +12,7 @@ export interface OutputLine {
 export interface UsePython {
   status: PythonStatus
   output: OutputLine[]
+  images: string[]
   elapsedMs: number | null
   bootError: string | null
   run: (code: string, stdin: string) => void
@@ -25,6 +26,7 @@ export function usePython(): UsePython {
 
   const [status, setStatus] = useState<PythonStatus>('booting')
   const [output, setOutput] = useState<OutputLine[]>([])
+  const [images, setImages] = useState<string[]>([])
   const [elapsedMs, setElapsedMs] = useState<number | null>(null)
   const [bootError, setBootError] = useState<string | null>(null)
 
@@ -53,6 +55,9 @@ export function usePython(): UsePython {
         case 'stderr':
           append('err', message.text)
           break
+        case 'image':
+          setImages((prev) => [...prev, message.dataUrl])
+          break
         case 'done':
           if (!message.ok && message.error) append('err', message.error)
           setElapsedMs(message.elapsedMs)
@@ -79,6 +84,7 @@ export function usePython(): UsePython {
       if (!worker || status === 'running' || status === 'error') return
 
       setOutput([])
+      setImages([])
       setElapsedMs(null)
       setStatus('running')
 
@@ -101,8 +107,9 @@ export function usePython(): UsePython {
 
   const clearOutput = useCallback(() => {
     setOutput([])
+    setImages([])
     setElapsedMs(null)
   }, [])
 
-  return { status, output, elapsedMs, bootError, run, stop, clearOutput }
+  return { status, output, images, elapsedMs, bootError, run, stop, clearOutput }
 }
