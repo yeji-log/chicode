@@ -34,6 +34,14 @@ const STORAGE_KEY = 'chicode.pico.circuit'
 const VIEW_WIDTH = 900
 const VIEW_HEIGHT = 640
 
+/** 그리드/스냅/줌 — 팅커캐드처럼 부품이 격자에 맞춰 정돈되고, 화면을 확대/축소·이동해
+ *  볼 수 있게 한다(계획 문서 "캔버스 기본기" 1단계). 모델 좌표(컴포넌트 x/y 등)는 이
+ *  그리드 단위와 무관한 자유 float로 그대로 두고, 렌더링 시점에만 반영한다. */
+const GRID = 20
+const MIN_SCALE = 0.5
+const MAX_SCALE = 2.5
+const snap = (v: number) => Math.round(v / GRID) * GRID
+
 // 처음 들어왔을 때(저장된 회로가 없을 때)는 빈 회로로 시작한다 — 코드도
 // STARTER_CODE(from machine import Pin 하나)뿐이라 앞뒤가 맞아야 한다
 // (PicoLab.tsx 참고). 예제별 회로는 examples.ts 의 circuit 이 맡는다.
@@ -89,6 +97,14 @@ function CircuitCanvas(
   // 버튼(누르는 동안)과 스위치(클릭해서 토글) 둘 다 "지금 켜진 입력 부품 id" 로 통일해서 관리한다.
   const [activeInputs, setActiveInputs] = useState<Set<string>>(new Set())
   const svgRef = useRef<SVGSVGElement>(null)
+
+  // 줌/팬은 회로 데이터(components/breadboards/wires)와 달리 저장하지 않는다 — 매번
+  // 처음 화면으로 시작해도 무방하고, "예제 불러오기"가 회로를 통째로 갈아끼우는 로직과
+  // 섞이지 않게 단순하게 둔다.
+  const [view, setView] = useState({ x: 0, y: 0, scale: 1 })
+  // 팬 제스처 시작 시점의 좌표를 들고 있는다. state 대신 ref 인 이유: 매 pointermove 마다
+  // setState 로 다시 만들 필요 없이 시작점만 고정해 두고 델타만 계산하면 되기 때문.
+  const panStartRef = useRef<{ svg: Point; view: { x: number; y: number; scale: number } } | null>(null)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ components, breadboards, wires }))
@@ -150,6 +166,43 @@ function CircuitCanvas(
     return { x: local.x, y: local.y }
   }, [])
 
+  /** toSvgPoint(뷰포트 좌표)를 한 번 더 view(줌/팬) 역변환해서 모델 좌표로 만든다.
+   *  컴포넌트/브레드보드 x/y, 드래그 계산은 전부 이 모델 좌표를 기준으로 한다 —
+   *  view가 (0,0,1)일 땐 toSvgPoint와 완전히 같은 값이 나온다. */
+  const toModelPoint = useCallback(
+    (clientX: number, clientY: number): Point => {
+      const svgP = toSvgPoint(clientX, clientY)
+      return { x: (svgP.x - view.x) / view.scale, y: (svgP.y - view.y) / view.scale }
+    },
+    [toSvgPoint, view],
+  )
+
+  /** center(뷰포트 좌표) 아래의 모델 좌표가 확대/축소 후에도 그대로 그 자리에 남도록
+   *  view.x/y를 같이 보정한다 — "커서 위치 기준 줌". 버튼 줌은 캔버스 중앙을 center로 준다. */
+  const zoomAt = useCallback((factor: number, center: Point) => {
+    setView((v) => {
+      const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale * factor))
+      const modelX = (center.x - v.x) / v.scale
+      const modelY = (center.y - v.y) / v.scale
+      return { scale: nextScale, x: center.x - modelX * nextScale, y: center.y - modelY * nextScale }
+    })
+  }, [])
+
+  // 휠 줌. React의 onWheel(합성 이벤트)은 브라우저가 스크롤 성능을 위해 기본적으로
+  // passive 리스너로 등록하는 이벤트라 preventDefault()가 안 먹을 수 있다 — svg에
+  // 직접(non-passive) 리스너를 붙여서 확실하게 막는다.
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const svgP = toSvgPoint(event.clientX, event.clientY)
+      zoomAt(event.deltaY < 0 ? 1.1 : 1 / 1.1, svgP)
+    }
+    svg.addEventListener('wheel', handleWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', handleWheel)
+  }, [toSvgPoint, zoomAt])
+
   const startWire = (ref: PinRef, point: Point) => {
     if (locked) return
     setDraft({ from: ref, to: point })
@@ -183,8 +236,19 @@ function CircuitCanvas(
   }
 
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    // 팬은 locked와 무관하게 항상 된다 — 회로를 둘러보는 것 자체는 편집이 아니다.
+    if (panStartRef.current) {
+      const svgP = toSvgPoint(event.clientX, event.clientY)
+      const start = panStartRef.current
+      setView({
+        x: start.view.x + (svgP.x - start.svg.x),
+        y: start.view.y + (svgP.y - start.svg.y),
+        scale: start.view.scale,
+      })
+      return
+    }
     if (locked) return
-    const p = toSvgPoint(event.clientX, event.clientY)
+    const p = toModelPoint(event.clientX, event.clientY)
     if (draft) setDraft((d) => (d ? { ...d, to: p } : d))
     if (dragging) {
       setState((s) =>
@@ -205,10 +269,29 @@ function CircuitCanvas(
     }
   }
 
+  /** 부품/브레드보드를 옮기는 동안엔 자유롭게 움직이다가, 놓는(pointer up) 순간에만
+   *  그리드에 스냅한다 — 매 프레임 스냅하면 뚝뚝 끊겨 보인다(팅커캐드도 이 방식). */
   const onPointerUp = () => {
+    panStartRef.current = null
+    if (dragging) {
+      const target = dragging
+      setState((s) =>
+        target.kind === 'component'
+          ? { ...s, components: s.components.map((c) => (c.id === target.id ? { ...c, x: snap(c.x), y: snap(c.y) } : c)) }
+          : { ...s, breadboards: s.breadboards.map((b) => (b.id === target.id ? { ...b, x: snap(b.x), y: snap(b.y) } : b)) },
+      )
+    }
     setDragging(null)
     setDraft(null) // 빈 곳에서 놓으면 배선 취소
   }
+
+  const onBackgroundPointerDown = (event: React.PointerEvent) => {
+    panStartRef.current = { svg: toSvgPoint(event.clientX, event.clientY), view }
+  }
+
+  const zoomIn = () => zoomAt(1.2, { x: VIEW_WIDTH / 2, y: VIEW_HEIGHT / 2 })
+  const zoomOut = () => zoomAt(1 / 1.2, { x: VIEW_WIDTH / 2, y: VIEW_HEIGHT / 2 })
+  const resetView = () => setView({ x: 0, y: 0, scale: 1 })
 
   const removeWire = (id: string) => {
     if (locked) return
@@ -310,7 +393,7 @@ function CircuitCanvas(
         className="h-[520px] w-full touch-none rounded-xl border border-cream-deep bg-[#eef2ea] select-none"
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerLeave={() => setDragging(null)}
+        onPointerLeave={onPointerUp}
       >
         <defs>
           <filter id="chico-shadow" x="-40%" y="-40%" width="180%" height="180%">
@@ -325,98 +408,144 @@ function CircuitCanvas(
             <stop offset="0%" stopColor="#fbfaf5" />
             <stop offset="100%" stopColor="#ece7d8" />
           </linearGradient>
+          {/* 팅커캐드 스타일 점 그리드. patternTransform을 콘텐츠 그룹과 똑같은
+              translate/scale로 맞춰서, 줌/팬 중에도 점이 부품과 같이 움직이는 것처럼
+              보이게 한다(실제로는 배경 rect 자체는 화면에 고정돼 있고 패턴만 움직인다). */}
+          <pattern
+            id="chico-grid"
+            width={GRID}
+            height={GRID}
+            patternUnits="userSpaceOnUse"
+            patternTransform={`translate(${view.x} ${view.y}) scale(${view.scale})`}
+          >
+            <circle cx={1} cy={1} r={1} fill="#c7d1c2" />
+          </pattern>
         </defs>
 
-        {breadboards.map((b) => {
-          const layout = breadboardLayouts.get(b.id)
-          if (!layout) return null
-          return (
-            <BreadboardGlyph
-              key={b.id}
-              layout={layout}
+        {/* 빈 캔버스를 누르면 팬(화면 이동) — 부품/보드/전선이 위에 겹쳐 그려지므로
+            그 위를 눌렀을 땐 이 배경이 아니라 해당 부품이 이벤트를 받는다. */}
+        <rect x={0} y={0} width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#chico-grid)" onPointerDown={onBackgroundPointerDown} />
+
+        <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
+          {breadboards.map((b) => {
+            const layout = breadboardLayouts.get(b.id)
+            if (!layout) return null
+            return (
+              <BreadboardGlyph
+                key={b.id}
+                layout={layout}
+                locked={locked}
+                onBodyPointerDown={(event) => {
+                  if (locked) return
+                  const p = toModelPoint(event.clientX, event.clientY)
+                  setDragging({ id: b.id, kind: 'breadboard', dx: p.x - b.x, dy: p.y - b.y })
+                }}
+                onRemove={() => removeBreadboard(b.id)}
+                onDotPointerDown={(ref, point) => startWire(ref, point)}
+                onDotPointerUp={(ref) => finishWire(ref)}
+              />
+            )
+          })}
+
+          <PicoBoard
+            onPinPointerDown={(pin, point) => startWire({ kind: 'board', pinId: pin.id }, point)}
+            onPinPointerUp={(pin) => finishWire({ kind: 'board', pinId: pin.id })}
+          />
+
+          {wires.map((w) => {
+            const a = pinPoint(w.from)
+            const b = pinPoint(w.to)
+            return (
+              <path
+                key={w.id}
+                d={wirePath(a, b)}
+                stroke="#dc2626"
+                strokeWidth={3.5}
+                fill="none"
+                strokeLinecap="round"
+                className={locked ? '' : 'cursor-pointer hover:stroke-red-800'}
+                onClick={() => removeWire(w.id)}
+              />
+            )
+          })}
+          {/* 실제 선(3.5px)은 클릭하기 얇아서, 안 보이는 굵은 선을 하나 더 깔아 클릭 영역을 넓힌다. */}
+          {!locked &&
+            wires.map((w) => (
+              <path
+                key={`${w.id}-hit`}
+                d={wirePath(pinPoint(w.from), pinPoint(w.to))}
+                stroke="transparent"
+                strokeWidth={14}
+                fill="none"
+                className="cursor-pointer"
+                onClick={() => removeWire(w.id)}
+              />
+            ))}
+
+          {draft && (
+            <path
+              d={wirePath(pinPoint(draft.from), draft.to)}
+              stroke="#94a3b8"
+              strokeWidth={2.5}
+              strokeDasharray="4 3"
+              fill="none"
+            />
+          )}
+
+          {components.map((c) => (
+            <ComponentGlyph
+              key={c.id}
+              component={c}
+              gpioLevels={gpioLevels}
+              gpioForPin={(pin) => gpioForPin(c.id, pin)}
+              active={activeInputs.has(c.id)}
               locked={locked}
               onBodyPointerDown={(event) => {
                 if (locked) return
-                const p = toSvgPoint(event.clientX, event.clientY)
-                setDragging({ id: b.id, kind: 'breadboard', dx: p.x - b.x, dy: p.y - b.y })
+                const p = toModelPoint(event.clientX, event.clientY)
+                setDragging({ id: c.id, kind: 'component', dx: p.x - c.x, dy: p.y - c.y })
               }}
-              onRemove={() => removeBreadboard(b.id)}
-              onDotPointerDown={(ref, point) => startWire(ref, point)}
-              onDotPointerUp={(ref) => finishWire(ref)}
-            />
-          )
-        })}
-
-        <PicoBoard
-          onPinPointerDown={(pin, point) => startWire({ kind: 'board', pinId: pin.id }, point)}
-          onPinPointerUp={(pin) => finishWire({ kind: 'board', pinId: pin.id })}
-        />
-
-        {wires.map((w) => {
-          const a = pinPoint(w.from)
-          const b = pinPoint(w.to)
-          return (
-            <path
-              key={w.id}
-              d={wirePath(a, b)}
-              stroke="#dc2626"
-              strokeWidth={3.5}
-              fill="none"
-              strokeLinecap="round"
-              className={locked ? '' : 'cursor-pointer hover:stroke-red-800'}
-              onClick={() => removeWire(w.id)}
-            />
-          )
-        })}
-        {/* 실제 선(3.5px)은 클릭하기 얇아서, 안 보이는 굵은 선을 하나 더 깔아 클릭 영역을 넓힌다. */}
-        {!locked &&
-          wires.map((w) => (
-            <path
-              key={`${w.id}-hit`}
-              d={wirePath(pinPoint(w.from), pinPoint(w.to))}
-              stroke="transparent"
-              strokeWidth={14}
-              fill="none"
-              className="cursor-pointer"
-              onClick={() => removeWire(w.id)}
+              onRemove={() => removeComponent(c.id)}
+              onPinPointerDown={(pin, event) => {
+                event.stopPropagation()
+                startWire({ kind: 'component', componentId: c.id, pin }, pinPoint({ kind: 'component', componentId: c.id, pin }))
+              }}
+              onPinPointerUp={(pin, event) => {
+                event.stopPropagation()
+                finishWire({ kind: 'component', componentId: c.id, pin })
+              }}
+              onInputActiveChange={(active) => setInputActive(c.id, active)}
             />
           ))}
+        </g>
 
-        {draft && (
-          <path
-            d={wirePath(pinPoint(draft.from), draft.to)}
-            stroke="#94a3b8"
-            strokeWidth={2.5}
-            strokeDasharray="4 3"
-            fill="none"
-          />
-        )}
-
-        {components.map((c) => (
-          <ComponentGlyph
-            key={c.id}
-            component={c}
-            gpioLevels={gpioLevels}
-            gpioForPin={(pin) => gpioForPin(c.id, pin)}
-            active={activeInputs.has(c.id)}
-            locked={locked}
-            onBodyPointerDown={(event) => {
-              if (locked) return
-              const p = toSvgPoint(event.clientX, event.clientY)
-              setDragging({ id: c.id, kind: 'component', dx: p.x - c.x, dy: p.y - c.y })
-            }}
-            onRemove={() => removeComponent(c.id)}
-            onPinPointerDown={(pin, event) => {
-              event.stopPropagation()
-              startWire({ kind: 'component', componentId: c.id, pin }, pinPoint({ kind: 'component', componentId: c.id, pin }))
-            }}
-            onPinPointerUp={(pin, event) => {
-              event.stopPropagation()
-              finishWire({ kind: 'component', componentId: c.id, pin })
-            }}
-            onInputActiveChange={(active) => setInputActive(c.id, active)}
-          />
-        ))}
+        {/* 줌 컨트롤 — transform 그룹 밖에 그려서 확대/축소와 무관하게 항상 같은
+            화면 위치·크기를 유지한다. 휠이 없는 아이패드 등 터치 기기에선 이 버튼이
+            줌의 유일한 수단이라 꼭 있어야 한다. */}
+        <g transform={`translate(${VIEW_WIDTH - 112} ${VIEW_HEIGHT - 40})`}>
+          <rect x={0} y={0} width={104} height={28} rx={14} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
+          {[
+            { dx: 14, label: '−', onClick: zoomOut, aria: '축소' },
+            { dx: 52, label: '⤢', onClick: resetView, aria: '전체 보기(100%)' },
+            { dx: 90, label: '+', onClick: zoomIn, aria: '확대' },
+          ].map((btn) => (
+            <text
+              key={btn.aria}
+              x={btn.dx}
+              y={19}
+              fontSize={btn.label === '⤢' ? 11 : 15}
+              fontWeight="bold"
+              textAnchor="middle"
+              fill="#57534e"
+              className="cursor-pointer select-none"
+              aria-label={btn.aria}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={btn.onClick}
+            >
+              {btn.label}
+            </text>
+          ))}
+        </g>
       </svg>
     </div>
   )
