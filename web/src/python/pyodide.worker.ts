@@ -18,6 +18,7 @@ export type WorkerResponse =
   | { type: 'boot-error'; message: string }
   | { type: 'stdout'; text: string }
   | { type: 'stderr'; text: string }
+  | { type: 'image'; dataUrl: string }
   | { type: 'done'; ok: boolean; error?: string; elapsedMs: number }
 
 const post = (message: WorkerResponse) => self.postMessage(message)
@@ -31,6 +32,8 @@ let stdinCursor = 0
 
 /** Python 쪽 _chicode_run 핸들 (RUNNER 참고). */
 let runner: ((source: string) => string | undefined) | null = null
+/** Python 쪽 _chicode_collect_images 핸들 (RUNNER 참고). */
+let collectImages: (() => unknown) | null = null
 
 const bootPromise = boot()
 
@@ -41,10 +44,19 @@ async function boot(): Promise<PyodideInterface> {
   // 번들 대상으로 붙잡아 "public 파일은 import 할 수 없다"는 오류를 낸다.
   const runtimeUrl = `${self.location.origin}${BASE_URL}pyodide/pyodide.mjs`
   const { loadPyodide } = (await import(/* @vite-ignore */ runtimeUrl)) as {
-    loadPyodide: (options: { indexURL: string }) => Promise<PyodideInterface>
+    loadPyodide: (options: {
+      indexURL: string
+      env?: Record<string, string>
+    }) => Promise<PyodideInterface>
   }
 
-  const pyodide = await loadPyodide({ indexURL: `${BASE_URL}pyodide/` })
+  const pyodide = await loadPyodide({
+    indexURL: `${BASE_URL}pyodide/`,
+    // matplotlib이 import 시점에 인터랙티브 백엔드를 고르지 않도록 미리 못박아 둔다.
+    // 워커 안에는 화면이 없으니 캔버스를 그릴 대상이 없다 — Agg(이미지 전용
+    // 렌더러)로 고정하고, 실행이 끝나면 그린 figure 를 PNG 로 꺼내 온다.
+    env: { MPLBACKEND: 'Agg' },
+  })
 
   pyodide.setStdout({ batched: (text: string) => post({ type: 'stdout', text }) })
   pyodide.setStderr({ batched: (text: string) => post({ type: 'stderr', text }) })
@@ -55,6 +67,7 @@ async function boot(): Promise<PyodideInterface> {
   pyodide.runPython(RUNNER)
   // 실행마다 새로 꺼내면 PyProxy 가 계속 쌓인다. 한 번만 붙잡아 두고 재사용한다.
   runner = pyodide.globals.get('_chicode_run')
+  collectImages = pyodide.globals.get('_chicode_collect_images')
 
   return pyodide
 }
@@ -93,6 +106,17 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
     // 실행과 오류 정리는 Python 쪽 _chicode_run 이 맡는다(RUNNER 참고).
     const error = runner?.(code)
+
+    // matplotlib을 안 쓴 코드가 대부분이라, import 됐을 때만 그려진 figure 를 훑는다.
+    if (pyodide.loadedPackages['matplotlib']) {
+      // _chicode_collect_images 가 돌려주는 파이썬 리스트는 PyProxy 로 온다 —
+      // toJs() 로 꺼내고 나면 프록시는 더 쓸 일이 없으니 바로 destroy 한다.
+      const proxy = collectImages?.() as { toJs: () => string[]; destroy: () => void } | undefined
+      for (const base64 of proxy?.toJs() ?? []) {
+        post({ type: 'image', dataUrl: `data:image/png;base64,${base64}` })
+      }
+      proxy?.destroy()
+    }
 
     post({
       type: 'done',
@@ -168,4 +192,25 @@ def _chicode_run(source):
         _sys.stdout.flush()
         _sys.stderr.flush()
     return None
+
+def _chicode_collect_images():
+    """matplotlib으로 그린 figure 를 PNG(base64) 리스트로 꺼내고 지운다.
+
+    학생 코드에서 plt.show() 를 불러도 워커 안엔 화면이 없어 아무 일도
+    일어나지 않는다(백엔드를 Agg 로 고정해 뒀다 — boot() 참고). 대신 실행이
+    끝난 뒤 열려 있는 figure 를 전부 PNG 로 저장해 결과창에 이미지로 보여준다.
+    """
+    if "matplotlib.pyplot" not in _sys.modules:
+        return []
+    import base64 as _base64
+    import io as _io
+
+    _plt = _sys.modules["matplotlib.pyplot"]
+    images = []
+    for num in _plt.get_fignums():
+        buf = _io.BytesIO()
+        _plt.figure(num).savefig(buf, format="png", bbox_inches="tight")
+        images.append(_base64.b64encode(buf.getvalue()).decode("ascii"))
+    _plt.close("all")
+    return images
 `
