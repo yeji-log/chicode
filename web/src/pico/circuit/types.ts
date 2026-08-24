@@ -72,6 +72,7 @@ export interface PlacedBreadboard {
   size: BreadboardSize
   x: number
   y: number
+  rotation?: 0 | 90 | 180 | 270
 }
 
 /** Pico 2 W 보드 하나뿐이라(컴포넌트/브레드보드와 달리 여러 개를 추가·삭제할 수

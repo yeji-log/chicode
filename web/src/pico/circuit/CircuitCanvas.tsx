@@ -29,6 +29,7 @@ import {
   DEFAULT_WIRE_COLOR,
   type PinRef,
   type PlacedBoard,
+  type PlacedBreadboard,
   type PlacedComponent,
   type Point,
   pinRefKey,
@@ -53,6 +54,15 @@ const snap = (v: number) => Math.round(v / GRID) * GRID
  *  "파란 가이드는 가만있는데 물체가 그 밖으로 돈다"고 지적해서 찾은 문제 —
  *  ComponentGlyph의 COMPONENT_PIVOT과 같은 이유). */
 const BOARD_PIVOT: Point = { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2 }
+
+/** 브레드보드의 회전 중심(가로/세로 절반) — board.ts와 달리 breadboard.ts의
+ *  layoutBreadboard()는 칸/줄 좌표를 처음부터 절대좌표(b.x/b.y가 이미 반영된 값)로
+ *  계산해 둔다. 그래서 pivot도 매번 layout에서 뽑아 쓴다(고정 상수가 아님) — 크기
+ *  (미니/중간)마다 width가 다르고, 드래그로 옮기면 layout.x/y도 매번 바뀐다. */
+const breadboardPivot = (layout: BreadboardLayout): Point => ({
+  x: layout.x + layout.width / 2,
+  y: layout.y + layout.height / 2,
+})
 
 // 처음 들어왔을 때(저장된 회로가 없을 때)는 빈 회로로 시작한다 — 코드도
 // STARTER_CODE(from machine import Pin 하나)뿐이라 앞뒤가 맞아야 한다
@@ -429,6 +439,19 @@ function CircuitCanvas(
     setState((s) => ({ ...s, breadboards: [...s.breadboards, { id, size, x: 24, y: 90 + s.breadboards.length * 40 }] }))
   }
 
+  /** 부품/보드와 같은 방식(90도씩) — layoutBreadboard() 자체는 안 건드리고
+   *  breadboardPivot(가로/세로 절반) 기준으로 렌더링·pinPoint 양쪽에서 한 번 더
+   *  돌린다(BreadboardGlyph, pinPoint 참고). */
+  const rotateBreadboard = (id: string) => {
+    if (locked) return
+    setState((s) => ({
+      ...s,
+      breadboards: s.breadboards.map((b) =>
+        b.id === id ? { ...b, rotation: (((b.rotation ?? 0) + 90) % 360) as PlacedBreadboard['rotation'] } : b,
+      ),
+    }))
+  }
+
   const removeBreadboard = (id: string) => {
     if (locked) return
     setState((s) => ({
@@ -457,7 +480,7 @@ function CircuitCanvas(
     if (!selected) return
     if (selected.kind === 'component') rotateComponent(selected.id)
     else if (selected.kind === 'board') rotateBoard()
-    // 브레드보드는 회전 대상 아님 — rotateComponent와 같은 이유로 범위 밖.
+    else rotateBreadboard(selected.id)
   }
 
   // R = 선택한 항목(부품/보드) 90도 회전, Delete/Backspace = 선택한 항목 삭제.
@@ -507,13 +530,15 @@ function CircuitCanvas(
       const rotated = rotateAround(pin, BOARD_PIVOT, boardPos.rotation ?? 0)
       return { x: boardPos.x + rotated.x, y: boardPos.y + rotated.y }
     }
-    if (ref.kind === 'breadboard') {
+    if (ref.kind === 'breadboard' || ref.kind === 'breadboardRail') {
       const layout = breadboardLayouts.get(ref.boardId)
-      return layout ? breadboardAnchor(layout, ref.col, ref.side) : { x: 0, y: 0 }
-    }
-    if (ref.kind === 'breadboardRail') {
-      const layout = breadboardLayouts.get(ref.boardId)
-      return layout ? breadboardRailAnchor(layout, ref.rail) : { x: 0, y: 0 }
+      const bb = breadboards.find((b) => b.id === ref.boardId)
+      if (!layout || !bb) return { x: 0, y: 0 }
+      // layoutBreadboard()가 이미 절대좌표(회전 안 된 상태 기준)로 계산해 둔 점을,
+      // 브레드보드 한가운데(breadboardPivot)를 축으로 한 번 더 돌린다 — 부품/보드와
+      // 같은 이유(회전 안 하면 칸이 실제로 보이는 자리와 안 맞는다).
+      const raw = ref.kind === 'breadboard' ? breadboardAnchor(layout, ref.col, ref.side) : breadboardRailAnchor(layout, ref.rail)
+      return rotateAround(raw, breadboardPivot(layout), bb.rotation ?? 0)
     }
     const comp = components.find((c) => c.id === ref.componentId)
     const spec = comp ? COMPONENT_PINS[comp.type].find((p) => p.pin === ref.pin) : undefined
@@ -603,6 +628,7 @@ function CircuitCanvas(
               <BreadboardGlyph
                 key={b.id}
                 layout={layout}
+                rotation={b.rotation ?? 0}
                 locked={locked}
                 selected={selected?.kind === 'breadboard' && selected.id === b.id}
                 onBodyPointerDown={(event) => {
@@ -611,7 +637,7 @@ function CircuitCanvas(
                   const p = toModelPoint(event.clientX, event.clientY)
                   setDragging({ id: b.id, kind: 'breadboard', dx: p.x - b.x, dy: p.y - b.y })
                 }}
-                onDotPointerDown={(ref, point) => startWire(ref, point)}
+                onDotPointerDown={(ref) => startWire(ref, pinPoint(ref))}
                 onDotPointerUp={(ref) => finishWire(ref)}
               />
             )
@@ -920,6 +946,7 @@ function PinDot({
 
 function BreadboardGlyph({
   layout,
+  rotation,
   locked,
   selected,
   onBodyPointerDown,
@@ -927,10 +954,11 @@ function BreadboardGlyph({
   onDotPointerUp,
 }: {
   layout: BreadboardLayout
+  rotation: number
   locked: boolean
   selected: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
-  onDotPointerDown: (ref: PinRef, point: Point) => void
+  onDotPointerDown: (ref: PinRef) => void
   onDotPointerUp: (ref: PinRef) => void
 }) {
   const l = layout
@@ -953,7 +981,7 @@ function BreadboardGlyph({
           interactive={!locked}
           onPointerDown={(e) => {
             e.stopPropagation()
-            onDotPointerDown(ref, { x, y })
+            onDotPointerDown(ref)
           }}
           onPointerUp={(e) => {
             e.stopPropagation()
@@ -975,7 +1003,7 @@ function BreadboardGlyph({
           interactive={!locked}
           onPointerDown={(e) => {
             e.stopPropagation()
-            onDotPointerDown(ref, { x, y })
+            onDotPointerDown(ref)
           }}
           onPointerUp={(e) => {
             e.stopPropagation()
@@ -1000,7 +1028,7 @@ function BreadboardGlyph({
         interactive={!locked}
         onPointerDown={(e) => {
           e.stopPropagation()
-          onDotPointerDown(plusRef, { x, y: l.railPlusY })
+          onDotPointerDown(plusRef)
         }}
         onPointerUp={(e) => {
           e.stopPropagation()
@@ -1019,7 +1047,7 @@ function BreadboardGlyph({
         interactive={!locked}
         onPointerDown={(e) => {
           e.stopPropagation()
-          onDotPointerDown(minusRef, { x, y: l.railMinusY })
+          onDotPointerDown(minusRef)
         }}
         onPointerUp={(e) => {
           e.stopPropagation()
@@ -1033,8 +1061,18 @@ function BreadboardGlyph({
   const tickCols = [0]
   for (let c = 4; c < l.columns; c += 5) tickCols.push(c)
 
+  const pivot = breadboardPivot(l)
+
   return (
     <g style={{ filter: 'url(#chico-shadow)' }}>
+      {/* rotation은 몸통·칸·라벨을 전부 감싼 이 안쪽 그룹에만 건다. 회전 중심은
+          브레드보드 한가운데(breadboardPivot) — pinPoint()의 breadboard/
+          breadboardRail 분기가 rotateAround로 계산하는 것과 같은 중심·방향이라야
+          전선이 실제 보이는 칸 위치에 붙는다(부품/보드와 같은 이유). 선택 표시도
+          이 안에 둬서 몸통과 같이 돈다 — 칸이 많아 세로로 긴 모양이라, 돌아간
+          채로 있는 게 자연스럽다(부품의 원형 선택 표시와 달리 회전에 영향받는
+          모양이라 밖에 두면 몸통과 안 맞는다). */}
+      <g transform={`rotate(${rotation} ${pivot.x} ${pivot.y})`}>
       {selected && (
         <rect
           x={l.x - 5}
@@ -1094,6 +1132,7 @@ function BreadboardGlyph({
         브레드보드
       </text>
       {dots}
+      </g>
     </g>
   )
 }
