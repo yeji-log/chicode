@@ -55,6 +55,9 @@ export interface PlacedComponent {
   type: ComponentType
   x: number
   y: number
+  /** 0/90/180/270도. 없으면 0(회전 없음)으로 취급 — 이 필드가 생기기 전 저장된
+   *  회로(localStorage, EXAMPLES)도 그대로 읽혀야 하니 optional로 둔다. */
+  rotation?: 0 | 90 | 180 | 270
 }
 
 export type BreadboardSize = 'mini' | 'medium'
@@ -71,10 +74,36 @@ export interface PlacedBreadboard {
   y: number
 }
 
+/** 점퍼선 색 — 실제 브레드보드 배선 관례(전원=빨강, 접지=검정 등)를 그대로 옵션으로
+ *  준다. 새로 잇는 전선은 팔레트에서 고른 색을 쓰고, 이미 그은 전선은 오른쪽 클릭으로
+ *  바꾼다(왼쪽 클릭은 기존처럼 삭제 — 의미를 안 바꿨다). */
+export const WIRE_COLORS: { name: string; value: string }[] = [
+  { name: '빨강', value: '#dc2626' },
+  { name: '검정', value: '#1f2937' },
+  { name: '파랑', value: '#2563eb' },
+  { name: '노랑', value: '#eab308' },
+  { name: '초록', value: '#16a34a' },
+]
+export const DEFAULT_WIRE_COLOR = WIRE_COLORS[0].value
+
 export interface Wire {
   id: string
   from: PinRef
   to: PinRef
+  /** 없으면 DEFAULT_WIRE_COLOR(빨강) — 이 필드가 생기기 전 저장된 회로도 그대로
+   *  읽혀야 하니 optional. */
+  color?: string
+}
+
+/** dx/dy(부품 기준 상대 좌표)를 부품의 rotation만큼 원점 기준으로 돌린다.
+ *  ComponentGlyph가 부품 몸통을 그릴 때 쓰는 SVG rotate()와 같은 방향(시계 방향,
+ *  화면 좌표계라 y가 아래로 갈수록 증가)이라야 전선이 실제로 눈에 보이는 핀 위치에
+ *  붙는다. */
+export function rotateOffset(dx: number, dy: number, rotation: number): Point {
+  const rad = (rotation * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  return { x: dx * cos - dy * sin, y: dx * sin + dy * cos }
 }
 
 /** 회로 캔버스가 통째로 저장/불러오는 상태 — 예제마다 이 모양으로 회로를 같이 들고 있는다. */

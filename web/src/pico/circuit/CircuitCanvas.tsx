@@ -24,10 +24,13 @@ import {
   COMPONENT_PINS,
   type ComponentCategory,
   type ComponentType,
+  DEFAULT_WIRE_COLOR,
   type PinRef,
   type PlacedComponent,
   type Point,
   pinRefKey,
+  rotateOffset,
+  WIRE_COLORS,
 } from './types'
 
 const STORAGE_KEY = 'chicode.pico.circuit'
@@ -96,6 +99,8 @@ function CircuitCanvas(
   const [dragging, setDragging] = useState<DragTarget | null>(null)
   // 버튼(누르는 동안)과 스위치(클릭해서 토글) 둘 다 "지금 켜진 입력 부품 id" 로 통일해서 관리한다.
   const [activeInputs, setActiveInputs] = useState<Set<string>>(new Set())
+  // 지금부터 새로 잇는 전선에 쓸 색 — 팔레트에서 고르면 바뀐다(finishWire 참고).
+  const [wireColor, setWireColor] = useState(DEFAULT_WIRE_COLOR)
   const svgRef = useRef<SVGSVGElement>(null)
 
   // 줌/팬은 회로 데이터(components/breadboards/wires)와 달리 저장하지 않는다 — 매번
@@ -227,7 +232,12 @@ function CircuitCanvas(
           ...s,
           wires: [
             ...s.wires,
-            { id: `w${Date.now()}${Math.random().toString(36).slice(2, 6)}`, from: current.from, to: ref },
+            {
+              id: `w${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+              from: current.from,
+              to: ref,
+              color: wireColor,
+            },
           ],
         }
       })
@@ -298,6 +308,23 @@ function CircuitCanvas(
     setState((s) => ({ ...s, wires: s.wires.filter((w) => w.id !== id) }))
   }
 
+  /** 오른쪽 클릭으로 이미 그은 전선의 색을 지금 고른 색(wireColor)으로 바꾼다 — 왼쪽
+   *  클릭(삭제)의 의미는 그대로 두고 색만 따로 바꿀 방법을 준다. */
+  const recolorWire = (id: string, event: React.MouseEvent) => {
+    event.preventDefault()
+    if (locked) return
+    setState((s) => ({ ...s, wires: s.wires.map((w) => (w.id === id ? { ...w, color: wireColor } : w)) }))
+  }
+
+  /** 회로를 통째로 비운다 — 되돌릴 수 없어서 확인창을 거친다(반/학생 삭제 등 다른
+   *  화면의 파괴적 동작과 같은 패턴, ClassRecords.tsx 참고). */
+  const clearAll = () => {
+    if (locked) return
+    if (!confirm('회로를 전부 지울까요? 부품·브레드보드·전선이 모두 사라지고 되돌릴 수 없습니다.'))
+      return
+    setState({ components: [], breadboards: [], wires: [] })
+  }
+
   const addComponent = (type: ComponentType) => {
     if (locked) return
     const id = `${type.replace('-', '')}${Date.now().toString(36)}`
@@ -316,6 +343,19 @@ function CircuitCanvas(
         (w) =>
           !(w.from.kind === 'component' && w.from.componentId === id) &&
           !(w.to.kind === 'component' && w.to.componentId === id),
+      ),
+    }))
+  }
+
+  /** 클릭할 때마다 시계 방향으로 90도씩 돈다 — 배치 방향에 맞게 몇 번 눌러서 맞춘다.
+   *  브레드보드는 회전 대상에서 뺐다(칸이 많아 회전하면 줄/칸 계산을 다시 해야 해서
+   *  범위 밖으로 남겨둠 — LED/버튼 같은 낱개 부품만 우선). */
+  const rotateComponent = (id: string) => {
+    if (locked) return
+    setState((s) => ({
+      ...s,
+      components: s.components.map((c) =>
+        c.id === id ? { ...c, rotation: (((c.rotation ?? 0) + 90) % 360) as PlacedComponent['rotation'] } : c,
       ),
     }))
   }
@@ -368,7 +408,10 @@ function CircuitCanvas(
     const comp = components.find((c) => c.id === ref.componentId)
     const spec = comp ? COMPONENT_PINS[comp.type].find((p) => p.pin === ref.pin) : undefined
     if (!comp || !spec) return { x: 0, y: 0 }
-    return { x: comp.x + spec.dx, y: comp.y + spec.dy }
+    // 부품이 회전했으면 다리(리드선) 끝점도 같이 돌아간다 — ComponentGlyph가 몸통에
+    // 거는 rotate()와 같은 각도라야 전선이 실제로 보이는 핀 자리에 붙는다.
+    const offset = rotateOffset(spec.dx, spec.dy, comp.rotation ?? 0)
+    return { x: comp.x + offset.x, y: comp.y + offset.y }
   }
 
   /** Tinkercad 처럼 전선이 부드러운 곡선(케이블)으로 처지게 그린다 — 직각 꺾임 대신. */
@@ -385,6 +428,9 @@ function CircuitCanvas(
         addComponent={addComponent}
         addBreadboard={addBreadboard}
         locked={locked}
+        wireColor={wireColor}
+        setWireColor={setWireColor}
+        onClearAll={clearAll}
       />
 
       <svg
@@ -459,12 +505,13 @@ function CircuitCanvas(
               <path
                 key={w.id}
                 d={wirePath(a, b)}
-                stroke="#dc2626"
+                stroke={w.color ?? DEFAULT_WIRE_COLOR}
                 strokeWidth={3.5}
                 fill="none"
                 strokeLinecap="round"
-                className={locked ? '' : 'cursor-pointer hover:stroke-red-800'}
+                className={locked ? '' : 'cursor-pointer hover:opacity-70'}
                 onClick={() => removeWire(w.id)}
+                onContextMenu={(e) => recolorWire(w.id, e)}
               />
             )
           })}
@@ -479,6 +526,7 @@ function CircuitCanvas(
                 fill="none"
                 className="cursor-pointer"
                 onClick={() => removeWire(w.id)}
+                onContextMenu={(e) => recolorWire(w.id, e)}
               />
             ))}
 
@@ -506,6 +554,7 @@ function CircuitCanvas(
                 setDragging({ id: c.id, kind: 'component', dx: p.x - c.x, dy: p.y - c.y })
               }}
               onRemove={() => removeComponent(c.id)}
+              onRotate={() => rotateComponent(c.id)}
               onPinPointerDown={(pin, event) => {
                 event.stopPropagation()
                 startWire({ kind: 'component', componentId: c.id, pin }, pinPoint({ kind: 'component', componentId: c.id, pin }))
@@ -559,12 +608,18 @@ function Palette({
   addComponent,
   addBreadboard,
   locked,
+  wireColor,
+  setWireColor,
+  onClearAll,
 }: {
   tab: ComponentCategory | 'breadboard'
   setTab: (t: ComponentCategory | 'breadboard') => void
   addComponent: (type: ComponentType) => void
   addBreadboard: (size: BreadboardSize) => void
   locked: boolean
+  wireColor: string
+  setWireColor: (color: string) => void
+  onClearAll: () => void
 }) {
   const TABS: { key: ComponentCategory | 'breadboard'; label: string }[] = [
     { key: 'output', label: '출력 장치' },
@@ -574,21 +629,30 @@ function Palette({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex gap-1 border-b border-cream-deep">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={[
-              'rounded-t-lg px-3 py-1.5 text-xs font-bold transition-colors',
-              tab === t.key
-                ? 'border border-b-0 border-cream-deep bg-white text-ink-900'
-                : 'text-ink-500 hover:text-ink-700',
-            ].join(' ')}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-2 border-b border-cream-deep">
+        <div className="flex gap-1">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={[
+                'rounded-t-lg px-3 py-1.5 text-xs font-bold transition-colors',
+                tab === t.key
+                  ? 'border border-b-0 border-cream-deep bg-white text-ink-900'
+                  : 'text-ink-500 hover:text-ink-700',
+              ].join(' ')}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button
+          disabled={locked}
+          onClick={onClearAll}
+          className="mb-1 rounded-lg border border-cream-deep px-2 py-1 text-xs font-semibold text-ink-500 transition-colors hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          🗑️ 전체 삭제
+        </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -613,10 +677,32 @@ function Palette({
                 🍞 {b.label} 추가
               </button>
             ))}
+
+        {/* 전선 색 — 지금부터 새로 잇는 전선에 쓰인다. 이미 그은 전선은 오른쪽
+            클릭으로 이 색을 입힌다(recolorWire). */}
+        <div className="flex items-center gap-1 rounded-lg border border-cream-deep bg-white px-2 py-1">
+          <span className="text-xs font-semibold text-ink-500">전선 색</span>
+          {WIRE_COLORS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              disabled={locked}
+              aria-label={c.name}
+              title={c.name}
+              onClick={() => setWireColor(c.value)}
+              className={[
+                'h-5 w-5 rounded-full border-2 transition-transform disabled:cursor-not-allowed disabled:opacity-40',
+                wireColor === c.value ? 'scale-110 border-ink-900' : 'border-white/60 hover:scale-105',
+              ].join(' ')}
+              style={{ backgroundColor: c.value }}
+            />
+          ))}
+        </div>
+
         <span className="text-xs text-ink-500">
           {locked
             ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
-            : '핀(원)을 끌어 다른 핀까지 전선을 잇고, 몸통은 끌어서 옮기고, 전선/✕는 클릭합니다.'}
+            : '핀(원)을 끌어 전선을 잇고, 몸통은 끌어서 옮기고, 전선은 클릭(삭제)·오른쪽 클릭(색 바꾸기), ↻는 회전합니다.'}
         </span>
       </div>
     </div>
@@ -949,6 +1035,7 @@ function ComponentGlyph({
   onPinPointerUp,
   onInputActiveChange,
   onRemove,
+  onRotate,
 }: {
   component: PlacedComponent
   gpioLevels: Map<number, 0 | 1>
@@ -960,6 +1047,7 @@ function ComponentGlyph({
   onPinPointerUp: (pin: string, e: React.PointerEvent) => void
   onInputActiveChange: (active: boolean) => void
   onRemove: () => void
+  onRotate: () => void
 }) {
   const pins = COMPONENT_PINS[component.type]
   const isOn = (pin: string) => {
@@ -986,6 +1074,10 @@ function ComponentGlyph({
 
   return (
     <g transform={`translate(${component.x} ${component.y})`}>
+      {/* rotation은 이 안쪽 그룹에만 건다 — 바깥 그룹까지 돌리면 삭제/회전 라벨 글자도
+          같이 뒤집혀서 안 읽힌다. pinPoint()가 rotateOffset으로 계산하는 각도와 같은
+          방향(시계 방향)이라야 전선이 실제 보이는 핀 위치에 붙는다. */}
+      <g transform={`rotate(${component.rotation ?? 0})`}>
       {(component.type === 'led' || component.type === 'rgb-led' || component.type === 'buzzer') && <Legs />}
 
       {component.type === 'led' && (
@@ -1112,20 +1204,6 @@ function ComponentGlyph({
         </g>
       )}
 
-      {!locked && (
-        <text
-          x={0}
-          y={-6}
-          fontSize={9}
-          textAnchor="middle"
-          fill="#b91c1c"
-          className="cursor-pointer"
-          onClick={onRemove}
-        >
-          ✕ 삭제
-        </text>
-      )}
-
       {pins.map((p) => (
         <circle
           key={p.pin}
@@ -1140,6 +1218,36 @@ function ComponentGlyph({
           onPointerUp={locked ? undefined : (e) => onPinPointerUp(p.pin, e)}
         />
       ))}
+      </g>
+
+      {/* 삭제/회전 라벨은 회전 그룹 밖에 둔다 — 부품이 90/180/270도 돌아도 글자는
+          항상 똑바로 보여야 눌러서 조작하기 편하다. */}
+      {!locked && (
+        <>
+          <text
+            x={-16}
+            y={-6}
+            fontSize={9}
+            textAnchor="middle"
+            fill="#b91c1c"
+            className="cursor-pointer"
+            onClick={onRemove}
+          >
+            ✕ 삭제
+          </text>
+          <text
+            x={14}
+            y={-6}
+            fontSize={9}
+            textAnchor="middle"
+            fill="#57534e"
+            className="cursor-pointer"
+            onClick={onRotate}
+          >
+            ↻ 회전
+          </text>
+        </>
+      )}
     </g>
   )
 }
