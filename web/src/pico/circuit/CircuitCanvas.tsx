@@ -88,6 +88,7 @@ export interface CircuitCanvasHandle {
 }
 
 type DragTarget = { id: string; kind: 'component' | 'breadboard'; dx: number; dy: number }
+type Selection = { id: string; kind: 'component' | 'breadboard' } | null
 
 function CircuitCanvas(
   { gpioLevels, onButtonChange, locked = false }: CircuitCanvasProps,
@@ -101,6 +102,10 @@ function CircuitCanvas(
   const [activeInputs, setActiveInputs] = useState<Set<string>>(new Set())
   // 지금부터 새로 잇는 전선에 쓸 색 — 팔레트에서 고르면 바뀐다(finishWire 참고).
   const [wireColor, setWireColor] = useState(DEFAULT_WIRE_COLOR)
+  // 부품마다 "✕ 삭제"/"↻ 회전" 글자를 따로 두면 부품이 많아질수록 화면이 빽빽해지고
+  // 누르기도 작아진다는 사용자 지적으로, 클릭해서 하나만 선택한 뒤 키보드(R=회전,
+  // Delete=삭제) 또는 팔레트의 휴지통 버튼 하나로 조작하는 방식으로 바꿨다.
+  const [selected, setSelected] = useState<Selection>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
   // 줌/팬은 회로 데이터(components/breadboards/wires)와 달리 저장하지 않는다 — 매번
@@ -297,6 +302,7 @@ function CircuitCanvas(
 
   const onBackgroundPointerDown = (event: React.PointerEvent) => {
     panStartRef.current = { svg: toSvgPoint(event.clientX, event.clientY), view }
+    setSelected(null) // 빈 곳을 누르면 선택 해제
   }
 
   const zoomIn = () => zoomAt(1.2, { x: VIEW_WIDTH / 2, y: VIEW_HEIGHT / 2 })
@@ -379,6 +385,38 @@ function CircuitCanvas(
     }))
   }
 
+  /** 선택된 항목(부품 또는 브레드보드) 하나를 지운다 — 팔레트의 휴지통 버튼과
+   *  Delete/Backspace 키가 둘 다 이 함수를 부른다. */
+  const deleteSelected = () => {
+    if (locked || !selected) return
+    if (selected.kind === 'component') removeComponent(selected.id)
+    else removeBreadboard(selected.id)
+    setSelected(null)
+  }
+
+  // R = 선택한 부품 90도 회전, Delete/Backspace = 선택한 항목 삭제. 코드 에디터(Monaco)
+  // 등 다른 입력창에 포커스가 있을 때 여기서 가로채면 타이핑이 막히므로(예: 변수명에
+  // r이 들어가거나 코드를 지우려고 Delete를 누를 때) input/textarea/contentEditable
+  // 이면 무시한다.
+  useEffect(() => {
+    const isTypingTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false
+      return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (locked || !selected || isTypingTarget(event.target)) return
+      if (event.key === 'r' || event.key === 'R') {
+        if (selected.kind === 'component') rotateComponent(selected.id)
+      } else if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault()
+        deleteSelected()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, locked])
+
   // 버튼/스위치는 locked 여부와 무관하게 항상 된다 — 실행 중인 회로를 눌러보는 게
   // 이번 요청의 핵심이라 여기만 잠금에서 뺐다.
   const setInputActive = (componentId: string, active: boolean) => {
@@ -420,6 +458,15 @@ function CircuitCanvas(
     return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`
   }
 
+  // 팔레트의 "선택 삭제" 버튼에 뭘 지우려는지 보여준다 — 부품은 COMPONENT_LIST의
+  // 한글 이름을, 브레드보드는 고정 문구를 쓴다.
+  const selectedLabel =
+    selected?.kind === 'component'
+      ? (COMPONENT_LIST.find((c) => c.type === components.find((comp) => comp.id === selected.id)?.type)?.label ?? '부품')
+      : selected?.kind === 'breadboard'
+        ? '브레드보드'
+        : null
+
   return (
     <div className="flex flex-col gap-2">
       <Palette
@@ -431,6 +478,8 @@ function CircuitCanvas(
         wireColor={wireColor}
         setWireColor={setWireColor}
         onClearAll={clearAll}
+        selectedLabel={selectedLabel}
+        onDeleteSelected={deleteSelected}
       />
 
       <svg
@@ -481,12 +530,13 @@ function CircuitCanvas(
                 key={b.id}
                 layout={layout}
                 locked={locked}
+                selected={selected?.kind === 'breadboard' && selected.id === b.id}
                 onBodyPointerDown={(event) => {
                   if (locked) return
+                  setSelected({ kind: 'breadboard', id: b.id })
                   const p = toModelPoint(event.clientX, event.clientY)
                   setDragging({ id: b.id, kind: 'breadboard', dx: p.x - b.x, dy: p.y - b.y })
                 }}
-                onRemove={() => removeBreadboard(b.id)}
                 onDotPointerDown={(ref, point) => startWire(ref, point)}
                 onDotPointerUp={(ref) => finishWire(ref)}
               />
@@ -548,13 +598,13 @@ function CircuitCanvas(
               gpioForPin={(pin) => gpioForPin(c.id, pin)}
               active={activeInputs.has(c.id)}
               locked={locked}
+              selected={selected?.kind === 'component' && selected.id === c.id}
               onBodyPointerDown={(event) => {
                 if (locked) return
+                setSelected({ kind: 'component', id: c.id })
                 const p = toModelPoint(event.clientX, event.clientY)
                 setDragging({ id: c.id, kind: 'component', dx: p.x - c.x, dy: p.y - c.y })
               }}
-              onRemove={() => removeComponent(c.id)}
-              onRotate={() => rotateComponent(c.id)}
               onPinPointerDown={(pin, event) => {
                 event.stopPropagation()
                 startWire({ kind: 'component', componentId: c.id, pin }, pinPoint({ kind: 'component', componentId: c.id, pin }))
@@ -611,6 +661,8 @@ function Palette({
   wireColor,
   setWireColor,
   onClearAll,
+  selectedLabel,
+  onDeleteSelected,
 }: {
   tab: ComponentCategory | 'breadboard'
   setTab: (t: ComponentCategory | 'breadboard') => void
@@ -620,6 +672,10 @@ function Palette({
   wireColor: string
   setWireColor: (color: string) => void
   onClearAll: () => void
+  /** 지금 선택된 부품/브레드보드의 한글 이름. 선택된 게 없으면 null — 이때는
+   *  "선택 삭제" 버튼 자체를 안 보여준다(뭘 지울지 없으니). */
+  selectedLabel: string | null
+  onDeleteSelected: () => void
 }) {
   const TABS: { key: ComponentCategory | 'breadboard'; label: string }[] = [
     { key: 'output', label: '출력 장치' },
@@ -699,10 +755,22 @@ function Palette({
           ))}
         </div>
 
+        {/* 부품/브레드보드를 클릭해 선택하면 나타난다 — 휴지통 버튼 하나로 지운다
+            (부품마다 작은 삭제 글자를 따로 두던 것 대신, 사용자 요청으로 바꿈). */}
+        {selectedLabel && (
+          <button
+            disabled={locked}
+            onClick={onDeleteSelected}
+            className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            🗑️ {selectedLabel} 삭제
+          </button>
+        )}
+
         <span className="text-xs text-ink-500">
           {locked
             ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
-            : '핀(원)을 끌어 전선을 잇고, 몸통은 끌어서 옮기고, 전선은 클릭(삭제)·오른쪽 클릭(색 바꾸기), ↻는 회전합니다.'}
+            : '부품/브레드보드는 클릭해서 선택 후 R(회전)·Delete(삭제)나 휴지통 버튼을 씁니다. 핀(원)을 끌어 전선을 잇고, 전선은 클릭(삭제)·오른쪽 클릭(색 바꾸기)합니다.'}
         </span>
       </div>
     </div>
@@ -746,15 +814,15 @@ function PinDot({
 function BreadboardGlyph({
   layout,
   locked,
+  selected,
   onBodyPointerDown,
-  onRemove,
   onDotPointerDown,
   onDotPointerUp,
 }: {
   layout: BreadboardLayout
   locked: boolean
+  selected: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
-  onRemove: () => void
   onDotPointerDown: (ref: PinRef, point: Point) => void
   onDotPointerUp: (ref: PinRef) => void
 }) {
@@ -860,6 +928,19 @@ function BreadboardGlyph({
 
   return (
     <g style={{ filter: 'url(#chico-shadow)' }}>
+      {selected && (
+        <rect
+          x={l.x - 5}
+          y={l.y - 5}
+          width={l.width + 10}
+          height={l.height + 10}
+          rx={9}
+          fill="none"
+          stroke="#2563eb"
+          strokeWidth={2}
+          strokeDasharray="5 3"
+        />
+      )}
       <rect x={l.x} y={l.y} width={l.width} height={l.height} rx={6} fill="url(#chico-bb-body)" stroke="#cbbf9c" />
       {/* 전원 레일 줄무늬 */}
       <line x1={l.x + 10} y1={l.railPlusY} x2={l.x + l.width - 10} y2={l.railPlusY} stroke="#f87171" strokeWidth={1.5} opacity={0.5} />
@@ -905,19 +986,6 @@ function BreadboardGlyph({
       <text x={l.x + l.width / 2} y={l.y + l.height + 12} fontSize={9} fill="#8a7a55" textAnchor="middle">
         브레드보드
       </text>
-      {!locked && (
-        <text
-          x={l.x + l.width - 4}
-          y={l.y + 10}
-          fontSize={9}
-          fill="#b91c1c"
-          textAnchor="end"
-          className="cursor-pointer"
-          onClick={onRemove}
-        >
-          ✕
-        </text>
-      )}
       {dots}
     </g>
   )
@@ -1030,24 +1098,22 @@ function ComponentGlyph({
   gpioForPin,
   active,
   locked,
+  selected,
   onBodyPointerDown,
   onPinPointerDown,
   onPinPointerUp,
   onInputActiveChange,
-  onRemove,
-  onRotate,
 }: {
   component: PlacedComponent
   gpioLevels: Map<number, 0 | 1>
   gpioForPin: (pin: string) => number | undefined
   active: boolean
   locked: boolean
+  selected: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGGElement>) => void
   onPinPointerDown: (pin: string, e: React.PointerEvent) => void
   onPinPointerUp: (pin: string, e: React.PointerEvent) => void
   onInputActiveChange: (active: boolean) => void
-  onRemove: () => void
-  onRotate: () => void
 }) {
   const pins = COMPONENT_PINS[component.type]
   const isOn = (pin: string) => {
@@ -1074,9 +1140,14 @@ function ComponentGlyph({
 
   return (
     <g transform={`translate(${component.x} ${component.y})`}>
-      {/* rotation은 이 안쪽 그룹에만 건다 — 바깥 그룹까지 돌리면 삭제/회전 라벨 글자도
-          같이 뒤집혀서 안 읽힌다. pinPoint()가 rotateOffset으로 계산하는 각도와 같은
-          방향(시계 방향)이라야 전선이 실제 보이는 핀 위치에 붙는다. */}
+      {/* 선택 표시 — 회전 그룹 밖(바깥 그룹)에 둬서 부품이 돌아가도 항상 같은
+          동그란 점선으로 보인다(굳이 몸통 모양을 따라갈 필요는 없다). */}
+      {selected && (
+        <circle cx={0} cy={20} r={26} fill="none" stroke="#2563eb" strokeWidth={2} strokeDasharray="5 3" />
+      )}
+      {/* rotation은 이 안쪽 그룹에만 건다 — 바깥 그룹(선택 표시 원)까지 돌 이유는 없다.
+          pinPoint()가 rotateOffset으로 계산하는 각도와 같은 방향(시계 방향)이라야
+          전선이 실제 보이는 핀 위치에 붙는다. */}
       <g transform={`rotate(${component.rotation ?? 0})`}>
       {(component.type === 'led' || component.type === 'rgb-led' || component.type === 'buzzer') && <Legs />}
 
@@ -1219,35 +1290,6 @@ function ComponentGlyph({
         />
       ))}
       </g>
-
-      {/* 삭제/회전 라벨은 회전 그룹 밖에 둔다 — 부품이 90/180/270도 돌아도 글자는
-          항상 똑바로 보여야 눌러서 조작하기 편하다. */}
-      {!locked && (
-        <>
-          <text
-            x={-16}
-            y={-6}
-            fontSize={9}
-            textAnchor="middle"
-            fill="#b91c1c"
-            className="cursor-pointer"
-            onClick={onRemove}
-          >
-            ✕ 삭제
-          </text>
-          <text
-            x={14}
-            y={-6}
-            fontSize={9}
-            textAnchor="middle"
-            fill="#57534e"
-            className="cursor-pointer"
-            onClick={onRotate}
-          >
-            ↻ 회전
-          </text>
-        </>
-      )}
     </g>
   )
 }
