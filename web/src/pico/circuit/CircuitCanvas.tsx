@@ -23,6 +23,7 @@ import {
   type CircuitSnapshot,
   COMPONENT_LIST,
   COMPONENT_PINS,
+  COMPONENT_PIVOT,
   type ComponentCategory,
   type ComponentType,
   DEFAULT_WIRE_COLOR,
@@ -31,7 +32,7 @@ import {
   type PlacedComponent,
   type Point,
   pinRefKey,
-  rotateOffset,
+  rotateAround,
   WIRE_COLORS,
 } from './types'
 
@@ -46,6 +47,12 @@ const GRID = 20
 const MIN_SCALE = 0.5
 const MAX_SCALE = 2.5
 const snap = (v: number) => Math.round(v / GRID) * GRID
+
+/** 보드의 회전 중심 — 보드 한가운데(가로/세로 절반)다. 왼쪽 위(0,0)를 축으로
+ *  돌리면 보드가 모서리 기준으로 빙 돌아 선택 링 밖으로 나가버린다(실제 사용자가
+ *  "파란 가이드는 가만있는데 물체가 그 밖으로 돈다"고 지적해서 찾은 문제 —
+ *  ComponentGlyph의 COMPONENT_PIVOT과 같은 이유). */
+const BOARD_PIVOT: Point = { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2 }
 
 // 처음 들어왔을 때(저장된 회로가 없을 때)는 빈 회로로 시작한다 — 코드도
 // STARTER_CODE(from machine import Pin 하나)뿐이라 앞뒤가 맞아야 한다
@@ -495,9 +502,10 @@ function CircuitCanvas(
       if (!pin) return { x: 0, y: 0 }
       // 보드도 부품처럼 옮기고 돌릴 수 있다(사용자 요청) — pin.x/y는 이제 보드 기준
       // 로컬 좌표(board.ts 참고)라, 컴포넌트 핀과 같은 방식으로 보드의 위치·회전을
-      // 적용해야 실제 화면 위치가 나온다.
-      const offset = rotateOffset(pin.x, pin.y, boardPos.rotation ?? 0)
-      return { x: boardPos.x + offset.x, y: boardPos.y + offset.y }
+      // 적용해야 실제 화면 위치가 나온다. 회전 중심은 보드 왼쪽 위(0,0)가 아니라
+      // 보드 한가운데(BOARD_PIVOT) — 안 그러면 보드가 모서리를 축으로 빙 돈다.
+      const rotated = rotateAround(pin, BOARD_PIVOT, boardPos.rotation ?? 0)
+      return { x: boardPos.x + rotated.x, y: boardPos.y + rotated.y }
     }
     if (ref.kind === 'breadboard') {
       const layout = breadboardLayouts.get(ref.boardId)
@@ -511,9 +519,11 @@ function CircuitCanvas(
     const spec = comp ? COMPONENT_PINS[comp.type].find((p) => p.pin === ref.pin) : undefined
     if (!comp || !spec) return { x: 0, y: 0 }
     // 부품이 회전했으면 다리(리드선) 끝점도 같이 돌아간다 — ComponentGlyph가 몸통에
-    // 거는 rotate()와 같은 각도라야 전선이 실제로 보이는 핀 자리에 붙는다.
-    const offset = rotateOffset(spec.dx, spec.dy, comp.rotation ?? 0)
-    return { x: comp.x + offset.x, y: comp.y + offset.y }
+    // 거는 rotate()와 같은 중심·각도라야 전선이 실제로 보이는 핀 자리에 붙는다.
+    // 회전 중심은 부품 로컬 원점(0,0)이 아니라 몸통 한가운데(COMPONENT_PIVOT) —
+    // 안 그러면 몸통이 원점을 축으로 궤도를 그리며 돈다.
+    const rotated = rotateAround({ x: spec.dx, y: spec.dy }, COMPONENT_PIVOT[comp.type], comp.rotation ?? 0)
+    return { x: comp.x + rotated.x, y: comp.y + rotated.y }
   }
 
   /** Tinkercad 처럼 전선이 부드러운 곡선(케이블)으로 처지게 그린다 — 직각 꺾임 대신. */
@@ -1119,9 +1129,16 @@ function PicoBoard({
           strokeDasharray="5 3"
         />
       )}
-      {/* rotation은 몸통·핀만 감싼 안쪽 그룹에만 건다 — pinPoint()가 rotateOffset()으로
-          계산하는 각도와 같은 방향이라야 전선이 실제 보이는 핀 위치에 붙는다. */}
-      <g transform={`rotate(${board.rotation ?? 0})`} style={{ filter: 'url(#chico-shadow)' }}>
+      {/* rotation은 몸통·핀만 감싼 안쪽 그룹에만 건다. 회전 중심은 보드 한가운데
+          (BOARD_PIVOT) — 선택 표시 사각형은 이미 그 중심에 맞춰져 있어서(위 rect가
+          -6~206, -6~566로 대칭) 손 안 대도 되지만, rotate() 자체엔 중심을 명시
+          안 하면 기본값인 왼쪽 위(0,0)를 축으로 돌아 보드가 궤도를 그리며 돈다.
+          pinPoint()가 rotateAround(pin, BOARD_PIVOT, …)로 계산하는 것과 같은
+          중심·방향이라야 전선이 실제 보이는 핀 위치에 붙는다. */}
+      <g
+        transform={`rotate(${board.rotation ?? 0} ${BOARD_WIDTH / 2} ${BOARD_HEIGHT / 2})`}
+        style={{ filter: 'url(#chico-shadow)' }}
+      >
         <rect x={0} y={0} width={BOARD_WIDTH} height={BOARD_HEIGHT} rx={10} fill="url(#chico-board-body)" stroke="#0f3d29" />
         {/* USB 커넥터 */}
         <rect x={cx - 18} y={-6} width={36} height={16} rx={2} fill="#c7cdd6" stroke="#8891a1" />
@@ -1249,6 +1266,7 @@ function ComponentGlyph({
   onInputActiveChange: (active: boolean) => void
 }) {
   const pins = COMPONENT_PINS[component.type]
+  const pivot = COMPONENT_PIVOT[component.type]
   const isOn = (pin: string) => {
     const gpio = gpioForPin(pin)
     return gpio !== undefined && gpioLevels.get(gpio) === 1
@@ -1273,15 +1291,19 @@ function ComponentGlyph({
 
   return (
     <g transform={`translate(${component.x} ${component.y})`}>
-      {/* 선택 표시 — 회전 그룹 밖(바깥 그룹)에 둬서 부품이 돌아가도 항상 같은
-          동그란 점선으로 보인다(굳이 몸통 모양을 따라갈 필요는 없다). */}
+      {/* 선택 표시 — 몸통 중심(pivot)에 맞춘 원. 회전 그룹 밖에 둬서 부품이
+          돌아가도 항상 같은 자리에 그대로 있다(부품이 이 안에서 도는 것처럼
+          보여야 한다 — 중심이 어긋나 있으면 부품이 선택 링 밖으로 궤도를 그리며
+          도는 것처럼 보인다, 실제로 지적받은 문제). */}
       {selected && (
-        <circle cx={0} cy={20} r={26} fill="none" stroke="#2563eb" strokeWidth={2} strokeDasharray="5 3" />
+        <circle cx={pivot.x} cy={pivot.y} r={26} fill="none" stroke="#2563eb" strokeWidth={2} strokeDasharray="5 3" />
       )}
-      {/* rotation은 이 안쪽 그룹에만 건다 — 바깥 그룹(선택 표시 원)까지 돌 이유는 없다.
-          pinPoint()가 rotateOffset으로 계산하는 각도와 같은 방향(시계 방향)이라야
-          전선이 실제 보이는 핀 위치에 붙는다. */}
-      <g transform={`rotate(${component.rotation ?? 0})`}>
+      {/* rotation은 이 안쪽 그룹에만 건다 — 바깥 그룹(선택 표시 원)까지 돌 이유는
+          없다. 회전 중심을 몸통 중심(pivot)으로 명시해야 몸통이 제자리에서 돈다
+          (기본값 rotate(각도)는 로컬 원점(0,0) 기준이라 몸통과 안 맞는다).
+          pinPoint()가 rotateAround로 계산하는 것과 같은 중심·방향(시계 방향)
+          이라야 전선이 실제 보이는 핀 위치에 붙는다. */}
+      <g transform={`rotate(${component.rotation ?? 0} ${pivot.x} ${pivot.y})`}>
       {(component.type === 'led' || component.type === 'rgb-led' || component.type === 'buzzer') && <Legs />}
 
       {component.type === 'led' && (

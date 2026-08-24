@@ -116,6 +116,17 @@ export function rotateOffset(dx: number, dy: number, rotation: number): Point {
   return { x: dx * cos - dy * sin, y: dx * sin + dy * cos }
 }
 
+/** point를 pivot 기준으로 돌린다(rotateOffset은 항상 원점(0,0) 기준이라, 부품
+ *  로컬 원점이 몸통 중심과 다르면 몸통이 궤도를 그리며 빙 돌아버린다 — 실제로
+ *  사용자가 "파란 선택 링은 가만있는데 부품이 그 밖으로 돌아나간다"고 지적해서
+ *  찾은 문제다). ComponentGlyph/PicoBoard가 여는 SVG `rotate(각도, pivot.x,
+ *  pivot.y)`와 정확히 같은 중심을 써야 화면에 보이는 자리와 전선이 붙는 자리가
+ *  맞는다. */
+export function rotateAround(point: Point, pivot: Point, rotation: number): Point {
+  const offset = rotateOffset(point.x - pivot.x, point.y - pivot.y, rotation)
+  return { x: pivot.x + offset.x, y: pivot.y + offset.y }
+}
+
 /** 회로 캔버스가 통째로 저장/불러오는 상태 — 예제마다 이 모양으로 회로를 같이 들고 있는다. */
 export interface CircuitSnapshot {
   components: PlacedComponent[]
@@ -150,4 +161,16 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'a', dx: -16, dy: 18 },
     { pin: 'b', dx: 16, dy: 18 },
   ],
+}
+
+/** 부품 종류별 "몸통 중심"(회전 중심) — ComponentGlyph의 몸통 도형 좌표와 맞춰
+ *  직접 눈으로 재서 정했다. LED/RGB LED/부저는 몸통 원(cy=18)의 중심, 버튼/
+ *  스위치는 몸통 사각형(y 0~20)의 중심이다. 여기서 벗어나면 회전할 때 몸통이
+ *  선택 링 밖으로 궤도를 그리며 돈다. */
+export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
+  led: { x: 0, y: 18 },
+  'rgb-led': { x: 0, y: 18 },
+  buzzer: { x: 0, y: 18 },
+  button: { x: 0, y: 10 },
+  switch: { x: 0, y: 10 },
 }
