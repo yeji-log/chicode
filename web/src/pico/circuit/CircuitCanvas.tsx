@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 
+import Modal from '../../components/Modal'
 import { BOARD_HEIGHT, BOARD_PINS, BOARD_WIDTH, BOARD_X, BOARD_Y, type BoardPin } from './board'
 import {
   type BreadboardLayout,
@@ -106,6 +107,10 @@ function CircuitCanvas(
   // 누르기도 작아진다는 사용자 지적으로, 클릭해서 하나만 선택한 뒤 키보드(R=회전,
   // Delete=삭제) 또는 팔레트의 휴지통 버튼 하나로 조작하는 방식으로 바꿨다.
   const [selected, setSelected] = useState<Selection>(null)
+  // 전체 삭제 확인은 window.confirm() 대신 앱 안 모달로 띄운다 — 특정 환경(임베드된
+  // 브라우저, 일부 아이패드 웹뷰 등)에서 네이티브 confirm()이 아무 반응 없이 조용히
+  // 취소로 처리되는 문제가 실제로 보고됐다(사용자가 "확인창 자체가 안 뜬다"고 확인).
+  const [confirmingClearAll, setConfirmingClearAll] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
 
   // 줌/팬은 회로 데이터(components/breadboards/wires)와 달리 저장하지 않는다 — 매번
@@ -322,13 +327,17 @@ function CircuitCanvas(
     setState((s) => ({ ...s, wires: s.wires.map((w) => (w.id === id ? { ...w, color: wireColor } : w)) }))
   }
 
-  /** 회로를 통째로 비운다 — 되돌릴 수 없어서 확인창을 거친다(반/학생 삭제 등 다른
-   *  화면의 파괴적 동작과 같은 패턴, ClassRecords.tsx 참고). */
+  /** 회로를 통째로 비운다 — 되돌릴 수 없어서 확인 모달을 거친다. 실제로 지우는 건
+   *  confirmClearAll(모달의 "지우기" 버튼)이 한다. */
   const clearAll = () => {
     if (locked) return
-    if (!confirm('회로를 전부 지울까요? 부품·브레드보드·전선이 모두 사라지고 되돌릴 수 없습니다.'))
-      return
+    setConfirmingClearAll(true)
+  }
+
+  const confirmClearAll = () => {
     setState({ components: [], breadboards: [], wires: [] })
+    setSelected(null)
+    setConfirmingClearAll(false)
   }
 
   const addComponent = (type: ComponentType) => {
@@ -646,6 +655,28 @@ function CircuitCanvas(
           ))}
         </g>
       </svg>
+
+      {confirmingClearAll && (
+        <Modal title="회로 전체 삭제" onClose={() => setConfirmingClearAll(false)}>
+          <p className="text-sm text-ink-700">
+            부품·브레드보드·전선이 모두 사라지고 되돌릴 수 없습니다. 정말 지울까요?
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              onClick={() => setConfirmingClearAll(false)}
+              className="rounded-lg border border-cream-deep px-4 py-2 text-sm font-semibold text-ink-700 hover:border-cheese-300"
+            >
+              취소
+            </button>
+            <button
+              onClick={confirmClearAll}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700"
+            >
+              지우기
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
