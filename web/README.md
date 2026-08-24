@@ -1,8 +1,8 @@
 # chicode web
 
-교사와 학생이 브라우저에서 수업자료를 보고 Python·C 코드를 실습하는 교육 플랫폼.
+교사와 학생이 브라우저에서 수업자료를 보고 Python·C·Pico 2 W(MicroPython) 코드를
+실습하는 교육 플랫폼.
 
-Pico 2 W 시뮬레이터는 별도 트랙으로 미뤘다(`../chicode_개발_전략_및_단계별_계획.md` 9~14단계).
 저장소 루트의 `CLAUDE.md` 에 프로젝트 전체 맥락과 다음 계획이 정리되어 있다 — 세션을
 이어서 작업한다면 이 README 보다 먼저 그 문서를 읽을 것.
 
@@ -13,10 +13,13 @@ npm install
 npm run dev
 ```
 
-`npm install` 시 `postinstall` 이 두 런타임을 자동으로 받는다 (git에는 올리지 않는다):
+`npm install` 시 `postinstall` 이 브라우저에서 돌아가는 런타임들을 자동으로 받는다
+(git에는 올리지 않는다 — 전부 `public/` 아래, `.gitignore` 처리됨):
 
-- Pyodide (약 13MB) → `public/pyodide/`
+- Pyodide 코어 (약 13MB) + numpy/pandas/matplotlib 등 (약 17MB) → `public/pyodide/`
 - clang 툴체인 (약 51MB) → `public/clang/`
+- MicroPython WebAssembly (약 450KB) → `public/micropython/`
+- pdf.js CMap·표준 폰트 데이터 → `public/pdfjs/`
 
 | 명령 | 설명 |
 | --- | --- |
@@ -24,8 +27,11 @@ npm run dev
 | `npm run build` | 프로덕션 빌드 (`dist/`, Vercel 용) |
 | `npm run build:pages` | GitHub Pages 용 빌드 (base `/chicode/`) |
 | `npm run lint` | oxlint |
-| `npm run sync:pyodide` | Pyodide 런타임 재복사 |
+| `npm run sync:pyodide` | Pyodide 코어 런타임 재복사 |
+| `npm run sync:pyodide-packages` | numpy/pandas/matplotlib 등 wheel 재다운로드 |
 | `npm run sync:clang` | clang 툴체인 재복사 |
+| `npm run sync:micropython` | MicroPython 런타임 재복사 |
+| `npm run sync:pdfjs-assets` | pdf.js CMap·폰트 데이터 재복사 |
 
 ## 화면
 
@@ -33,13 +39,16 @@ npm run dev
 | --- | --- |
 | `/` | 브랜드 메인 |
 | `/news` | 오늘의 AI·IT 이슈 (학생) |
-| `/materials` | 수업자료 목록·뷰어·다운로드 (학생) |
+| `/materials` | 수업자료 과목 선택 (학생) |
+| `/materials/:subjectId` | 핀번호 입력 후 과목별 수업목차·OT·자료 열람 |
 | `/practice` | 실습 선택 (Python / C / Pico) |
-| `/practice/python` | Python 에디터 + 실행 결과 |
+| `/practice/python` | Python 에디터 + 실행 결과 (numpy/pandas/matplotlib 포함) |
 | `/practice/c` | C 에디터 + 컴파일·실행 결과 |
-| `/practice/pico` | 준비 중 안내 (ComingSoon) |
-| `/projects`, `/lab` | 준비 중 안내 (ComingSoon) |
-| `/teacher` | 자료 업로드·삭제 (Google 로그인 + 허용 계정 확인) |
+| `/practice/pico` | Pico 2 W 시뮬레이터 — 회로 캔버스 + MicroPython 에디터. 교사는 항상, 학생은 공개 설정이 켜져야 들어감 |
+| `/lab` | 핀 게이트 뒤 활동(시즌 로드맵·활동 목록·상세). 교사용 보드 에디터도 포함 |
+| `/timetable` | 시간표 그리드 + 반별 수업기록 |
+| `/projects` | 아직 내용 없음, ComingSoon 자리표시자 |
+| `/teacher` | 자료 업로드·삭제 + Lab/뉴스/과목 관리 (Google 로그인 + 허용 계정 확인) |
 
 풋터에 개인정보처리방침·이용약관 팝업이 있다 (`src/content/PrivacyPolicy.tsx`,
 `TermsOfService.tsx`). 실제 데이터 처리 방식(Firebase Auth가 어떤 정보를 받는지,
@@ -83,6 +92,33 @@ WASI는 기성 라이브러리 대신 직접 구현했다(`src/c/wasi.ts`) — �
 
 관련 파일: `src/c/wasi.ts`(WASI 구현 + MemFS), `src/c/tar.ts`(sysroot 압축 해제),
 `src/c/clang.worker.ts`(컴파일 파이프라인), `src/c/useC.ts`, `src/c/examples.ts`
+
+## Pico 2 W 실행 방식
+
+가상 Pico 2 W 보드에 회로(LED·버튼 등)를 그리고, MicroPython 코드로 그 회로를
+실시간으로 제어하는 실습이다. 설계·검증 과정은 저장소 루트의
+`pico2w_시뮬레이터_구현_계획.md` 에 있다 — "먼저 검증, 그다음 구현" 원칙대로
+직접 설치해서 확인한 결과로 쓴 문서다.
+
+- MicroPython을 직접 WebAssembly로 포팅하지 않는다. MicroPython 리드 메인테이너
+  (dpgeorge)가 npm에 배포하는 사전 빌드 패키지
+  (`@micropython/micropython-webassembly-pyscript`, 446KB)를 그대로 쓴다 —
+  Pyodide·clang과 같은 패턴으로 `postinstall` 때 `public/micropython`에 복사해 둔다.
+- 이 빌드엔 `machine`(GPIO) 모듈이 아예 없다 — 브라우저엔 진짜 GPIO가 없으니 당연하다.
+  `registerJsModule` 공식 API로 `machine.Pin`을 직접 구현해 JS 쪽 가상 회로와 연결한다.
+- **진짜 문제는 `time.sleep()`이 진짜로 블로킹이라는 것.** WASM 호출 중엔 JS 이벤트
+  루프에 제어권이 전혀 안 돌아와서, 실행 중에 학생이 가상 버튼을 눌러도 반영되지
+  않는다(실측 확인). 해결책: `machine`/`time` 셔임의 하드웨어 호출을 JS `async` 함수로
+  만들고 Python 쪽에서 `await`로 부르면 그 순간 진짜로 이벤트 루프에 양보한다
+  (`runPythonAsync`가 모듈 최상위 `await`를 지원 — 확인 완료).
+- 제약: `machine.Pin`(디지털 입출력)만 지원, ADC/PWM/I2C/SPI/UART는 아직 없음. 함수
+  없이 최상위(또는 `while`)에 코드를 두면 실행 중에도 버튼 반응을 볼 수 있지만, 함수로
+  감싸면 실행이 끝난 뒤 결과만 보인다. 브레드보드는 10칸 + 전원 레일만 있는 축소판.
+- 학생 공개는 `practiceSettings/pico2w` 문서의 `open` 필드로 켠다(`PicoGate.tsx`) —
+  교사는 이 설정과 무관하게 항상 들어간다.
+
+관련 파일: `src/pico/usePico.ts`, `src/pico/circuit/CircuitCanvas.tsx`,
+`src/pages/PicoLab.tsx`, `src/pages/PicoGate.tsx`
 
 ## 교사 인증 (Firebase)
 
@@ -228,11 +264,8 @@ Blaze 로 올려 Storage 를 쓰게 되면 `src/lib/materials.ts` 의 함수 본
 
 ## 다음 계획
 
-`../수업자료_과목별_핀잠금_구현_계획.md` — 수업자료를 과목별(정보/인공지능 기초)로
-나누고 핀번호로 가볍게 잠근다. 의도적으로 서버 검증 없는 가벼운 잠금이다(Firestore
-`read: true` 유지). 상세 설계와 트레이드오프는 그 문서에 있다.
-
-그 외 검토만 하고 구현 안 한 것은 `CLAUDE.md` 참고 (numpy/pandas/matplotlib).
+현재 백로그는 저장소 루트 `CLAUDE.md` 가 최신 상태를 유지한다 — 이 README 보다
+자주 바뀌므로 여기엔 목록을 복제하지 않는다.
 
 ## 참고
 
