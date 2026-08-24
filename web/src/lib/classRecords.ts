@@ -130,10 +130,17 @@ export async function listStudents(classId: string): Promise<Student[]> {
 }
 
 export async function addStudent(classId: string, studentNumber: string, name: string): Promise<Student> {
+  const trimmedNumber = studentNumber.trim()
   const existing = await listStudents(classId)
+  // addStudentsBulk(일괄 추가)는 이미 있는 학번을 건너뛰는데, 이 함수엔 그 확인이
+  // 없었다 — 실제 프로덕션 데이터에서 같은 학번이 두 번 저장된 걸 발견하고 나서
+  // 추가했다(사용자가 "한 명만 추가"로 이미 있는 학번을 다시 넣은 것으로 보임).
+  if (existing.some((entry) => entry.studentNumber === trimmedNumber)) {
+    throw new Error(`이미 있는 학번입니다 (${trimmedNumber}).`)
+  }
   const order = existing.reduce((max, entry) => Math.max(max, entry.order ?? 0), -1) + 1
   const id = crypto.randomUUID()
-  const student = { studentNumber: studentNumber.trim(), name: name.trim(), order }
+  const student = { studentNumber: trimmedNumber, name: name.trim(), order }
   await setDoc(doc(db, CLASS_RECORDS, classId, STUDENTS, id), student)
   return { id, ...student }
 }

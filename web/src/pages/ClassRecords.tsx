@@ -632,7 +632,13 @@ function StudentAddPanel({
       setName('')
     } catch (caught) {
       console.error('학생 추가 실패', caught)
-      alert('추가하지 못했습니다. 다시 시도해 주세요.')
+      // 중복 학번처럼 사용자가 바로 이해할 수 있는 메시지는 addStudent가 직접
+      // 던진 것 그대로 보여준다 — 그 외(권한 오류 등)는 뭉뚱그린 안내로 충분하다.
+      const message =
+        caught instanceof Error && caught.message.startsWith('이미 있는 학번')
+          ? caught.message
+          : '추가하지 못했습니다. 다시 시도해 주세요.'
+      alert(message)
     } finally {
       setAddingSingle(false)
     }
@@ -782,7 +788,14 @@ function formatDateShort(date: string): string {
  *  보여준다. */
 function DateSummary({ students, dates }: { students: Student[]; dates: DateRecord[] }) {
   if (dates.length === 0) {
-    return <p className="text-sm text-ink-500">아직 수업 날짜가 없습니다. 아래에서 날짜를 추가해 주세요.</p>
+    // 날짜가 하나도 없어도 학생 수는 보여준다 — 안 그러면 학생을 추가해도
+    // "제대로 저장됐는지" 확인할 방법이 화면에 전혀 없다(실제로 이것 때문에
+    // "추가가 안 된다"는 문의를 받았다 — Firestore엔 정상 저장돼 있었다).
+    return (
+      <p className="text-sm text-ink-500">
+        학생 {students.length}명. 아직 수업 날짜가 없습니다. 아래에서 날짜를 추가해 주세요.
+      </p>
+    )
   }
   const latest = dates[dates.length - 1]
   const participating = students.filter((entry) => isParticipating(latest, entry.id)).length
@@ -808,8 +821,11 @@ function RecordTable({
   onDelete: (student: Student) => void
   onToggle: (dateId: string, studentId: string, next: boolean) => void
 }) {
-  if (dates.length === 0) return null
-
+  // 날짜가 없어도 표 자체(순서·학번·이름)는 그린다 — 이전엔 여기서 통째로
+  // null을 반환해서, 학생을 추가해도 날짜가 하나도 없으면 화면에 아무것도 안
+  // 보였다(DateSummary 주석 참고, 실제 사용자 문의로 발견). 날짜 컬럼은
+  // dates.map(...)이 그대로 빈 배열을 돌기만 하면 되므로 따로 분기할 필요가
+  // 없다.
   return (
     <div className="overflow-x-auto rounded-2xl border border-cream-deep bg-white/70">
       <table className="border-collapse text-sm">
