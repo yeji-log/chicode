@@ -46,8 +46,15 @@ export default function ClassRecords() {
   // A반에서 열어둔 추가 폼이 B반으로 넘어가서도 열려 있어 혼동을 준다.
   const [showStudentAdd, setShowStudentAdd] = useState(false)
 
+  // "명단 다운로드" 버튼은 학생추가 바로 옆(ClassPicker의 통제 줄)에 있어야
+  // 해서(사용자 요청), 정작 학생 목록은 ClassRoster가 들고 있는 걸 여기로도
+  // 알려받는다 — ClassRoster를 통째로 끌어올리는 대신 필요한 데이터만
+  // 콜백으로 미러링하는 쪽이 기존 구조를 덜 건드린다.
+  const [currentStudents, setCurrentStudents] = useState<Student[] | null>(null)
+
   useEffect(() => {
     setShowStudentAdd(false)
+    setCurrentStudents(null)
   }, [selectedClassId])
 
   useEffect(() => {
@@ -128,10 +135,20 @@ export default function ClassRecords() {
         onDelete={selectedClass ? () => handleDeleteClass(selectedClass) : undefined}
         showStudentAdd={showStudentAdd}
         onToggleStudentAdd={selectedClass ? () => setShowStudentAdd((value) => !value) : undefined}
+        onDownloadRoster={
+          selectedClass && currentStudents && currentStudents.length > 0
+            ? () => downloadRosterCsv(selectedClass.name, currentStudents)
+            : undefined
+        }
       />
 
       {selectedClass ? (
-        <ClassRoster key={selectedClass.id} classMeta={selectedClass} showStudentAdd={showStudentAdd} />
+        <ClassRoster
+          key={selectedClass.id}
+          classMeta={selectedClass}
+          showStudentAdd={showStudentAdd}
+          onStudentsChange={setCurrentStudents}
+        />
       ) : (
         <p className="text-sm text-ink-500">
           반이 없습니다. 위에서 새 반을 만들어 주세요(예: "2학년 1반").
@@ -151,6 +168,7 @@ function ClassPicker({
   onDelete,
   showStudentAdd,
   onToggleStudentAdd,
+  onDownloadRoster,
 }: {
   classes: ClassRecordMeta[]
   selectedClassId: string | null
@@ -161,6 +179,7 @@ function ClassPicker({
   onDelete: (() => void) | undefined
   showStudentAdd: boolean
   onToggleStudentAdd: (() => void) | undefined
+  onDownloadRoster: (() => void) | undefined
 }) {
   const [showAddForm, setShowAddForm] = useState(false)
 
@@ -283,6 +302,14 @@ function ClassPicker({
               ].join(' ')}
             >
               + 학생추가
+            </button>
+          )}
+          {onDownloadRoster && (
+            <button
+              onClick={onDownloadRoster}
+              className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+            >
+              명단 다운로드
             </button>
           )}
         </div>
@@ -464,13 +491,21 @@ function downloadRosterCsv(className: string, students: Student[]) {
 function ClassRoster({
   classMeta,
   showStudentAdd,
+  onStudentsChange,
 }: {
   classMeta: ClassRecordMeta
   showStudentAdd: boolean
+  // "명단 다운로드" 버튼이 ClassPicker의 통제 줄(사용자 요청)에 있어서,
+  // 여기서 불러온/바뀐 학생 목록을 부모에게도 알려준다.
+  onStudentsChange: (students: Student[] | null) => void
 }) {
   const [students, setStudents] = useState<Student[] | null>(null)
   const [dates, setDates] = useState<DateRecord[] | null>(null)
   const [loadError, setLoadError] = useState(false)
+
+  useEffect(() => {
+    onStudentsChange(students)
+  }, [students, onStudentsChange])
 
   useEffect(() => {
     setStudents(null)
@@ -552,18 +587,6 @@ function ClassRoster({
           받아 패널만 그린다. */}
       {showStudentAdd && (
         <StudentAddPanel classId={classMeta.id} onAdded={handleStudentAdded} onBulkAdded={handleStudentsBulkAdded} />
-      )}
-
-      {students.length > 0 && (
-        <div className="flex items-center">
-          <button
-            type="button"
-            onClick={() => downloadRosterCsv(classMeta.name, students)}
-            className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
-          >
-            명단 다운로드
-          </button>
-        </div>
       )}
 
       {students.length === 0 ? (
