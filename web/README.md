@@ -53,11 +53,16 @@ Python은 **학생 브라우저 안에서** 돈다. Pyodide(WebAssembly로 컴�
 - 실행은 Web Worker 안에서 한다 → 무한 루프가 화면을 얼리지 않고, **중지** 버튼으로 끊을 수 있다.
 - `input()` 은 왼쪽 아래 **입력값** 칸의 줄을 위에서부터 읽는다.
 - 오류는 Python 쪽에서 트레이스백을 다듬어 학생 코드의 줄 번호와 해당 줄만 보여준다.
-- 표준 라이브러리는 모두 쓸 수 있다. numpy 같은 외부 패키지는 코어 런타임만 로컬에 두었으므로
-  지금은 `ImportError` 가 난다 — 검토는 끝났고 구현은 안 했다. `CLAUDE.md` 의
-  "검토했지만 아직 안 만든 것" 참고 (필요 용량, 왜 matplotlib만 결과창 작업이 더 필요한지 등).
+- 표준 라이브러리는 물론 numpy, pandas, matplotlib 도 쓸 수 있다. 코어 런타임만 번들에
+  들어있고 이 패키지들은 `postinstall` 때 `scripts/sync-pyodide-packages.mjs` 가 미리
+  받아 `public/pyodide` 에 자체 호스팅해 둔다(CDN 요청 없음). 처음 import 할 때 워커가
+  그 파일을 불러오느라 몇 초 걸릴 수 있고, 그 다음부턴 캐시돼서 빠르다.
+  matplotlib 그래프는 `plt.show()` 대신 실행이 끝나면 결과창에 이미지로 나타난다(워커
+  안엔 화면이 없어 `MPLBACKEND=Agg` 로 고정하고 `plt.savefig()` 로 꺼내온다). `CLAUDE.md`
+  의 "Python numpy/pandas/matplotlib 추가" 절 참고.
 
-관련 파일: `src/python/pyodide.worker.ts`, `src/python/usePython.ts`, `src/python/examples.ts`
+관련 파일: `src/python/pyodide.worker.ts`, `src/python/usePython.ts`, `src/python/examples.ts`,
+`scripts/sync-pyodide-packages.mjs`
 
 ## C 실행 방식
 

@@ -29,7 +29,7 @@ Firebase Google 로그인 기반 교사 인증. 학생은 회원가입 없이 �
 | 수업자료 — 과목 선택 | `/materials` | 과목 카드(정보 / 인공지능 기초) 목록. `web/src/lib/subjects.ts` |
 | 수업자료 — 과목별 자료 | `/materials/:subjectId` | 핀번호 입력 후 열람. `web/src/pages/SubjectMaterials.tsx`. 아래 "과목별 핀잠금" 참고 |
 | 실습 선택 | `/practice` | Python / C언어 / Pico(준비중) 카드 |
-| Python 실습 | `/practice/python` | Pyodide(WASM CPython), Web Worker, 무한루프 중지 가능 |
+| Python 실습 | `/practice/python` | Pyodide(WASM CPython), Web Worker, 무한루프 중지 가능. numpy/pandas/matplotlib 사용 가능(matplotlib은 결과창에 이미지로) |
 | C 실습 | `/practice/c` | **진짜 clang을 브라우저에서 실행**. 아래 "C 실습 구조" 참고 |
 | Pico 2 W 실습 | `/practice/pico` | 회로 캔버스 + 코드 에디터(`PicoLab.tsx`). `PicoGate.tsx`가 교사/학생(설정 공개 여부)로 게이트. Monaco는 진입 시 동적 로드 |
 | Lab (활동/발표) | `/lab` | 핀 게이트(`LabGate.tsx`) 아래 홈·로드맵(시즌 카드)·활동 목록·활동 상세. `/materials/:subjectId`에도 로드맵·활동 화면이 과목별로 재마운트됨(`useLabScope`). 교사용 보드 에디터는 `LabBoardEditor.tsx` |
@@ -84,21 +84,37 @@ Firebase 승인 도메인은 Vercel 쪽만 등록되어 있다 (GitHub Pages는 
 - 제약: C++ 안 됨, 파일 하나만, 네트워크 불가, 파일이 실행마다 초기화됨.
   (`web/src/pages/CLab.tsx`의 SupportNote에 학생용으로도 안내되어 있음)
 
-## 검토했지만 아직 안 만든 것
+## Python numpy/pandas/matplotlib 추가 (완료)
 
-**Python에 numpy/pandas/matplotlib 추가** — 기술 검토 완료, 구현은 안 함.
-- 이미 `pyodide.worker.ts`에 `loadPackagesFromImports(code)` 호출이 있다 —
-  지금은 조용히 실패할 뿐, 패키지 파일만 채우면 켜지는 구조.
-- 실측 용량: numpy 2.8MB, pandas 4.7MB(+dateutil,pytz),
-  matplotlib 9.1MB(+pillow,fonttools 등 8개) = 총 16.6MB. **import한 것만
-  받아온다** (C 컴파일러와 달리 hello world엔 영향 없음).
-- numpy/pandas는 텍스트 출력이라 지금 결과창 그대로 사용 가능.
-- **matplotlib은 결과창에 이미지 표시 기능을 새로 만들어야 한다** — 지금은
-  텍스트 줄만 그리는 구조. `plt.savefig()` → base64 PNG → 워커 메시지로
-  전달 → `<img>` 렌더링, 이 방식이 지금 아키텍처와 가장 잘 맞는다 (라이브
-  캔버스 방식은 워커 격리를 깨야 해서 비추천).
-- 버전 고정 주의: numpy/pandas/matplotlib wheel은 현재 Pyodide 버전
-  (`web/node_modules/pyodide` package.json 확인)에 정확히 맞춰 받아야 한다.
+기술 검토(용량 실측, matplotlib만 결과창 작업이 더 필요한 이유)까지만 끝나있던
+상태였는데 실제로 붙였다. `feature/python-numpy-pandas-matplotlib` 브랜치에서
+구현해 `main`에 merge·push 완료.
+
+- Pyodide npm 패키지엔 코어 런타임만 있고 numpy 등 개별 패키지 `.whl`은 없다 —
+  `pyodide-lock.json`에 이름·해시만 있고 실제 파일은 Pyodide가 배포하는
+  jsdelivr CDN에서 받아야 한다. "외부 CDN 의존 금지" 원칙대로, 학생이 실습을
+  실행하는 시점이 아니라 `postinstall` 시점에 미리 받아 `public/pyodide`에
+  자체 호스팅해 둔다 (`web/scripts/sync-pyodide-packages.mjs`, 신규).
+- 의존성은 하드코딩하지 않고 `pyodide-lock.json`의 `depends`를 따라가며 자동
+  계산한다(지금 기준 13개 파일, 총 30MB — 코어 13MB + 패키지 17MB로 사전 추정치
+  16.6MB와 거의 일치). 파일마다 sha256 검증하고 이미 받았으면 다시 안 받는다.
+- `pyodide.worker.ts`의 `loadPackagesFromImports(code)` 호출은 이미 있었으므로
+  (조용히 실패하던 것) 파일만 채우면 코드 변경 없이 바로 동작했다.
+- **matplotlib**: 워커 안엔 화면이 없어 `plt.show()`가 기본 인터랙티브 백엔드를
+  고르면 깨진다 — `loadPyodide`의 `env` 옵션으로 `MPLBACKEND=Agg`를 미리 박아둠.
+  실행이 끝나면(matplotlib이 로드됐을 때만) RUNNER의 `_chicode_collect_images()`가
+  열린 figure를 전부 PNG(base64)로 저장하고 `plt.close('all')`로 정리한 뒤 워커
+  메시지(`type: 'image'`)로 보낸다. 결과창은 그 목록을 `<img>`로 렌더링
+  (`usePython.ts`의 `images` 상태, `PythonLab.tsx`).
+- 브라우저로 직접 확인: numpy 합계·pandas DataFrame 출력·matplotlib 그래프
+  이미지까지 정상. 재실행해도 이전 이미지 안 남고, 두 번째 실행부턴 "already
+  loaded"로 재다운로드 없이 몇 ms 안에 끝남. matplotlib 안 쓰는 기존 예제는
+  영향 없음.
+- 버전 고정 주의는 여전히 유효: numpy/pandas/matplotlib wheel은 현재 Pyodide
+  버전(`web/node_modules/pyodide` package.json)에 정확히 맞춰야 한다 — Pyodide
+  버전이 올라가면 `sync-pyodide-packages.mjs`가 알아서 새 버전에 맞는 파일을
+  받아오지만(하드코딩 안 함), 기존에 받아둔 옛 버전 파일이 `public/pyodide`에
+  남아있다면 정리가 필요할 수 있다.
 
 ## 수업자료 과목별 탭 + 핀번호 잠금 (완료)
 
