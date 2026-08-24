@@ -307,7 +307,7 @@ function ClassPicker({
           {onDownloadRoster && (
             <button
               onClick={onDownloadRoster}
-              className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
+              className="ml-auto rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
             >
               명단 다운로드
             </button>
