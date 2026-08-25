@@ -21,6 +21,13 @@ const GP14 = 'L19'
 const GND = 'L18'
 // 아래 예제들이 쓰는 나머지 핀. 왼쪽 열은 L1~L20(위→아래), 오른쪽 열은 R21~R40
 // (아래→위)이다 — board.ts 의 라벨 배열과 같은 순서다.
+const GP0 = 'L1'
+const GP1 = 'L2'
+const GP2 = 'L4'
+const GP3 = 'L5'
+const GP4 = 'L6'
+const GP5 = 'L7'
+const GP6 = 'L9'
 const GP13 = 'L17'
 const GP16 = 'R21'
 const GP17 = 'R22'
@@ -176,6 +183,38 @@ function dhtOnly(): CircuitSnapshot {
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'dht1', pin: 'out' }, to: { kind: 'board', pinId: GP14 } },
       { id: 'w2', from: { kind: 'component', componentId: 'dht1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
+function sevenSegment(): CircuitSnapshot {
+  // 획 7개를 GP0~GP6 에 하나씩. 배선이 8줄이라 예제로 미리 이어둔다 — 손으로 다
+  // 긋게 하면 그것만 한 시간이다(틀린 줄은 전선 끝을 끌어서 옮기면 된다).
+  const segments: [string, string][] = [
+    ['a', GP0],
+    ['b', GP1],
+    ['c', GP2],
+    ['d', GP3],
+    ['e', GP4],
+    ['f', GP5],
+    ['g', GP6],
+  ]
+  return {
+    components: [{ id: 'seg1', type: 'seven-segment', x: PART_X, y: 110 }],
+    breadboards: [],
+    wires: [
+      ...segments.map(([pin, boardPin], i) => ({
+        id: `w${i + 1}`,
+        from: { kind: 'component' as const, componentId: 'seg1', pin },
+        to: { kind: 'board' as const, pinId: boardPin },
+        color: '#dc2626',
+      })),
+      {
+        id: 'w8',
+        from: { kind: 'component', componentId: 'seg1', pin: 'common' },
+        to: { kind: 'board', pinId: GND },
+        color: '#1f2937',
+      },
     ],
   }
 }
@@ -428,6 +467,30 @@ while True:
         print('  추워요!')
 
     time.sleep(1)
+`,
+  },
+  {
+    name: '13. 7세그먼트로 숫자 세기',
+    circuit: sevenSegment(),
+    code: `from machine import Pin
+import time
+
+# 획 하나에 핀 하나씩. a b c d e f g 순서로 GP0~GP6 에 이어져 있다
+pins = [Pin(0, Pin.OUT), Pin(1, Pin.OUT), Pin(2, Pin.OUT), Pin(3, Pin.OUT),
+        Pin(4, Pin.OUT), Pin(5, Pin.OUT), Pin(6, Pin.OUT)]
+names = 'abcdefg'
+
+# 숫자마다 켜야 할 획들 (0 은 가운데 g 만 빼고 전부)
+shapes = ['abcdef', 'bc', 'abdeg', 'abcdg', 'bcfg', 'acdfg',
+          'acdefg', 'abc', 'abcdefg', 'abcdfg']
+
+while True:
+    for n in range(10):
+        shape = shapes[n]
+        for i in range(7):
+            pins[i].value(1 if names[i] in shape else 0)
+        print(n)
+        time.sleep(0.8)
 `,
   },
 ]

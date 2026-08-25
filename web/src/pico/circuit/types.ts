@@ -47,6 +47,7 @@ export type ComponentType =
   | 'vibration'
   | 'traffic-light'
   | 'dht'
+  | 'seven-segment'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -122,6 +123,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '리드 스위치(클릭해서 자석 대기)',
     short: '리드',
     emoji: '🧲',
+  },
+  {
+    type: 'seven-segment',
+    category: 'output',
+    label: '7세그먼트(획 7개 + 점, 핀 9개)',
+    short: '7세그',
+    emoji: '🔢',
   },
   {
     type: 'dht',
@@ -287,6 +295,20 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'green', dx: 6, dy: 62 },
     { pin: 'gnd', dx: 18, dy: 62 },
   ],
+  // 획 a~g + 소수점(dp) + 공통 음극. 실물은 핀이 위아래 두 줄이지만 여기선 아래
+  // 한 줄로 폈다 — Legs 가 몸통 아래로만 다리를 그리기도 하고, 배선할 때 한쪽만
+  // 보면 되는 게 학생한테 낫다.
+  'seven-segment': [
+    { pin: 'a', dx: -32, dy: 92 },
+    { pin: 'b', dx: -24, dy: 92 },
+    { pin: 'c', dx: -16, dy: 92 },
+    { pin: 'd', dx: -8, dy: 92 },
+    { pin: 'e', dx: 0, dy: 92 },
+    { pin: 'f', dx: 8, dy: 92 },
+    { pin: 'g', dx: 16, dy: 92 },
+    { pin: 'dp', dx: 24, dy: 92 },
+    { pin: 'common', dx: 32, dy: 92 },
+  ],
   // DHT11 모듈과 같은 3핀(VCC/DATA/GND). 실물 알맹이는 4핀이지만 시중 모듈은 3핀이다.
   dht: [
     { pin: 'vcc', dx: -16, dy: 54 },
@@ -335,7 +357,20 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   vibration: { x: 0, y: 14 },
   'traffic-light': { x: 0, y: 28 },
   dht: { x: 0, y: 21 },
+  'seven-segment': { x: 0, y: 38 },
 }
+
+/** 7세그먼트 획 하나하나의 도형. 실물처럼 비스듬히 깎인 막대 대신 둥근 사각형으로
+ *  단순화했다 — 캔버스에서 이 크기(48x72)면 깎임은 거의 안 보이고, 좌표만 복잡해진다. */
+export const SEVEN_SEGMENT_BARS: { pin: string; x: number; y: number; w: number; h: number }[] = [
+  { pin: 'a', x: -12, y: 10, w: 24, h: 5 },
+  { pin: 'f', x: -16, y: 14, w: 5, h: 23 },
+  { pin: 'b', x: 11, y: 14, w: 5, h: 23 },
+  { pin: 'g', x: -12, y: 35, w: 24, h: 5 },
+  { pin: 'e', x: -16, y: 38, w: 5, h: 23 },
+  { pin: 'c', x: 11, y: 38, w: 5, h: 23 },
+  { pin: 'd', x: -12, y: 60, w: 24, h: 5 },
+]
 
 /**
  * 온습도 센서 슬라이더가 만드는 값의 범위. 교실에서 그럴듯한 폭으로 잡았다 —

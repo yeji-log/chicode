@@ -45,6 +45,7 @@ import {
   pinRefKey,
   rotateAround,
   servoAngleFromPwm,
+  SEVEN_SEGMENT_BARS,
   type Wire,
   WIRE_COLORS,
 } from './types'
@@ -1841,7 +1842,8 @@ function ComponentGlyph({
         component.type === 'pir' ||
         component.type === 'tilt' ||
         component.type === 'reed' ||
-        component.type === 'dht') && <Legs />}
+        component.type === 'dht' ||
+        component.type === 'seven-segment') && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -2014,6 +2016,37 @@ function ComponentGlyph({
           <text x={0} y={-18} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
             {Math.round(analogValue * 100)}%
           </text>
+        </g>
+      )}
+
+      {component.type === 'seven-segment' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          <rect x={-24} y={2} width={48} height={72} rx={3} fill="#1c1917" stroke="#0c0a09" strokeWidth={1.5} />
+          {/* 꺼진 획도 옅게 그려둔다 — 실물도 안 켜진 획이 어렴풋이 보이고, 무엇보다
+              어느 자리에 어떤 획이 있는지 알아야 배선을 할 수 있다. */}
+          {SEVEN_SEGMENT_BARS.map((bar) => (
+            <rect
+              key={bar.pin}
+              x={bar.x}
+              y={bar.y}
+              width={bar.w}
+              height={bar.h}
+              rx={2}
+              fill={isOn(bar.pin) ? '#ef4444' : '#3f2b2b'}
+              style={isOn(bar.pin) ? { filter: 'drop-shadow(0 0 5px #f87171)' } : undefined}
+            />
+          ))}
+          <circle
+            cx={21}
+            cy={63}
+            r={3}
+            fill={isOn('dp') ? '#ef4444' : '#3f2b2b'}
+            style={isOn('dp') ? { filter: 'drop-shadow(0 0 5px #f87171)' } : undefined}
+          />
         </g>
       )}
 
