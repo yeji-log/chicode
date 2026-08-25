@@ -19,6 +19,11 @@ const PART_X = 450
 const GP15 = 'L20'
 const GP14 = 'L19'
 const GND = 'L18'
+// 아래 예제들이 쓰는 나머지 핀. 왼쪽 열은 L1~L20(위→아래), 오른쪽 열은 R21~R40
+// (아래→위)이다 — board.ts 의 라벨 배열과 같은 순서다.
+const GP13 = 'L17'
+const GP16 = 'R21'
+const GP17 = 'R22'
 // GP26 은 오른쪽 열이다 — 아래에서 위로 세는 자리라 id 가 R31 이다(board.ts 참고).
 const GP26 = 'R31'
 
@@ -83,6 +88,83 @@ function ldrAndLed(): CircuitSnapshot {
       { id: 'w2', from: { kind: 'component', componentId: 'ldr1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
       { id: 'w3', from: { kind: 'component', componentId: 'led1', pin: 'anode' }, to: { kind: 'board', pinId: GP15 } },
       { id: 'w4', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
+function potAndLed(): CircuitSnapshot {
+  return {
+    components: [
+      { id: 'pot1', type: 'potentiometer', x: PART_X, y: 90 },
+      { id: 'led1', type: 'led', x: PART_X, y: 250 },
+    ],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'pot1', pin: 'out' }, to: { kind: 'board', pinId: GP26 } },
+      { id: 'w2', from: { kind: 'component', componentId: 'pot1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w3', from: { kind: 'component', componentId: 'led1', pin: 'anode' }, to: { kind: 'board', pinId: GP15 } },
+      { id: 'w4', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
+function trafficLight(): CircuitSnapshot {
+  return {
+    components: [{ id: 'tl1', type: 'traffic-light', x: PART_X, y: 110 }],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'tl1', pin: 'red' }, to: { kind: 'board', pinId: GP15 } },
+      { id: 'w2', from: { kind: 'component', componentId: 'tl1', pin: 'yellow' }, to: { kind: 'board', pinId: GP16 } },
+      { id: 'w3', from: { kind: 'component', componentId: 'tl1', pin: 'green' }, to: { kind: 'board', pinId: GP17 } },
+      { id: 'w4', from: { kind: 'component', componentId: 'tl1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
+function pirAndRelay(): CircuitSnapshot {
+  return {
+    components: [
+      { id: 'pir1', type: 'pir', x: PART_X, y: 90 },
+      { id: 'relay1', type: 'relay', x: PART_X, y: 250 },
+    ],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'pir1', pin: 'a' }, to: { kind: 'board', pinId: GP14 } },
+      { id: 'w2', from: { kind: 'component', componentId: 'pir1', pin: 'b' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w3', from: { kind: 'component', componentId: 'relay1', pin: 'a' }, to: { kind: 'board', pinId: GP15 } },
+      { id: 'w4', from: { kind: 'component', componentId: 'relay1', pin: 'b' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
+function rgbLed(): CircuitSnapshot {
+  return {
+    components: [{ id: 'rgb1', type: 'rgb-led', x: PART_X, y: 130 }],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'rgb1', pin: 'r' }, to: { kind: 'board', pinId: GP13 } },
+      { id: 'w2', from: { kind: 'component', componentId: 'rgb1', pin: 'g' }, to: { kind: 'board', pinId: GP14 } },
+      { id: 'w3', from: { kind: 'component', componentId: 'rgb1', pin: 'b' }, to: { kind: 'board', pinId: GP15 } },
+      { id: 'w4', from: { kind: 'component', componentId: 'rgb1', pin: 'common' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
+function tiltAndBuzzer(): CircuitSnapshot {
+  return {
+    components: [
+      { id: 'tilt1', type: 'tilt', x: PART_X, y: 90 },
+      { id: 'buzzer1', type: 'buzzer', x: PART_X, y: 250 },
+      { id: 'vib1', type: 'vibration', x: PART_X + 130, y: 250 },
+    ],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'tilt1', pin: 'a' }, to: { kind: 'board', pinId: GP14 } },
+      { id: 'w2', from: { kind: 'component', componentId: 'tilt1', pin: 'b' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w3', from: { kind: 'component', componentId: 'buzzer1', pin: 'positive' }, to: { kind: 'board', pinId: GP15 } },
+      { id: 'w4', from: { kind: 'component', componentId: 'buzzer1', pin: 'negative' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w5', from: { kind: 'component', componentId: 'vib1', pin: 'a' }, to: { kind: 'board', pinId: GP16 } },
+      { id: 'w6', from: { kind: 'component', componentId: 'vib1', pin: 'b' }, to: { kind: 'board', pinId: GND } },
     ],
   }
 }
@@ -194,6 +276,123 @@ while True:
         led.off()
 
     time.sleep(0.3)
+`,
+  },
+  {
+    name: '7. 가변저항으로 LED 밝기 조절',
+    circuit: potAndLed(),
+    code: `from machine import Pin, ADC, PWM
+import time
+
+knob = ADC(Pin(26))    # 가변저항 - 노브를 돌려서 값을 바꾼다
+led = PWM(Pin(15))     # LED - 켜고 끄는 게 아니라 밝기로
+led.freq(1000)
+
+while True:
+    value = knob.read_u16()   # 0 ~ 65535
+    led.duty_u16(value)       # 읽은 값을 그대로 밝기로
+    print('노브', value * 100 // 65535, '%')
+    time.sleep(0.1)
+`,
+  },
+  {
+    name: '8. 신호등 만들기',
+    circuit: trafficLight(),
+    code: `from machine import Pin
+import time
+
+red = Pin(15, Pin.OUT)
+yellow = Pin(16, Pin.OUT)
+green = Pin(17, Pin.OUT)
+
+while True:
+    # 초록 5초
+    green.on()
+    print('초록 - 건너세요')
+    time.sleep(5)
+    green.off()
+
+    # 노랑 2초 (깜빡깜빡)
+    print('노랑 - 곧 바뀝니다')
+    for i in range(4):
+        yellow.on()
+        time.sleep(0.25)
+        yellow.off()
+        time.sleep(0.25)
+
+    # 빨강 5초
+    red.on()
+    print('빨강 - 멈추세요')
+    time.sleep(5)
+    red.off()
+`,
+  },
+  {
+    name: '9. 사람이 오면 불 켜기 (PIR + 릴레이)',
+    circuit: pirAndRelay(),
+    code: `from machine import Pin
+import time
+
+pir = Pin(14, Pin.IN)       # 인체감지 센서 (눌러서 감지 켜기/끄기)
+relay = Pin(15, Pin.OUT)    # 릴레이 - 진짜 전등을 켜는 스위치
+
+while True:
+    if pir.value():
+        relay.on()
+        print('사람 발견! 불 켬')
+    else:
+        relay.off()
+        print('아무도 없음')
+    time.sleep(0.3)
+`,
+  },
+  {
+    name: '10. RGB LED로 색 섞기',
+    circuit: rgbLed(),
+    code: `from machine import Pin
+import time
+
+red = Pin(13, Pin.OUT)
+green = Pin(14, Pin.OUT)
+blue = Pin(15, Pin.OUT)
+
+# 빨강+초록=노랑, 빨강+파랑=분홍, 초록+파랑=하늘색, 셋 다=흰색
+colors = [
+    ('빨강', 1, 0, 0), ('초록', 0, 1, 0), ('파랑', 0, 0, 1),
+    ('노랑', 1, 1, 0), ('분홍', 1, 0, 1), ('하늘색', 0, 1, 1),
+    ('흰색', 1, 1, 1),
+]
+
+while True:
+    for name, r, g, b in colors:
+        red.value(r)
+        green.value(g)
+        blue.value(b)
+        print(name)
+        time.sleep(0.7)
+`,
+  },
+  {
+    name: '11. 기울이면 알려주기 (틸트 + 부저 + 진동)',
+    circuit: tiltAndBuzzer(),
+    code: `from machine import Pin, PWM
+import time
+
+tilt = Pin(14, Pin.IN)       # 기울기 센서 (눌러서 기울이기)
+buzzer = PWM(Pin(15))
+buzzer.freq(880)
+motor = Pin(16, Pin.OUT)     # 진동모터
+
+while True:
+    if tilt.value():
+        buzzer.duty_u16(20000)   # 소리 켜기
+        motor.on()
+        print('기울어졌어요!')
+    else:
+        buzzer.duty_u16(0)       # 소리 끄기
+        motor.off()
+        print('똑바로')
+    time.sleep(0.2)
 `,
   },
 ]
