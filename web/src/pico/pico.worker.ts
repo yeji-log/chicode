@@ -39,6 +39,8 @@ export type WorkerResponse =
   | { type: 'gpio'; pin: number; value: 0 | 1 }
   /** PWM 상태. duty 0~65535, freq 는 Hz. deinit() 하면 duty 0 으로 온다. */
   | { type: 'pwm'; pin: number; freq: number; duty: number }
+  /** 네오픽셀 한 줄의 현재 색. write() 를 불러야 나간다(실물과 같다). */
+  | { type: 'neopixel'; pin: number; colors: string[] }
   | { type: 'done'; ok: boolean; error?: string; elapsedMs: number; interactive: boolean }
 
 const post = (message: WorkerResponse) => self.postMessage(message)
@@ -100,6 +102,17 @@ async function boot(): Promise<MicroPythonInterface> {
      *  OUT 으로 썼다가 IN 으로 바꾸면 옛날 출력값이 계속 읽히는 걸 막는다. */
     pin_clear_out(pin: number) {
       gpioOut.delete(pin)
+    },
+    /** 색 목록은 "r,g,b;r,g,b;…" 문자열로 받는다. Python 리스트를 그대로 넘기면
+     *  JS 쪽에 프록시로 와서 다루기 번거로운데, 문자열은 그냥 값으로 넘어온다. */
+    neopixel_write(pin: number, packed: string) {
+      const colors = packed
+        ? packed.split(';').map((c) => {
+            const [r, g, b] = c.split(',').map((n) => Math.max(0, Math.min(255, Number(n) | 0)))
+            return `rgb(${r}, ${g}, ${b})`
+          })
+        : []
+      post({ type: 'neopixel', pin, colors })
     },
     pwm_set(pin: number, freq: number, duty: number) {
       // PWM 이 걸린 핀은 더는 단순 on/off 가 아니다 — Pin.value() 가 옛 출력값을
@@ -384,6 +397,50 @@ def _chico_build_dht():
 
 sys.modules["dht"] = _chico_build_dht()
 del _chico_build_dht
+
+
+def _chico_build_neopixel():
+    """import neopixel 로 쓰는 WS2812 스트립. 실물은 한 가닥 선에 800kHz 펄스를
+    줄줄이 흘려보내는데, MicroPython 에서는 그 타이밍을 neopixel 모듈이 감춘다 —
+    학생이 쓰는 건 np[i] = (r,g,b) 와 np.write() 뿐이라 여기서도 그것만 있으면 된다.
+
+    write() 를 불러야 색이 나가는 것도 실물 그대로다. 이걸 빼먹어서 "왜 안 켜지지"
+    하는 게 네오픽셀 첫 수업의 단골이라, 여기서도 똑같이 안 나가게 뒀다."""
+
+    class _Module:
+        pass
+
+    class NeoPixel:
+        def __init__(self, pin, n, bpp=3, timing=1):
+            self.pin = pin.id if hasattr(pin, "id") else pin
+            self.n = n
+            self.buf = [(0, 0, 0)] * n
+
+        def __len__(self):
+            return self.n
+
+        def __setitem__(self, i, color):
+            self.buf[i] = (int(color[0]), int(color[1]), int(color[2]))
+
+        def __getitem__(self, i):
+            return self.buf[i]
+
+        def fill(self, color):
+            for i in range(self.n):
+                self[i] = color
+
+        def write(self):
+            _chico_hw.neopixel_write(
+                self.pin, ";".join("%d,%d,%d" % (c[0], c[1], c[2]) for c in self.buf)
+            )
+
+    mod = _Module()
+    mod.NeoPixel = NeoPixel
+    return mod
+
+
+sys.modules["neopixel"] = _chico_build_neopixel()
+del _chico_build_neopixel
 `
 
 /**

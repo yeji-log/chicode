@@ -18,6 +18,8 @@ export interface UsePico {
   gpio: Map<number, 0 | 1>
   /** PWM 이 걸린 핀의 주파수/듀티. LED 밝기, 부저 음, 서보 각도를 그리는 데 쓴다. */
   pwm: Map<number, { freq: number; duty: number }>
+  /** 네오픽셀 핀별 색 목록(CSS 색 문자열). write() 를 부른 시점의 값이다. */
+  neopixel: Map<number, string[]>
   run: (code: string) => void
   stop: () => void
   clearOutput: () => void
@@ -43,6 +45,7 @@ export function usePico(): UsePico {
   const [bootError, setBootError] = useState<string | null>(null)
   const [gpio, setGpio] = useState<Map<number, 0 | 1>>(new Map())
   const [pwm, setPwm] = useState<Map<number, { freq: number; duty: number }>>(new Map())
+  const [neopixel, setNeopixel] = useState<Map<number, string[]>>(new Map())
 
   const append = useCallback((stream: OutputLine['stream'], text: string) => {
     setOutput((prev) => [...prev, { id: lineId.current++, stream, text }])
@@ -89,6 +92,9 @@ export function usePico(): UsePico {
           })
           setPwm((prev) => new Map(prev).set(message.pin, { freq: message.freq, duty: message.duty }))
           break
+        case 'neopixel':
+          setNeopixel((prev) => new Map(prev).set(message.pin, message.colors))
+          break
         case 'done':
           if (!message.ok && message.error) append('err', message.error)
           if (!message.interactive) {
@@ -125,6 +131,7 @@ export function usePico(): UsePico {
       setElapsedMs(null)
       setGpio(new Map())
       setPwm(new Map())
+      setNeopixel(new Map())
       setStatus('running')
 
       const request: WorkerRequest = { type: 'run', code }
@@ -140,6 +147,7 @@ export function usePico(): UsePico {
     // 켜진 채로 굳고, PWM 부저는 소리가 계속 울린다. 보드를 끈 것과 같으니 여기서 비운다.
     setGpio(new Map())
     setPwm(new Map())
+    setNeopixel(new Map())
     append('sys', '실행을 중지했습니다.')
     setStatus('booting')
     spawnWorker()
@@ -172,6 +180,7 @@ export function usePico(): UsePico {
     bootError,
     gpio,
     pwm,
+    neopixel,
     run,
     stop,
     clearOutput,

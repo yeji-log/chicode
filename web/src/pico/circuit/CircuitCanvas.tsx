@@ -40,6 +40,7 @@ import {
   LED_COLORS,
   ledColorOf,
   mirrorX,
+  NEOPIXEL_COUNT,
   type PinRef,
   type PlacedBoard,
   type PlacedBreadboard,
@@ -135,6 +136,8 @@ export interface CircuitCanvasProps {
   gpioLevels: Map<number, 0 | 1>
   /** PWM 이 걸린 핀의 주파수/듀티 — LED 는 밝기로, 부저는 음 높이로 보여준다. */
   pwmLevels: Map<number, { freq: number; duty: number }>
+  /** 네오픽셀 핀별 색 목록. write() 를 부른 시점의 값이다. */
+  neopixelColors: Map<number, string[]>
   /** 버튼/스위치가 눌리거나 켜질 때, 연결된 GPIO 번호로 알려준다(연결 안 됐으면 안 불림). */
   onButtonChange: (gpio: number, pressed: boolean) => void
   /** 가변저항 노브를 돌릴 때, 연결된 GPIO 번호로 0~65535 값을 알려준다. */
@@ -178,7 +181,7 @@ type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' | 'wir
 type Rewiring = { wireId: string; end: 'from' | 'to' } | null
 
 function CircuitCanvas(
-  { gpioLevels, pwmLevels, onButtonChange, onAnalogChange, onDhtChange, locked = false }: CircuitCanvasProps,
+  { gpioLevels, pwmLevels, neopixelColors, onButtonChange, onAnalogChange, onDhtChange, locked = false }: CircuitCanvasProps,
   ref: React.Ref<CircuitCanvasHandle>,
 ) {
   const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
@@ -1057,6 +1060,7 @@ function CircuitCanvas(
                 component={c}
                 gpioLevels={gpioLevels}
                 pwmLevels={pwmLevels}
+                neopixelColors={neopixelColors}
                 gpioForPin={(pin) => gpioForPin(c.id, pin)}
                 active={activeInputs.has(c.id)}
                 analogValue={analogValues.get(analogKey(c.id)) ?? 0}
@@ -1812,6 +1816,7 @@ function ComponentGlyph({
   component,
   gpioLevels,
   pwmLevels,
+  neopixelColors,
   gpioForPin,
   active,
   analogValue,
@@ -1828,6 +1833,7 @@ function ComponentGlyph({
   component: PlacedComponent
   gpioLevels: Map<number, 0 | 1>
   pwmLevels: Map<number, { freq: number; duty: number }>
+  neopixelColors: Map<number, string[]>
   gpioForPin: (pin: string) => number | undefined
   active: boolean
   /** 가변저항 노브·조도센서 슬라이더 위치(0~1). 다른 부품에선 안 쓴다. */
@@ -1871,6 +1877,11 @@ function ComponentGlyph({
   // RGB 는 채널마다 세기가 다를 수 있다 — PWM 을 쓰면 실제로 색이 섞인다.
   const rgbChannel = (pin: string) => Math.round(90 + 165 * levelOf(pin))
   const buzzerFreq = freqOf('positive') ?? freqOf('negative')
+  // 네오픽셀은 데이터 핀 하나로 칸 전체 색이 온다. write() 전에는 아무것도 안 온다.
+  const pixels = (() => {
+    const gpio = gpioForPin('din')
+    return gpio === undefined ? [] : (neopixelColors.get(gpio) ?? [])
+  })()
   // 서보는 신호선의 펄스 폭으로 각도가 정해진다. 신호가 없으면 null — 실물 서보는
   // 신호가 끊겨도 마지막 각도를 붙들고 있지만, 여기선 가운데(90도)로 두고 각도 표시를
   // 지운다. "지금 붙들고 있는 각도"를 흉내 내려면 부품마다 상태를 따로 들고 있어야
@@ -1929,7 +1940,8 @@ function ComponentGlyph({
         component.type === 'tilt' ||
         component.type === 'reed' ||
         component.type === 'dht' ||
-        component.type === 'seven-segment') && <Legs />}
+        component.type === 'seven-segment' ||
+        component.type === 'neopixel') && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -2108,6 +2120,35 @@ function ComponentGlyph({
               {Math.round(analogValue * 100)}%
             </text>
           </Unflip>
+        </g>
+      )}
+
+      {component.type === 'neopixel' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          <rect x={-34} y={2} width={68} height={24} rx={3} fill="#0c0a09" stroke="#292524" strokeWidth={1.2} />
+          {Array.from({ length: NEOPIXEL_COUNT }, (_, i) => {
+            const color = pixels[i]
+            // 검정(꺼짐)이면 알을 어둡게 둔다 — 실물도 (0,0,0) 은 그냥 안 켜진 것이다.
+            const lit = !!color && color !== 'rgb(0, 0, 0)'
+            return (
+              <rect
+                key={i}
+                x={-31 + i * 8.2}
+                y={7}
+                width={6.4}
+                height={14}
+                rx={1.5}
+                fill={lit ? color : '#292524'}
+                stroke="#44403c"
+                strokeWidth={0.8}
+                style={lit ? { filter: `drop-shadow(0 0 5px ${color})` } : undefined}
+              />
+            )
+          })}
         </g>
       )}
 

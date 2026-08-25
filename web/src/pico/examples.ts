@@ -239,6 +239,17 @@ function sevenSegment(): CircuitSnapshot {
   }
 }
 
+function neopixelStrip(): CircuitSnapshot {
+  return {
+    components: [{ id: 'np1', type: 'neopixel', x: PART_X, y: 140 }],
+    breadboards: [],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'np1', pin: 'din' }, to: { kind: 'board', pinId: GP0 }, color: '#dc2626' },
+      { id: 'w2', from: { kind: 'component', componentId: 'np1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
+    ],
+  }
+}
+
 export const EXAMPLES: Example[] = [
   {
     name: '1. LED 켜고 끄기',
@@ -511,6 +522,30 @@ while True:
             pins[i].value(1 if names[i] in shape else 0)
         print(n)
         time.sleep(0.8)
+`,
+  },
+  {
+    name: '14. 네오픽셀 무지개',
+    circuit: neopixelStrip(),
+    code: `import neopixel
+from machine import Pin
+import time
+
+np = neopixel.NeoPixel(Pin(0), 8)   # 선 한 가닥으로 8칸을 다 다룬다
+
+rainbow = [
+    (255, 0, 0), (255, 100, 0), (255, 255, 0), (0, 255, 0),
+    (0, 255, 255), (0, 0, 255), (150, 0, 255), (255, 0, 150),
+]
+
+step = 0
+while True:
+    for i in range(8):
+        np[i] = rainbow[(i + step) % 8]
+    np.write()          # 이걸 불러야 실제로 색이 나간다!
+    print('무지개', step)
+    step = step + 1
+    time.sleep(0.3)
 `,
   },
 ]

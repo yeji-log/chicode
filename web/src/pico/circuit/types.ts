@@ -52,6 +52,7 @@ export type ComponentType =
   | 'traffic-light'
   | 'dht'
   | 'seven-segment'
+  | 'neopixel'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -127,6 +128,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '리드 스위치(클릭해서 자석 대기)',
     short: '리드',
     emoji: '🧲',
+  },
+  {
+    type: 'neopixel',
+    category: 'output',
+    label: '네오픽셀 8칸(write() 를 불러야 켜집니다)',
+    short: '네오픽셀',
+    emoji: '✨',
   },
   {
     type: 'seven-segment',
@@ -331,6 +339,13 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'green', dx: 6, dy: 62 },
     { pin: 'gnd', dx: 18, dy: 62 },
   ],
+  // WS2812 스트립 모듈과 같은 3핀. 데이터는 din 한 가닥으로 전부 나간다 — 칸이
+  // 여덟이어도 핀이 늘지 않는 게 네오픽셀의 요점이다.
+  neopixel: [
+    { pin: 'vcc', dx: -24, dy: 40 },
+    { pin: 'din', dx: 0, dy: 40 },
+    { pin: 'gnd', dx: 24, dy: 40 },
+  ],
   // 획 a~g + 소수점(dp) + 공통 음극. 실물은 핀이 위아래 두 줄이지만 여기선 아래
   // 한 줄로 폈다 — Legs 가 몸통 아래로만 다리를 그리기도 하고, 배선할 때 한쪽만
   // 보면 되는 게 학생한테 낫다.
@@ -394,7 +409,11 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   'traffic-light': { x: 0, y: 28 },
   dht: { x: 0, y: 21 },
   'seven-segment': { x: 0, y: 38 },
+  neopixel: { x: 0, y: 14 },
 }
+
+/** 시뮬레이터 네오픽셀 스트립의 칸 수. 코드에서 더 많이 잡아도 여기까지만 보인다. */
+export const NEOPIXEL_COUNT = 8
 
 /** 7세그먼트 획 하나하나의 도형. 실물처럼 비스듬히 깎인 막대 대신 둥근 사각형으로
  *  단순화했다 — 캔버스에서 이 크기(48x72)면 깎임은 거의 안 보이고, 좌표만 복잡해진다. */
