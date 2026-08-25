@@ -698,6 +698,8 @@ function CircuitCanvas(
 
   /** 모든 포인터를 여기서 받는다(capture 단계라 자식이 stopPropagation 해도 들어온다). */
   const onPointerDownCapture = (event: React.PointerEvent<SVGSVGElement>) => {
+    // iOS 는 사용자가 건드린 핸들러 안에서만 소리를 깨울 수 있다(buzzerAudio.unlock 주석).
+    if (!muted) buzzerAudio.unlock()
     // 새 제스처의 "첫 번째" 포인터가 오면 이전 것들을 싹 비운다.
     //
     // 아이패드는 다른 제스처가 끼어들면 pointerup/cancel 을 흘려버리는 일이 있는데,
@@ -971,6 +973,19 @@ function CircuitCanvas(
 
   /** 선택한 LED 의 알 색을 바꾼다. 전선 색과 달리 "지금 고른 색"을 들고 다니지 않고
    *  선택한 LED 에 바로 적용한다 — LED 는 놓은 뒤에 색을 정하는 게 자연스럽다. */
+  /** 팔레트에서 색을 고를 때. 전선이 선택돼 있으면 그 전선 색을 바로 바꾸고, 아니면
+   *  "앞으로 그을 전선" 의 색으로 삼는다 — 오른쪽 클릭이 없는 아이패드에서도 색을
+   *  바꿀 수 있어야 해서 선택 기반 경로를 넣었다. */
+  const pickWireColor = (color: string) => {
+    setWireColor(color)
+    if (locked || selected?.kind !== 'wire') return
+    pushHistory()
+    setState((s) => ({
+      ...s,
+      wires: s.wires.map((w) => (w.id === selected.id ? { ...w, color } : w)),
+    }))
+  }
+
   const setLedColor = (key: string) => {
     if (locked || !selectedLed) return
     pushHistory()
@@ -1231,6 +1246,12 @@ function CircuitCanvas(
 
   // 팔레트의 "선택 삭제" 버튼에 뭘 지우려는지 보여준다 — 부품은 COMPONENT_LIST의
   // 한글 이름을, 브레드보드는 고정 문구를 쓴다.
+  /** 전선을 선택했으면 그 전선의 색을 팔레트에 켜 보여준다(지금 고른 색 대신). */
+  const selectedWireColor =
+    selected?.kind === 'wire'
+      ? (wires.find((w) => w.id === selected.id)?.color ?? DEFAULT_WIRE_COLOR)
+      : null
+
   // LED 를 선택했을 때만 팔레트에 색 고르는 자리가 나온다.
   const selectedLed =
     selected?.kind === 'component'
@@ -1257,14 +1278,19 @@ function CircuitCanvas(
           addComponent={addComponent}
           addBreadboard={addBreadboard}
           locked={locked}
-          wireColor={wireColor}
-          setWireColor={setWireColor}
+          wireColor={selectedWireColor ?? wireColor}
+          setWireColor={pickWireColor}
+          wireColorTarget={selected?.kind === 'wire' ? '선택 전선' : '새 전선'}
           onClearAll={clearAll}
           muted={muted}
           onToggleMute={() => setMuted((m) => !m)}
           ledColor={selectedLed ? ledColorOf(selectedLed.color).key : null}
           onLedColor={setLedColor}
           selectedLabel={selectedLabel}
+          canRotate={selected !== null && selected.kind !== 'wire'}
+          canFlip={selected?.kind === 'component'}
+          onRotateSelected={rotateSelected}
+          onFlipSelected={flipSelected}
           onDeleteSelected={deleteSelected}
         />
 
@@ -1509,27 +1535,26 @@ function CircuitCanvas(
               확대/축소와 무관하게 항상 같은 자리에 있다. 팔레트가 아니라 캔버스 위에
               둔 건 자리가 없어서이기도 하지만, 되돌릴 대상이 캔버스라 여기가 맞다. */}
           <g data-canvas-control transform={`translate(16 ${VIEW_HEIGHT - 40})`}>
-            <rect x={0} y={0} width={72} height={28} rx={14} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
+            <rect x={0} y={0} width={72} height={34} rx={17} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
             {[
               { dx: 20, label: '↶', onClick: () => timeTravel('undo'), aria: '되돌리기', enabled: canUndo },
               { dx: 52, label: '↷', onClick: () => timeTravel('redo'), aria: '다시 실행', enabled: canRedo },
             ].map((btn) => (
-              <text
+              // 글자만 두면 터치 영역이 10px 밖에 안 된다 — 손가락으로 못 누른다.
+              // 안 보이는 사각형을 깔아 32px 짜리 과녁을 만든다.
+              <g
                 key={btn.aria}
-                x={btn.dx}
-                y={20}
-                fontSize={16}
-                fontWeight="bold"
-                textAnchor="middle"
-                fill="#57534e"
-                opacity={btn.enabled && !locked ? 1 : 0.25}
-                className={btn.enabled && !locked ? 'cursor-pointer select-none' : 'select-none'}
                 aria-label={btn.aria}
+                className={btn.enabled && !locked ? 'cursor-pointer select-none' : 'select-none'}
+                opacity={btn.enabled && !locked ? 1 : 0.25}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => btn.enabled && !locked && btn.onClick()}
               >
-                {btn.label}
-              </text>
+                <rect x={btn.dx - 16} y={1} width={32} height={32} rx={16} fill="transparent" />
+                <text x={btn.dx} y={23} fontSize={17} fontWeight="bold" textAnchor="middle" fill="#57534e">
+                  {btn.label}
+                </text>
+              </g>
             ))}
           </g>
 
@@ -1537,27 +1562,31 @@ function CircuitCanvas(
               화면 위치·크기를 유지한다. 휠이 없는 아이패드 등 터치 기기에선 이 버튼이
               줌의 유일한 수단이라 꼭 있어야 한다. */}
           <g data-canvas-control transform={`translate(${viewWidth - 112} ${VIEW_HEIGHT - 40})`}>
-            <rect x={0} y={0} width={104} height={28} rx={14} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
+            <rect x={0} y={0} width={104} height={34} rx={17} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
             {[
               { dx: 14, label: '−', onClick: zoomOut, aria: '축소' },
               { dx: 52, label: '⤢', onClick: resetView, aria: '전체 보기(100%)' },
               { dx: 90, label: '+', onClick: zoomIn, aria: '확대' },
             ].map((btn) => (
-              <text
+              <g
                 key={btn.aria}
-                x={btn.dx}
-                y={19}
-                fontSize={btn.label === '⤢' ? 11 : 15}
-                fontWeight="bold"
-                textAnchor="middle"
-                fill="#57534e"
-                className="cursor-pointer select-none"
                 aria-label={btn.aria}
+                className="cursor-pointer select-none"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={btn.onClick}
               >
-                {btn.label}
-              </text>
+                <rect x={btn.dx - 16} y={1} width={32} height={32} rx={16} fill="transparent" />
+                <text
+                  x={btn.dx}
+                  y={23}
+                  fontSize={btn.label === '⤢' ? 13 : 17}
+                  fontWeight="bold"
+                  textAnchor="middle"
+                  fill="#57534e"
+                >
+                  {btn.label}
+                </text>
+              </g>
             ))}
           </g>
         </svg>
@@ -1568,7 +1597,7 @@ function CircuitCanvas(
       <p className="px-1 text-xs leading-relaxed text-ink-500">
         {locked
           ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
-          : '부품/브레드보드/Pico 보드는 클릭해서 선택한 뒤 끌어서 옮기고, R(또는 ㄱ)로 돌리고 M(또는 ㅡ)으로 좌우 반전합니다(보드는 삭제 불가). 핀(원)을 끌면 전선이 이어지고, 전선을 클릭하면 양 끝에 손잡이가 나와 다른 핀으로 옮길 수 있습니다(오른쪽 클릭은 색 바꾸기). 삭제는 Delete 키나 휴지통 버튼, 되돌리기는 ⌘/Ctrl+Z 입니다.'}
+          : '부품/브레드보드/Pico 보드는 클릭해서 선택한 뒤 끌어서 옮기고, R(또는 ㄱ)로 돌리고 M(또는 ㅡ)으로 좌우 반전합니다(보드는 삭제 불가). 핀(원)을 끌면 전선이 이어지고, 전선을 클릭하면 양 끝에 손잡이가 나와 다른 핀으로 옮길 수 있습니다(오른쪽 클릭은 색 바꾸기). 회전·반전·삭제는 팔레트 버튼으로도 됩니다. 되돌리기는 ⌘/Ctrl+Z 또는 캔버스 왼쪽 아래 버튼. 손가락 두 개로 벌리면 확대/축소됩니다.'}
       </p>
 
       {confirmingClearAll && (
@@ -1616,12 +1645,17 @@ function Palette({
   locked,
   wireColor,
   setWireColor,
+  wireColorTarget,
   onClearAll,
   muted,
   onToggleMute,
   ledColor,
   onLedColor,
   selectedLabel,
+  canRotate,
+  canFlip,
+  onRotateSelected,
+  onFlipSelected,
   onDeleteSelected,
 }: {
   addComponent: (type: ComponentType) => void
@@ -1629,6 +1663,8 @@ function Palette({
   locked: boolean
   wireColor: string
   setWireColor: (color: string) => void
+  /** 지금 이 색이 어디에 쓰이는지 — 전선을 선택했으면 "선택 전선", 아니면 "새 전선". */
+  wireColorTarget: string
   onClearAll: () => void
   /** 부저 음소거 상태. 소리는 수업 중에 꺼야 할 때가 있다. */
   muted: boolean
@@ -1640,6 +1676,12 @@ function Palette({
   /** 지금 선택된 부품/브레드보드의 한글 이름. 선택된 게 없으면 null — 이때는
    *  "선택 삭제" 버튼 자체를 안 보여준다(뭘 지울지 없으니). */
   selectedLabel: string | null
+  /** 회전은 부품·브레드보드·보드에, 반전은 부품에만 있다. 아이패드처럼 키보드가 없는
+   *  기기에서는 이 버튼이 유일한 수단이다(R/ㄱ, M/ㅡ 는 키보드 전용이었다). */
+  canRotate: boolean
+  canFlip: boolean
+  onRotateSelected: () => void
+  onFlipSelected: () => void
   onDeleteSelected: () => void
 }) {
   const groups: { key: string; label: string; tiles: PaletteTile[] }[] = [
@@ -1712,6 +1754,7 @@ function Palette({
           클릭으로 이 색을 입힌다(recolorWire). */}
       <div className="flex flex-col gap-1">
         <PaletteHeading>전선 색</PaletteHeading>
+        <p className="px-0.5 text-[9px] leading-tight text-ink-500">{wireColorTarget}</p>
         <div className="flex flex-wrap justify-center gap-1 rounded-lg border border-cream-deep bg-white px-1 py-1.5">
           {WIRE_COLORS.map((c) => (
             <button
@@ -1773,6 +1816,30 @@ function Palette({
 
       {/* 삭제는 맨 아래에 둔다 — 추가 버튼 사이에 끼어 있으면 잘못 누르기 쉽다. */}
       <div className="flex flex-col gap-1">
+        {(canRotate || canFlip) && (
+          <div className="grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              disabled={locked || !canRotate}
+              title="회전 (R 또는 ㄱ)"
+              onClick={onRotateSelected}
+              className="flex flex-col items-center gap-0.5 rounded-lg border border-cream-deep bg-white py-1.5 transition-colors hover:border-cheese-300 hover:bg-cheese-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <span className="text-sm leading-none">↻</span>
+              <span className="text-[10px] leading-none font-bold text-ink-700">회전</span>
+            </button>
+            <button
+              type="button"
+              disabled={locked || !canFlip}
+              title="좌우 반전 (M 또는 ㅡ)"
+              onClick={onFlipSelected}
+              className="flex flex-col items-center gap-0.5 rounded-lg border border-cream-deep bg-white py-1.5 transition-colors hover:border-cheese-300 hover:bg-cheese-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <span className="text-sm leading-none">⇄</span>
+              <span className="text-[10px] leading-none font-bold text-ink-700">반전</span>
+            </button>
+          </div>
+        )}
         {/* 부품/브레드보드를 클릭해 선택하면 나타난다 — 휴지통 버튼 하나로 지운다
             (부품마다 작은 삭제 글자를 따로 두던 것 대신, 사용자 요청으로 바꿈). */}
         {selectedLabel && (

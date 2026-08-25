@@ -6,6 +6,7 @@ import SupportNote from '../components/SupportNote'
 import { EDITOR_OPTIONS } from '../lib/monaco'
 import { usePico } from '../pico/usePico'
 import { EXAMPLES } from '../pico/examples'
+import { buzzerAudio } from '../pico/circuit/buzzerAudio'
 import CircuitCanvas, { type CircuitCanvasHandle } from '../pico/circuit/CircuitCanvas'
 
 const CODE_KEY = 'chicode.pico.code'
@@ -107,7 +108,12 @@ export default function PicoLab() {
             </button>
           ) : (
             <button
-              onClick={() => run(code)}
+              onClick={() => {
+                // iOS 는 사용자가 누른 이 핸들러 안에서 소리를 깨워야 부저가 울린다
+                // (buzzerAudio.unlock 주석 참고).
+                buzzerAudio.unlock()
+                run(code)
+              }}
               disabled={booting || status === 'error'}
               className="rounded-xl bg-cheese-400 px-5 py-2.5 font-bold text-ink-900 transition-colors hover:bg-cheese-300 disabled:cursor-not-allowed disabled:opacity-50"
             >

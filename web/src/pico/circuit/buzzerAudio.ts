@@ -50,6 +50,16 @@ class BuzzerAudio {
     return this.ctx
   }
 
+  /**
+   * 소리를 낼 준비만 해 둔다. iOS 는 AudioContext 를 "사용자가 화면을 건드린 그
+   * 핸들러 안" 에서 만들거나 깨워야 소리가 난다 — 나중에 effect 안에서 만들면 정지
+   * 상태로 태어나서 첫 실행에 아무 소리도 안 난다. 실행 버튼을 누를 때, 캔버스를
+   * 건드릴 때 여기를 불러서 미리 깨워 둔다.
+   */
+  unlock() {
+    this.ensureContext()
+  }
+
   /** 부저 하나의 상태를 갱신한다. level 0(또는 음소거)이면 소리를 끈다. */
   set(id: string, freq: number, level: number) {
     if (level <= 0) {
