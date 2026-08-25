@@ -20,6 +20,9 @@ const MAX_SLIDE_VIEWPORT_HEIGHT = 0.74
  *  끄는 동안 매번 pptx 를 다시 렌더하면 눈에 띄게 버벅인다. */
 const RESIZE_THRESHOLD = 24
 
+/** 크기가 더 안 바뀔 때까지 기다렸다가 한 번만 다시 그리는 시간. */
+const RESIZE_SETTLE_MS = 150
+
 /**
  * 발표자료 카드를 본문 칸(App.tsx의 max-w-6xl = 1152px)보다 넓게 빼는 스타일.
  *
@@ -30,12 +33,25 @@ const RESIZE_THRESHOLD = 24
  * left:50% 는 부모 기준, translateX(-50%) 는 자기 자신 기준이라 부모가 얼마나
  * 좁든 화면 한가운데에 놓인다. 100vw 는 세로 스크롤바까지 포함한 값이라
  * 2.5rem(= 본문 좌우 여백 px-5 두 번)을 빼야 가로 스크롤바가 안 생긴다.
+ *
+ * 세 번째 항(높이에서 거꾸로 계산한 폭)이 카드를 슬라이드에 붙여 준다.
+ * 이게 없으면 카드만 화면 폭까지 넓어지고 슬라이드는 세로 상한에 먼저
+ * 걸려서, 그 차이만큼 양옆이 빈 카드가 된다 — "카드가 PPT보다 넓어서 보기
+ * 불편하다"는 지적을 받은 게 이것이다. 아래 fitSlideWidth 가 고르는 두 값
+ * (쓸 수 있는 폭 / 세로에서 나온 폭) 중 어느 쪽이 이기든 카드가 정확히 그
+ * 폭이 되도록, 같은 두 값을 CSS 로 한 번 더 적는다. JS 로 재서 맞추지 않는
+ * 이유는 순환이다 — 카드 폭을 슬라이드에 맞추면 슬라이드가 재는 "쓸 수
+ * 있는 폭"이 곧 자기 자신이 되어버린다. 뷰포트만 보는 CSS 식은 그 고리를
+ * 만들지 않는다.
+ *
+ * 3rem 은 카드 안쪽 여백(p-6) 좌우 합이다 — 이 상수는 p-6 카드에 쓴다는
+ * 전제가 붙어 있다(지금 쓰는 두 곳 다 p-6).
  */
 export const SLIDE_SECTION_BREAKOUT: CSSProperties = {
   position: 'relative',
   left: '50%',
   transform: 'translateX(-50%)',
-  width: 'min(100vw - 2.5rem, 1600px)',
+  width: `min(100vw - 2.5rem, 1600px, calc(${MAX_SLIDE_VIEWPORT_HEIGHT} * 100vh * 16 / 9 + 3rem))`,
   maxWidth: 'none',
 }
 
@@ -166,17 +182,35 @@ export default function PptxSlideViewer({
 
   // 창 크기가 바뀌면 슬라이드도 새 크기로 다시 그린다. pptx-preview 는 init 에
   // 넘긴 px 크기로 고정 렌더라 CSS 만으로는 따라오지 않는다.
+  //
+  // ResizeObserver 로 자리를 직접 지켜보는 게 더 일반적이지만 여기선 window 의
+  // resize 로 충분하다 — 이 뷰어가 쓸 수 있는 폭은 카드가 정하고, 카드 폭은
+  // 뷰포트만 보는 CSS 식이다(SLIDE_SECTION_BREAKOUT). 즉 뷰포트가 안 바뀌면
+  // 자리도 안 바뀐다. 게다가 ResizeObserver 는 화면을 실제로 그리지 않는
+  // 상황에서 콜백이 아예 안 오는 경우가 있어서(미리보기 창을 숨긴 채로
+  // 확인해보니 폭이 1314→650→1314 로 변하는 동안 콜백이 0번 왔다) 검증하기도
+  // 어렵다.
   useEffect(() => {
     if (!pptxFile) return
+
+    // 창을 끄는 동안 pptx 를 매번 처음부터 다시 여는 건 너무 무겁다 —
+    // 멈춘 뒤 한 번만 그린다.
+    let timer: number | undefined
+
     const onResize = () => {
       const sizing = sizingRef.current
       if (!sizing || !sizing.clientWidth) return
       const next = fitSlideWidth(sizing.clientWidth)
       if (Math.abs(next - renderedWidthRef.current) < RESIZE_THRESHOLD) return
-      setSizeTick((tick) => tick + 1)
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => setSizeTick((tick) => tick + 1), RESIZE_SETTLE_MS)
     }
+
     window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('resize', onResize)
+    }
   }, [pptxFile])
 
   if (state === 'fallback' && pdfFile) {
