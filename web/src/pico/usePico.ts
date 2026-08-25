@@ -22,6 +22,8 @@ export interface UsePico {
   neopixel: Map<number, string[]>
   /** I2C LCD 화면 글자(sda 핀 → 줄 목록). */
   lcd: Map<number, string[]>
+  /** OLED 화면(sda 핀 → 행마다 '0'/'1' 문자열). */
+  oled: Map<number, string[]>
   run: (code: string) => void
   stop: () => void
   clearOutput: () => void
@@ -33,6 +35,8 @@ export interface UsePico {
   setDht: (pin: number, temperature: number, humidity: number) => void
   /** I2C LCD 목록을 알려준다. scan() 이 무엇을 돌려줘야 하는지 워커가 알아야 한다. */
   setLcdConfig: (screens: { sda: number; addr: number }[]) => void
+  /** OLED 목록. LCD 와 같은 이유로 UI 가 알려준다. */
+  setOledConfig: (screens: { sda: number; addr: number }[]) => void
   /** 초음파 센서 배선·거리를 알려준다. 워커가 trig 를 보고 echo 펄스를 만들어야 해서
    *  값 하나가 아니라 목록 통째로 보낸다. */
   setUltrasonic: (sensors: { trig: number; echo: number; distanceCm: number }[]) => void
@@ -74,6 +78,7 @@ export function usePico(): UsePico {
   const [pwm, setPwm] = useState<Map<number, { freq: number; duty: number }>>(new Map())
   const [neopixel, setNeopixel] = useState<Map<number, string[]>>(new Map())
   const [lcd, setLcd] = useState<Map<number, string[]>>(new Map())
+  const [oled, setOled] = useState<Map<number, string[]>>(new Map())
 
   const append = useCallback((stream: OutputLine['stream'], text: string) => {
     setOutput((prev) => [...prev, { id: lineId.current++, stream, text }])
@@ -126,6 +131,9 @@ export function usePico(): UsePico {
         case 'lcd':
           setLcd((prev) => new Map(prev).set(message.sda, message.lines))
           break
+        case 'oled':
+          setOled((prev) => new Map(prev).set(message.sda, message.rows))
+          break
         case 'done':
           if (!message.ok && message.error) append('err', message.error)
           if (!message.interactive) {
@@ -166,6 +174,7 @@ export function usePico(): UsePico {
       setPwm(new Map())
       setNeopixel(new Map())
       setLcd(new Map())
+      setOled(new Map())
       setStatus('running')
 
       const request: WorkerRequest = { type: 'run', code }
@@ -183,6 +192,7 @@ export function usePico(): UsePico {
     setPwm(new Map())
     setNeopixel(new Map())
     setLcd(new Map())
+    setOled(new Map())
     append('sys', '실행을 중지했습니다.')
     setStatus('booting')
     spawnWorker()
@@ -220,6 +230,11 @@ export function usePico(): UsePico {
     [send],
   )
 
+  const setOledConfig = useCallback(
+    (screens: { sda: number; addr: number }[]) => send('oled-config', { type: 'oled-config', screens }),
+    [send],
+  )
+
   return {
     status,
     output,
@@ -229,6 +244,7 @@ export function usePico(): UsePico {
     pwm,
     neopixel,
     lcd,
+    oled,
     run,
     stop,
     clearOutput,
@@ -237,5 +253,6 @@ export function usePico(): UsePico {
     setDht,
     setUltrasonic,
     setLcdConfig,
+    setOledConfig,
   }
 }

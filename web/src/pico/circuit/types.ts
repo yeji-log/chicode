@@ -63,6 +63,7 @@ export type ComponentType =
   | 'joystick'
   | 'dc-motor'
   | 'stepper'
+  | 'oled'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -159,6 +160,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '네오픽셀 8칸(write() 를 불러야 켜집니다)',
     short: '네오픽셀',
     emoji: '✨',
+  },
+  {
+    type: 'oled',
+    category: 'output',
+    label: 'OLED SSD1306 128x64(I2C · 주소 0x3C)',
+    short: 'OLED',
+    emoji: '📺',
   },
   {
     type: 'lcd',
@@ -437,6 +445,13 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'din', dx: 0, dy: 40 },
     { pin: 'gnd', dx: 24, dy: 40 },
   ],
+  // OLED 모듈과 같은 4핀. LCD 와 같은 I2C 버스에 함께 물릴 수도 있다(주소가 다르다).
+  oled: [
+    { pin: 'gnd', dx: -30, dy: 62 },
+    { pin: 'vcc', dx: -10, dy: 62 },
+    { pin: 'sda', dx: 10, dy: 62 },
+    { pin: 'scl', dx: 30, dy: 62 },
+  ],
   // I2C LCD 백팩과 같은 4핀. 선 두 가닥(sda/scl)으로 글자를 다 보낸다.
   lcd: [
     { pin: 'gnd', dx: -30, dy: 60 },
@@ -565,6 +580,7 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   neopixel: { x: 0, y: 14 },
   ultrasonic: { x: 0, y: 20 },
   lcd: { x: 0, y: 24 },
+  oled: { x: 0, y: 26 },
   soil: { x: 0, y: 16 },
   rain: { x: 0, y: 16 },
   flame: { x: 0, y: 16 },
@@ -650,6 +666,10 @@ export const ANALOG_SENSORS: Partial<Record<ComponentType, AnalogSensorMeta>> = 
 
 /** I2C LCD 백팩의 주소. 시중 모듈은 0x27 아니면 0x3F 인데, 여기선 0x27 하나로 둔다. */
 export const LCD_I2C_ADDR = 0x27
+/** OLED 백팩 주소. 시중 모듈은 0x3C 가 기본이다. */
+export const OLED_I2C_ADDR = 0x3c
+export const OLED_WIDTH = 128
+export const OLED_HEIGHT = 64
 export const LCD_COLUMNS = 16
 export const LCD_LINES = 2
 

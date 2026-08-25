@@ -30,8 +30,9 @@ export type WorkerRequest =
   | { type: 'analog'; pin: number; value: number }
   /** 온습도 센서가 그 핀에서 읽어갈 값. 온도는 ℃, 습도는 %. */
   | { type: 'dht'; pin: number; temperature: number; humidity: number }
-  /** I2C LCD 목록. scan() 이 무엇을 돌려줘야 하는지 워커가 알아야 해서 UI 가 알려준다. */
+  /** I2C LCD·OLED 목록. scan() 이 무엇을 돌려줘야 하는지 워커가 알아야 해서 UI 가 알려준다. */
   | { type: 'lcd-config'; screens: { sda: number; addr: number }[] }
+  | { type: 'oled-config'; screens: { sda: number; addr: number }[] }
   /** 초음파 센서 목록. 워커가 trig 의 내림 edge 를 보고 echo 펄스를 만들어야 해서,
    *  어느 핀이 짝인지(배선)를 UI 가 알려줘야 한다. */
   | { type: 'ultrasonic'; sensors: { trig: number; echo: number; distanceCm: number }[] }
@@ -48,6 +49,8 @@ export type WorkerResponse =
   | { type: 'neopixel'; pin: number; colors: string[] }
   /** I2C LCD 화면에 지금 찍혀 있는 글자. sda 핀으로 어느 LCD 인지 가린다. */
   | { type: 'lcd'; sda: number; lines: string[] }
+  /** OLED 화면. 128x64 픽셀을 행마다 '0'/'1' 문자열로 보낸다(그대로 그리기 편하다). */
+  | { type: 'oled'; sda: number; rows: string[] }
   | { type: 'done'; ok: boolean; error?: string; elapsedMs: number; interactive: boolean }
 
 const post = (message: WorkerResponse) => self.postMessage(message)
@@ -117,6 +120,51 @@ function lcdReceive(lcd: LcdState, byte: number, rs: boolean) {
   const at = lcdCellOf(lcd.cursor)
   if (at) lcd.cells[at.row][at.col] = String.fromCharCode(byte)
   lcd.cursor += 1
+}
+
+/**
+ * OLED SSD1306(I2C). LCD 와 달리 글자가 아니라 픽셀이 통째로 넘어온다.
+ *
+ * 실물 프로토콜: 0x00 으로 시작하면 명령, 0x40 으로 시작하면 화면 데이터다.
+ * 데이터는 "페이지" 단위로 들어오는데, 한 바이트가 세로 8픽셀을 한 줄로 담는다
+ * (LSB 가 위). 페이지가 8개(64/8), 가로가 128 이라 한 화면이 1024바이트다.
+ *
+ * 명령은 대부분 무시해도 화면이 맞는다 — 우리가 알아야 하는 건 "어디에 쓸 것인가"
+ * (페이지·열 주소)뿐이라, MicroPython 의 framebuf/ssd1306 이 실제로 쓰는 것만 본다.
+ */
+const OLED_WIDTH = 128
+const OLED_PAGES = 8
+
+interface OledState {
+  sda: number
+  addr: number
+  /** [페이지][열] = 세로 8픽셀을 담은 바이트. */
+  buffer: number[][]
+  page: number
+  col: number
+  /** 방금 받은 명령이 인자를 몇 개 더 기다리는지, 그리고 그게 열/페이지 중 무엇인지.
+   *  실물 드라이버는 write_cmd 를 한 바이트씩 따로 부르기 때문에 메시지를 넘어가며
+   *  기억해야 한다(한 메시지 안에서만 보면 인자가 영영 안 온다). */
+  awaiting: number
+  awaitingFor: 'col' | 'page' | null
+}
+const oleds = new Map<number, OledState>()
+
+function blankOled(): number[][] {
+  return Array.from({ length: OLED_PAGES }, () => Array.from({ length: OLED_WIDTH }, () => 0))
+}
+
+/** 화면 버퍼를 행마다 '0'/'1' 문자열로 편다. UI 는 이걸 그대로 픽셀로 찍는다. */
+function oledRows(buffer: number[][]): string[] {
+  const rows: string[] = []
+  for (let page = 0; page < OLED_PAGES; page++) {
+    for (let bit = 0; bit < 8; bit++) {
+      let row = ''
+      for (let col = 0; col < OLED_WIDTH; col++) row += (buffer[page][col] >> bit) & 1 ? '1' : '0'
+      rows.push(row)
+    }
+  }
+  return rows
 }
 
 /**
@@ -214,8 +262,46 @@ async function boot(): Promise<MicroPythonInterface> {
         : []
       post({ type: 'neopixel', pin, colors })
     },
-    /** I2C 로 바이트를 흘려보낸다. 지금은 PCF8574 백팩 뒤의 LCD 만 알아듣는다. */
+    /** I2C 로 바이트를 흘려보낸다. PCF8574 백팩 뒤의 LCD 와 SSD1306 OLED 를 알아듣는다. */
     i2c_write(addr: number, packed: string) {
+      const oled = oleds.get(addr)
+      if (oled) {
+        const bytes = packed.split(',').map((n) => Number(n) & 0xff)
+        const control = bytes[0]
+        if (control === 0x40) {
+          // 화면 데이터. 열을 채우다 끝에 닿으면 다음 페이지로 넘어간다.
+          for (let i = 1; i < bytes.length; i++) {
+            oled.buffer[oled.page][oled.col] = bytes[i]
+            oled.col += 1
+            if (oled.col >= OLED_WIDTH) {
+              oled.col = 0
+              oled.page = (oled.page + 1) % OLED_PAGES
+            }
+          }
+          post({ type: 'oled', sda: oled.sda, rows: oledRows(oled.buffer) })
+        } else {
+          // 명령. 우리가 신경 쓸 건 "어디에 쓸 것인가"(0x21 열, 0x22 페이지) 뿐이다.
+          for (let i = 1; i < bytes.length; i++) {
+            const cmd = bytes[i]
+            if (oled.awaiting > 0) {
+              // 두 인자 중 첫 번째가 시작 주소다. 끝 주소는 안 써도 화면이 맞는다.
+              if (oled.awaiting === 2) {
+                if (oled.awaitingFor === 'col') oled.col = cmd
+                else if (oled.awaitingFor === 'page') oled.page = cmd
+              }
+              oled.awaiting -= 1
+              if (oled.awaiting === 0) oled.awaitingFor = null
+            } else if (cmd === 0x21) {
+              oled.awaiting = 2
+              oled.awaitingFor = 'col'
+            } else if (cmd === 0x22) {
+              oled.awaiting = 2
+              oled.awaitingFor = 'page'
+            }
+          }
+        }
+        return
+      }
       const lcd = lcds.get(addr)
       if (!lcd) return
       for (const part of packed.split(',')) {
@@ -238,7 +324,11 @@ async function boot(): Promise<MicroPythonInterface> {
     },
     /** 이 버스(sda 핀)에 붙어 있는 주소들. 실물 scan() 과 같은 뜻이다. */
     i2c_scan(sda: number) {
-      return [...lcds.values()].filter((l) => l.sda === sda).map((l) => l.addr).join(',')
+      const found = [
+        ...[...lcds.values()].filter((l) => l.sda === sda).map((l) => l.addr),
+        ...[...oleds.values()].filter((o) => o.sda === sda).map((o) => o.addr),
+      ]
+      return found.join(',')
     },
     pwm_set(pin: number, freq: number, duty: number) {
       // PWM 이 걸린 핀은 더는 단순 on/off 가 아니다 — Pin.value() 가 옛 출력값을
@@ -312,6 +402,25 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     return
   }
 
+  if (message.type === 'oled-config') {
+    const next = new Map<number, OledState>()
+    for (const screen of message.screens) {
+      const prev = oleds.get(screen.addr)
+      next.set(screen.addr, {
+        sda: screen.sda,
+        addr: screen.addr,
+        buffer: prev?.buffer ?? blankOled(),
+        page: prev?.page ?? 0,
+        col: prev?.col ?? 0,
+        awaiting: 0,
+        awaitingFor: null,
+      })
+    }
+    oleds.clear()
+    for (const [k, v] of next) oleds.set(k, v)
+    return
+  }
+
   if (message.type === 'ultrasonic') {
     // 배선이 바뀌면 통째로 다시 온다. 진행 중이던 펄스는 유지한다(거리만 바뀌는
     // 경우가 대부분이라, 재측정 중에 창이 사라지면 학생 코드가 타임아웃에 걸린다).
@@ -353,6 +462,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     // 실행마다 이전 실행의 전역 변수가 남지 않도록 정리한다(Python 실습의
     // "매번 새 namespace" 와 같은 이유 — "지웠는데 왜 되지?" 방지).
     gpioOut.clear()
+    for (const oled of oleds.values()) {
+      oled.buffer = blankOled()
+      oled.page = 0
+      oled.col = 0
+      post({ type: 'oled', sda: oled.sda, rows: oledRows(oled.buffer) })
+    }
     // 실행할 때마다 화면도 초기화된다 — 실물도 보드를 리셋하면 그렇다.
     for (const lcd of lcds.values()) {
       lcd.cells = blankCells()
@@ -560,6 +675,13 @@ def _chico_build_machine():
             _chico_hw.i2c_write(addr, ",".join(str(b) for b in buf))
             return len(buf)
 
+        def writevto(self, addr, bufs, stop=True):
+            # 실물 ssd1306 드라이버가 "제어바이트 + 화면버퍼" 를 한 번에 보낼 때 쓴다.
+            merged = bytearray()
+            for b in bufs:
+                merged.extend(b)
+            return self.writeto(addr, merged)
+
         def writeto_mem(self, addr, memaddr, buf, addrsize=8):
             self.writeto(addr, bytes([memaddr]) + bytes(buf))
 
@@ -763,6 +885,85 @@ def _chico_build_lcd():
     mod.I2cLcd = I2cLcd
     return mod
 
+
+def _chico_build_ssd1306():
+    """import ssd1306 — 실물 Pico 수업에서 쓰는 그 드라이버다. framebuf 가 이
+    MicroPython 빌드에 이미 들어 있어서(확인함) FrameBuffer 를 그대로 상속한다.
+    그래서 text()/pixel()/rect()/line() 이 전부 진짜 폰트·진짜 픽셀로 그려지고,
+    show() 가 그 버퍼를 I2C 로 그대로 흘려보낸다 — 워커는 그 바이트를 해석할 뿐이다."""
+
+    import framebuf
+
+    class _Module:
+        pass
+
+    class SSD1306(framebuf.FrameBuffer):
+        def __init__(self, width, height, external_vcc=False):
+            self.width = width
+            self.height = height
+            self.external_vcc = external_vcc
+            self.pages = height // 8
+            self.buffer = bytearray(self.pages * width)
+            super().__init__(self.buffer, width, height, framebuf.MONO_VLSB)
+            self.init_display()
+
+        def init_display(self):
+            for cmd in (
+                0xAE, 0x20, 0x00, 0x40, 0xA1, 0xA8, self.height - 1,
+                0xC8, 0xD3, 0x00, 0xDA, 0x12, 0xD5, 0x80, 0xD9, 0xF1,
+                0xDB, 0x30, 0x81, 0xFF, 0xA4, 0xA6, 0x8D, 0x14, 0xAF,
+            ):
+                self.write_cmd(cmd)
+            self.fill(0)
+            self.show()
+
+        def poweroff(self):
+            self.write_cmd(0xAE)
+
+        def poweron(self):
+            self.write_cmd(0xAF)
+
+        def contrast(self, contrast):
+            self.write_cmd(0x81)
+            self.write_cmd(contrast)
+
+        def invert(self, invert):
+            self.write_cmd(0xA6 | (1 if invert else 0))
+
+        def show(self):
+            self.write_cmd(0x21)          # 열 범위
+            self.write_cmd(0)
+            self.write_cmd(self.width - 1)
+            self.write_cmd(0x22)          # 페이지 범위
+            self.write_cmd(0)
+            self.write_cmd(self.pages - 1)
+            self.write_data(self.buffer)
+
+    class SSD1306_I2C(SSD1306):
+        def __init__(self, width, height, i2c, addr=0x3C, external_vcc=False):
+            self.i2c = i2c
+            self.addr = addr
+            self.temp = bytearray(2)
+            self.write_list = [b"@", None]   # b"@" == 0x40, 화면 데이터라는 표시
+            super().__init__(width, height, external_vcc)
+
+        def write_cmd(self, cmd):
+            self.temp[0] = 0x80
+            self.temp[1] = cmd
+            self.i2c.writeto(self.addr, self.temp)
+
+        def write_data(self, buf):
+            self.write_list[1] = buf
+            self.i2c.writevto(self.addr, self.write_list)
+
+    mod = _Module()
+    mod.SSD1306 = SSD1306
+    mod.SSD1306_I2C = SSD1306_I2C
+    return mod
+
+
+sys.modules["ssd1306"] = _chico_build_ssd1306()
+del _chico_build_ssd1306
 
 _chico_lcd_mod = _chico_build_lcd()
 sys.modules["pico_i2c_lcd"] = _chico_lcd_mod

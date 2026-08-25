@@ -43,7 +43,7 @@ MicroPython), Firebase Google 로그인 기반 교사 인증. 학생은 회원�
 | 실습 선택 | `/practice` | Python / C언어 / Pico(준비중) 카드 |
 | Python 실습 | `/practice/python` | Pyodide(WASM CPython), Web Worker, 무한루프 중지 가능. numpy/pandas/matplotlib 사용 가능(matplotlib은 결과창에 이미지로) |
 | C 실습 | `/practice/c` | **진짜 clang을 브라우저에서 실행**. 아래 "C 실습 구조" 참고 |
-| Pico 2 W 실습 | `/practice/pico` | **회로 / 코드 탭 전환**(`PicoLab.tsx`, 콘솔은 코드 탭 안). 부품 19종 + 되돌리기 + 부저 실제 소리. 아래 "Pico 시뮬레이터 확장" 참고. `PicoGate.tsx`가 교사/학생(설정 공개 여부)로 게이트. Monaco는 진입 시 동적 로드 |
+| Pico 2 W 실습 | `/practice/pico` | **회로 / 코드 탭 전환**(`PicoLab.tsx`, 콘솔은 코드 탭 안). 부품 28종 + 되돌리기 + 부저 실제 소리. 아래 "Pico 시뮬레이터 확장" 참고. `PicoGate.tsx`가 교사/학생(설정 공개 여부)로 게이트. Monaco는 진입 시 동적 로드 |
 | Lab (활동/발표) | `/lab` | 핀 게이트(`LabGate.tsx`) 아래 홈·로드맵(시즌 카드)·활동 목록·활동 상세. `/materials/:subjectId`에도 로드맵·활동 화면이 과목별로 재마운트됨(`useLabScope`). 교사용 보드 에디터는 `LabBoardEditor.tsx` |
 | 시간표 / 수업기록 | `/timetable` | 그리드(`TimetableBoard`)와 반별 수업기록(`ClassRecords.tsx`, 반 탭 드래그 정렬·학생 참여 기록·메모)을 탭 전환 |
 | 뉴스 | `/news` | 홈 히어로 "오늘의 AI·IT 이슈" 버튼에서 진입하는 공개 페이지. 교사는 `/teacher`의 뉴스 탭(`TeacherNews.tsx`)에서 후보 관리 |
@@ -148,10 +148,15 @@ Python 소스로 만들어 `sys.modules`에 꽂는데(1차 문서 참고), 거�
 `RESET_GLOBALS_SOURCE`가 매 실행 전에 그렇지 않은 전역을 전부 지워서, 첫 실행은
 멀쩡하고 두 번째부터 `NameError`가 난다(실제로 밟았다).
 
-**부품 18종.** 출력 = LED(PWM이면 밝기, 알 색 5종 중 선택), RGB LED(PWM이면 색 혼합),
-부저(Web Audio로 실제 소리 + 음소거), 서보(뿔이 실제로 돌아감), 릴레이, 진동모터,
-신호등, 7세그먼트, 네오픽셀 8칸, I2C LCD 1602. 입력 = 버튼, 스위치, 틸트, 리드 스위치,
-가변저항(노브), 조도센서·온습도·초음파·PIR(슬라이더).
+**부품 28종.**
+출력 = LED(PWM이면 밝기, 알 색 5종 중 선택), RGB LED(PWM이면 색 혼합), 부저(Web Audio로
+실제 소리 + 음소거), 서보, DC 모터, 스텝모터, 릴레이, 진동모터, 신호등, 7세그먼트,
+네오픽셀 8칸, I2C LCD 1602, OLED SSD1306.
+입력 = 버튼, 스위치, 틸트, 리드, IR 장애물, 조이스틱(ADC 2축 + 버튼),
+가변저항·조도·토양수분·빗물·불꽃·아날로그온도(ADC 슬라이더), 온습도·초음파·PIR.
+
+**슬라이더 하나로 ADC 값을 만드는 센서는 `ANALOG_SENSORS` 표에 한 줄 추가하면 끝난다**
+— 글리프도 그 표를 읽는 것 하나뿐이다. 부품마다 같은 코드를 복사하지 말 것.
 
 **부품에 조작부를 넣을 땐 몸통(끄는 자리)과 조작부(누르는 자리)를 반드시 분리할 것** —
 조작부가 몸통을 덮으면 `stopPropagation` 때문에 부품을 아예 못 옮기게 된다(PIR·틸트·
@@ -187,6 +192,12 @@ trig/echo 인지는 워커가 알 수 없으므로(배선은 UI가 안다) UI가
 **전선은 전원 레일의 구멍마다 따로 꽂힌다.** 레일 `PinRef`에 `col`이 있고, 전기적으로
 같은 레일이면 `connectivity`에서 가상 노드 하나로 묶는다. 이게 없으면 같은 레일에
 꽂은 선끼리 안 이어진 것으로 계산된다.
+
+**OLED 는 framebuf 를 쓴다.** 이 MicroPython 빌드에 `framebuf` 가 이미 들어 있어서
+(확인함) 실물 `ssd1306` 드라이버를 거의 그대로 쓴다 — `text()` 가 진짜 폰트로 그려지고
+`show()` 가 그 버퍼를 I2C 로 흘려보내면 워커가 SSD1306 규약(0x40=데이터, 0x21/0x22=
+주소 지정, 한 바이트가 세로 8픽셀)대로 푼다. 명령은 드라이버가 한 바이트씩 따로 보내니
+메시지를 넘어가며 인자를 기다려야 한다.
 
 **I2C LCD 는 진짜 프로토콜을 해석한다.** `machine.I2C.writeto()` 로 나가는 바이트를
 워커가 PCF8574 백팩 규약(니블 두 번, E 의 내림 edge, RS 비트)대로 풀어 HD44780

@@ -341,6 +341,18 @@ function stepper(): CircuitSnapshot {
   }
 }
 
+function oledOnly(): CircuitSnapshot {
+  return {
+    components: [{ id: 'oled1', type: 'oled', x: PART_X, y: 120 }],
+    breadboards: [],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'oled1', pin: 'sda' }, to: { kind: 'board', pinId: GP0 }, color: '#dc2626' },
+      { id: 'w2', from: { kind: 'component', componentId: 'oled1', pin: 'scl' }, to: { kind: 'board', pinId: GP1 }, color: '#eab308' },
+      { id: 'w3', from: { kind: 'component', componentId: 'oled1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
+    ],
+  }
+}
+
 export const EXAMPLES: Example[] = [
   {
     name: '1. LED 켜고 끄기',
@@ -830,6 +842,34 @@ while True:
     print('step', step)
     step = step + 1
     time.sleep(0.15)
+`,
+  },
+  {
+    name: '22. OLED에 글자와 그림 그리기',
+    circuit: oledOnly(),
+    code: `from machine import Pin, I2C
+import ssd1306
+import time
+
+i2c = I2C(0, sda=Pin(0), scl=Pin(1), freq=400000)
+print('찾은 주소:', [hex(a) for a in i2c.scan()])
+
+oled = ssd1306.SSD1306_I2C(128, 64, i2c)   # 128x64 점으로 된 화면
+
+count = 0
+while True:
+    oled.fill(0)                    # 화면 지우기
+    oled.text('CHICODE', 0, 0)      # (x, y) 자리에 글자
+    oled.text('Pico 2 W', 0, 12)
+    oled.text('count ' + str(count), 0, 24)
+
+    oled.rect(0, 40, 128, 12, 1)                    # 테두리만
+    oled.fill_rect(2, 42, (count % 21) * 6, 8, 1)   # 채워진 막대
+
+    oled.show()                     # 이걸 불러야 화면에 나간다
+    print('count', count)
+    count = count + 1
+    time.sleep(0.4)
 `,
   },
 ]

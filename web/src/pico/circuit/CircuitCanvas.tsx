@@ -46,6 +46,9 @@ import {
   STEPPER_DEG_PER_STEP,
   stepperPhaseOf,
   LCD_COLUMNS,
+  OLED_HEIGHT,
+  OLED_I2C_ADDR,
+  OLED_WIDTH,
   LCD_I2C_ADDR,
   LCD_LINES,
   NEOPIXEL_COUNT,
@@ -154,12 +157,16 @@ export interface CircuitCanvasProps {
   neopixelColors: Map<number, string[]>
   /** I2C LCD 화면 글자(sda 핀 → 줄 목록). */
   lcdLines: Map<number, string[]>
+  /** OLED 화면(sda 핀 → 행마다 '0'/'1' 문자열). */
+  oledRows: Map<number, string[]>
   /** 버튼/스위치가 눌리거나 켜질 때, 연결된 GPIO 번호로 알려준다(연결 안 됐으면 안 불림). */
   onButtonChange: (gpio: number, pressed: boolean) => void
   /** 가변저항 노브를 돌릴 때, 연결된 GPIO 번호로 0~65535 값을 알려준다. */
   onAnalogChange: (gpio: number, value: number) => void
   /** 온습도 센서 슬라이더를 움직일 때, 연결된 GPIO 번호로 온도(℃)·습도(%)를 알려준다. */
   onDhtChange: (gpio: number, temperature: number, humidity: number) => void
+  /** OLED 배선을 알려준다(LCD 와 같은 이유). */
+  onOledConfigChange: (screens: { sda: number; addr: number }[]) => void
   /** I2C LCD 배선을 알려준다. scan() 이 무엇을 돌려줘야 하는지 워커가 알아야 한다. */
   onLcdConfigChange: (screens: { sda: number; addr: number }[]) => void
   /** 초음파 센서의 배선(trig/echo 짝)과 거리를 알려준다. 워커가 trig 를 보고 echo
@@ -208,7 +215,7 @@ type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' | 'wir
 type Rewiring = { wireId: string; end: 'from' | 'to' } | null
 
 function CircuitCanvas(
-  { gpioLevels, pwmLevels, neopixelColors, lcdLines, onButtonChange, onAnalogChange, onDhtChange, onUltrasonicChange, onLcdConfigChange, locked = false }: CircuitCanvasProps,
+  { gpioLevels, pwmLevels, neopixelColors, lcdLines, oledRows, onButtonChange, onAnalogChange, onDhtChange, onUltrasonicChange, onLcdConfigChange, onOledConfigChange, locked = false }: CircuitCanvasProps,
   ref: React.Ref<CircuitCanvasHandle>,
 ) {
   const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
@@ -493,6 +500,14 @@ function CircuitCanvas(
       screens.push({ sda, addr: LCD_I2C_ADDR })
     }
     onLcdConfigChange(screens)
+    const oleds: { sda: number; addr: number }[] = []
+    for (const c of components) {
+      if (c.type !== 'oled') continue
+      const sda = gpioForPin(c.id, 'sda')
+      if (sda === undefined) continue
+      oleds.push({ sda, addr: OLED_I2C_ADDR })
+    }
+    onOledConfigChange(oleds)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectivity, components])
 
@@ -1230,6 +1245,7 @@ function CircuitCanvas(
                 pwmLevels={pwmLevels}
                 neopixelColors={neopixelColors}
                 lcdLines={lcdLines}
+                oledRows={oledRows}
                 stepperAngle={stepperAngles.get(c.id) ?? 0}
                 gpioForPin={(pin) => gpioForPin(c.id, pin)}
                 active={activeInputs.has(c.id)}
@@ -1996,6 +2012,7 @@ function ComponentGlyph({
   pwmLevels,
   neopixelColors,
   lcdLines,
+  oledRows,
   stepperAngle,
   gpioForPin,
   active,
@@ -2016,6 +2033,7 @@ function ComponentGlyph({
   pwmLevels: Map<number, { freq: number; duty: number }>
   neopixelColors: Map<number, string[]>
   lcdLines: Map<number, string[]>
+  oledRows: Map<number, string[]>
   /** 스텝모터가 지금까지 돈 각도(도). 다른 부품에선 안 쓴다. */
   stepperAngle: number
   gpioForPin: (pin: string) => number | undefined
@@ -2080,6 +2098,11 @@ function ComponentGlyph({
   // RGB 는 채널마다 세기가 다를 수 있다 — PWM 을 쓰면 실제로 색이 섞인다.
   const rgbChannel = (pin: string) => Math.round(90 + 165 * levelOf(pin))
   const buzzerFreq = freqOf('positive') ?? freqOf('negative')
+  // OLED 화면도 sda 핀 기준. 행마다 '0'/'1' 문자열이라 그대로 찍으면 된다.
+  const oledPixels = (() => {
+    const gpio = gpioForPin('sda')
+    return gpio === undefined ? undefined : oledRows.get(gpio)
+  })()
   // LCD 화면 글자는 sda 핀 기준으로 온다. 아직 아무것도 안 찍었으면 빈 줄.
   const lcdText = (() => {
     const gpio = gpioForPin('sda')
@@ -2162,6 +2185,7 @@ function ComponentGlyph({
         component.type === 'neopixel' ||
         component.type === 'ultrasonic' ||
         component.type === 'lcd' ||
+        component.type === 'oled' ||
         component.type === 'ir-obstacle' ||
         component.type === 'joystick' ||
         component.type === 'dc-motor' ||
@@ -2619,6 +2643,36 @@ function ComponentGlyph({
               </text>
             </Unflip>
           )}
+        </g>
+      )}
+
+      {component.type === 'oled' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          <rect x={-38} y={2} width={76} height={48} rx={3} fill="#0f172a" stroke="#020617" strokeWidth={1.5} />
+          {/* 128x64 픽셀을 64x32 로 줄여 그린다 — 두 픽셀씩 묶으면 화면에서 알아볼 수
+              있는 크기가 되고, 글자도 읽힌다. 원본 해상도 그대로면 점이 너무 작다. */}
+          <g transform="translate(-32 6)">
+            <rect x={0} y={0} width={64} height={32} fill="#020617" />
+            {oledPixels &&
+              Array.from({ length: OLED_HEIGHT / 2 }, (_, y) => {
+                const top = oledPixels[y * 2] ?? ''
+                const bottom = oledPixels[y * 2 + 1] ?? ''
+                const spans: React.ReactNode[] = []
+                for (let x = 0; x < OLED_WIDTH / 2; x++) {
+                  const on =
+                    top[x * 2] === '1' ||
+                    top[x * 2 + 1] === '1' ||
+                    bottom[x * 2] === '1' ||
+                    bottom[x * 2 + 1] === '1'
+                  if (on) spans.push(<rect key={x} x={x} y={y} width={1} height={1} fill="#7dd3fc" />)
+                }
+                return spans
+              })}
+          </g>
         </g>
       )}
 
