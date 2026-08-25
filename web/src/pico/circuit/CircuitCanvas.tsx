@@ -813,7 +813,7 @@ function CircuitCanvas(
       // layoutBreadboard()가 이미 절대좌표(회전 안 된 상태 기준)로 계산해 둔 점을,
       // 브레드보드 한가운데(breadboardPivot)를 축으로 한 번 더 돌린다 — 부품/보드와
       // 같은 이유(회전 안 하면 칸이 실제로 보이는 자리와 안 맞는다).
-      const raw = ref.kind === 'breadboard' ? breadboardAnchor(layout, ref.col, ref.side) : breadboardRailAnchor(layout, ref.rail)
+      const raw = ref.kind === 'breadboard' ? breadboardAnchor(layout, ref.col, ref.side) : breadboardRailAnchor(layout, ref.rail, ref.col)
       return rotateAround(raw, breadboardPivot(layout), bb.rotation ?? 0)
     }
     const comp = components.find((c) => c.id === ref.componentId)
@@ -1540,8 +1540,10 @@ function BreadboardGlyph({
   }
   for (let col = 0; col < l.columns; col++) {
     const x = l.colX(col)
-    const plusRef: PinRef = { kind: 'breadboardRail', boardId: l.id, rail: 'plus' }
-    const minusRef: PinRef = { kind: 'breadboardRail', boardId: l.id, rail: 'minus' }
+    // 구멍마다 다른 ref 다 — 선을 각각 다른 구멍에 꽂을 수 있어야 한다(전기적으로는
+    // 같은 레일이면 한 노드, connectivity 에서 묶는다).
+    const plusRef: PinRef = { kind: 'breadboardRail', boardId: l.id, rail: 'plus', col }
+    const minusRef: PinRef = { kind: 'breadboardRail', boardId: l.id, rail: 'minus', col }
     dots.push(
       <PinDot
         key={`rp${col}`}

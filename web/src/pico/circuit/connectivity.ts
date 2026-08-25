@@ -41,6 +41,16 @@ export function resolveConnectivity(wires: Wire[]): ConnectivityResult {
     uf.union(pinRefKey(wire.from), pinRefKey(wire.to))
   }
 
+  // 같은 전원 레일의 구멍들은 전부 한 노드다. 구멍마다 pinRefKey 가 달라진 뒤로
+  // (여러 선을 다른 구멍에 꽂을 수 있게 하려고) 여기서 명시적으로 묶어준다 —
+  // 이게 없으면 같은 레일에 꽂은 선끼리 안 이어진 것으로 계산된다.
+  for (const wire of wires) {
+    for (const ref of [wire.from, wire.to]) {
+      if (ref.kind !== 'breadboardRail') continue
+      uf.union(pinRefKey(ref), `bb:${ref.boardId}:rail:${ref.rail}`)
+    }
+  }
+
   // 같은 라벨(GND 등)을 공유하는 보드 핀은 실제 칩처럼 전부 같은 노드다.
   const byLabel = new Map<string, string[]>()
   for (const pin of BOARD_PINS) {

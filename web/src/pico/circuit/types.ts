@@ -9,7 +9,11 @@ export interface Point {
 export type PinRef =
   | { kind: 'board'; pinId: string }
   | { kind: 'breadboard'; boardId: string; col: number; side: 'top' | 'bottom' }
-  | { kind: 'breadboardRail'; boardId: string; rail: 'plus' | 'minus' }
+  /** 전원 레일. col 은 "몇 번째 구멍에 꽂았는가" 다 — 실제 레일도 구멍이 여러 개고,
+   *  여러 선을 각각 다른 구멍에 꽂는 게 브레드보드를 쓰는 이유다. 전기적으로는 같은
+   *  레일이면 전부 한 노드다(connectivity 에서 묶는다).
+   *  없으면 0번 구멍 — 이 필드가 생기기 전 저장된 회로도 읽혀야 하니 optional. */
+  | { kind: 'breadboardRail'; boardId: string; rail: 'plus' | 'minus'; col?: number }
   | { kind: 'component'; componentId: string; pin: string }
 
 export function pinRefKey(ref: PinRef): string {
@@ -19,7 +23,7 @@ export function pinRefKey(ref: PinRef): string {
     case 'breadboard':
       return `bb:${ref.boardId}:${ref.col}:${ref.side}`
     case 'breadboardRail':
-      return `bb:${ref.boardId}:rail:${ref.rail}`
+      return `bb:${ref.boardId}:rail:${ref.rail}:${ref.col ?? 0}`
     case 'component':
       return `comp:${ref.componentId}:${ref.pin}`
   }

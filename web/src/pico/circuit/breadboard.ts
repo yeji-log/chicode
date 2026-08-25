@@ -64,9 +64,13 @@ export function breadboardAnchor(
   return { x: layout.colX(col), y: rows[2] }
 }
 
-export function breadboardRailAnchor(layout: BreadboardLayout, rail: 'plus' | 'minus'): Point {
+export function breadboardRailAnchor(
+  layout: BreadboardLayout,
+  rail: 'plus' | 'minus',
+  col = 0,
+): Point {
   return {
-    x: layout.colX(Math.floor(layout.columns / 2)),
+    x: layout.colX(Math.max(0, Math.min(layout.columns - 1, col))),
     y: rail === 'plus' ? layout.railPlusY : layout.railMinusY,
   }
 }
