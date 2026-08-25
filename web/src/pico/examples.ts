@@ -8,6 +8,13 @@ export interface Example {
   circuit: CircuitSnapshot
 }
 
+/**
+ * 부품을 놓을 자리. 미니 브레드보드(x 24~354)와 Pico 보드(x 640~840) 사이의 빈 칸이다.
+ * 예전엔 부품을 보드 몸통 한가운데(x 700)에 뒀는데, 그러면 부품이 보드에 겹쳐 그려진다
+ * — 부저 예제를 만들면서 눈으로 보고 알았다. 기존 예제도 전부 그랬다.
+ */
+const PART_X = 450
+
 // 보드 핀 id 는 web/src/pico/circuit/board.ts 참고 — L20=GP15, L19=GP14, L18=GND.
 const GP15 = 'L20'
 const GP14 = 'L19'
@@ -15,7 +22,7 @@ const GND = 'L18'
 
 function ledOnly(): CircuitSnapshot {
   return {
-    components: [{ id: 'led1', type: 'led', x: 700, y: 90 }],
+    components: [{ id: 'led1', type: 'led', x: PART_X, y: 120 }],
     breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: { kind: 'board', pinId: GP15 } },
@@ -27,8 +34,8 @@ function ledOnly(): CircuitSnapshot {
 function ledAndButton(): CircuitSnapshot {
   return {
     components: [
-      { id: 'led1', type: 'led', x: 700, y: 90 },
-      { id: 'button1', type: 'button', x: 700, y: 200 },
+      { id: 'led1', type: 'led', x: PART_X, y: 120 },
+      { id: 'button1', type: 'button', x: PART_X, y: 260 },
     ],
     breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
     wires: [
@@ -42,7 +49,7 @@ function ledAndButton(): CircuitSnapshot {
 
 function buzzerOnly(): CircuitSnapshot {
   return {
-    components: [{ id: 'buzzer1', type: 'buzzer', x: 700, y: 120 }],
+    components: [{ id: 'buzzer1', type: 'buzzer', x: PART_X, y: 140 }],
     breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'buzzer1', pin: 'positive' }, to: { kind: 'board', pinId: GP15 } },
