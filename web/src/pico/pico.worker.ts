@@ -35,6 +35,8 @@ export type WorkerResponse =
   | { type: 'stdout'; text: string }
   | { type: 'stderr'; text: string }
   | { type: 'gpio'; pin: number; value: 0 | 1 }
+  /** PWM 상태. duty 0~65535, freq 는 Hz. deinit() 하면 duty 0 으로 온다. */
+  | { type: 'pwm'; pin: number; freq: number; duty: number }
   | { type: 'done'; ok: boolean; error?: string; elapsedMs: number; interactive: boolean }
 
 const post = (message: WorkerResponse) => self.postMessage(message)
@@ -92,6 +94,12 @@ async function boot(): Promise<MicroPythonInterface> {
      *  OUT 으로 썼다가 IN 으로 바꾸면 옛날 출력값이 계속 읽히는 걸 막는다. */
     pin_clear_out(pin: number) {
       gpioOut.delete(pin)
+    },
+    pwm_set(pin: number, freq: number, duty: number) {
+      // PWM 이 걸린 핀은 더는 단순 on/off 가 아니다 — Pin.value() 가 옛 출력값을
+      // 읽지 않도록 기록을 지운다.
+      gpioOut.delete(pin)
+      post({ type: 'pwm', pin, freq, duty })
     },
     /** ADC 로 읽는 값(0~65535). 아무것도 안 물려 있으면 0 — 실제 보드에서 뜬 핀은
      *  값이 떠다니지만, 그걸 흉내 내면 "왜 자꾸 숫자가 바뀌냐"는 질문만 늘어난다. */
@@ -203,6 +211,10 @@ import _chico_hw
 # NameError: name '_ADC_PINS' isn't defined 가 났다(실제로 재현해서 찾았다).
 _chico_adc_pins = (26, 27, 28)
 
+def _chico_clamp_duty(d):
+    d = int(d)
+    return 0 if d < 0 else (65535 if d > 65535 else d)
+
 def _chico_build_machine():
     # types.ModuleType 은 이 MicroPython WASM 빌드에서 직접 인스턴스화가 안 된다
     # ("TypeError: can't create 'module' instances", 실행해보고 확인함).
@@ -261,9 +273,50 @@ def _chico_build_machine():
         def read_u16(self):
             return _chico_hw.adc_read(self.id)
 
+    class PWM:
+        """진짜 MicroPython 과 같은 모양으로 쓴다 — PWM(Pin(15)) 뒤에 freq()/duty_u16().
+        인자 없이 부르면 지금 값을 돌려주는 것(getter)까지 실물과 같다."""
+
+        def __init__(self, dest, freq=None, duty_u16=None):
+            self.id = dest.id if hasattr(dest, "id") else dest
+            self._freq = 1000
+            self._duty = 0
+            if freq is not None:
+                self._freq = int(freq)
+            if duty_u16 is not None:
+                self._duty = _chico_clamp_duty(duty_u16)
+            self._push()
+
+        def freq(self, f=None):
+            if f is None:
+                return self._freq
+            self._freq = int(f)
+            self._push()
+
+        def duty_u16(self, d=None):
+            if d is None:
+                return self._duty
+            self._duty = _chico_clamp_duty(d)
+            self._push()
+
+        def duty_ns(self, ns=None):
+            # 서보 예제가 이걸 자주 쓴다(예: 1500000ns = 가운데). 주기 대비 비율로 환산.
+            period = 1000000000 // self._freq
+            if ns is None:
+                return self._duty * period // 65535
+            self.duty_u16(int(ns) * 65535 // period)
+
+        def deinit(self):
+            self._duty = 0
+            self._push()
+
+        def _push(self):
+            _chico_hw.pwm_set(self.id, self._freq, self._duty)
+
     mod = _Module()
     mod.Pin = Pin
     mod.ADC = ADC
+    mod.PWM = PWM
     return mod
 
 sys.modules["machine"] = _chico_build_machine()

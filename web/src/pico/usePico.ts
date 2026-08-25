@@ -16,6 +16,8 @@ export interface UsePico {
   bootError: string | null
   /** 실행 중인 코드가 GPIO 에 쓴 마지막 값. LED 등을 그릴 때 쓴다. */
   gpio: Map<number, 0 | 1>
+  /** PWM 이 걸린 핀의 주파수/듀티. LED 밝기, 부저 음, 서보 각도를 그리는 데 쓴다. */
+  pwm: Map<number, { freq: number; duty: number }>
   run: (code: string) => void
   stop: () => void
   clearOutput: () => void
@@ -38,6 +40,7 @@ export function usePico(): UsePico {
   const [elapsedMs, setElapsedMs] = useState<number | null>(null)
   const [bootError, setBootError] = useState<string | null>(null)
   const [gpio, setGpio] = useState<Map<number, 0 | 1>>(new Map())
+  const [pwm, setPwm] = useState<Map<number, { freq: number; duty: number }>>(new Map())
 
   const append = useCallback((stream: OutputLine['stream'], text: string) => {
     setOutput((prev) => [...prev, { id: lineId.current++, stream, text }])
@@ -65,7 +68,24 @@ export function usePico(): UsePico {
           append('err', message.text)
           break
         case 'gpio':
+          // 같은 핀에 PWM 이 걸려 있었다면 그건 이제 무효다(반대 방향은 워커의
+          // pwm_set 이 gpioOut 을 지우는 것으로 처리한다).
+          setPwm((prev) => {
+            if (!prev.has(message.pin)) return prev
+            const next = new Map(prev)
+            next.delete(message.pin)
+            return next
+          })
           setGpio((prev) => new Map(prev).set(message.pin, message.value))
+          break
+        case 'pwm':
+          setGpio((prev) => {
+            if (!prev.has(message.pin)) return prev
+            const next = new Map(prev)
+            next.delete(message.pin)
+            return next
+          })
+          setPwm((prev) => new Map(prev).set(message.pin, { freq: message.freq, duty: message.duty }))
           break
         case 'done':
           if (!message.ok && message.error) append('err', message.error)
@@ -102,6 +122,7 @@ export function usePico(): UsePico {
       setOutput([])
       setElapsedMs(null)
       setGpio(new Map())
+      setPwm(new Map())
       setStatus('running')
 
       const request: WorkerRequest = { type: 'run', code }
@@ -133,5 +154,5 @@ export function usePico(): UsePico {
     workerRef.current?.postMessage(request)
   }, [])
 
-  return { status, output, elapsedMs, bootError, gpio, run, stop, clearOutput, setButton, setAnalog }
+  return { status, output, elapsedMs, bootError, gpio, pwm, run, stop, clearOutput, setButton, setAnalog }
 }

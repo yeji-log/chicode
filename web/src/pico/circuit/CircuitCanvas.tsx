@@ -117,6 +117,8 @@ function loadInitial(): CircuitSnapshot {
 export interface CircuitCanvasProps {
   /** 워커가 보고하는 GPIO 출력값 — LED 등을 실제로 켜고 끄는 데 쓴다. */
   gpioLevels: Map<number, 0 | 1>
+  /** PWM 이 걸린 핀의 주파수/듀티 — LED 는 밝기로, 부저는 음 높이로 보여준다. */
+  pwmLevels: Map<number, { freq: number; duty: number }>
   /** 버튼/스위치가 눌리거나 켜질 때, 연결된 GPIO 번호로 알려준다(연결 안 됐으면 안 불림). */
   onButtonChange: (gpio: number, pressed: boolean) => void
   /** 가변저항 노브를 돌릴 때, 연결된 GPIO 번호로 0~65535 값을 알려준다. */
@@ -134,6 +136,19 @@ export interface CircuitCanvasHandle {
   loadCircuit: (circuit: CircuitSnapshot) => void
 }
 
+/** 핀에 실제로 걸린 세기(0~1). 단순 on/off 면 0 또는 1이고, PWM 이 걸려 있으면 duty
+ *  비율이다. 부저 소리와 ComponentGlyph 의 그림이 어긋나면 안 되니 한 군데서 계산한다. */
+function levelOfGpio(
+  gpio: number | undefined,
+  gpioLevels: Map<number, 0 | 1>,
+  pwmLevels: Map<number, { freq: number; duty: number }>,
+): number {
+  if (gpio === undefined) return 0
+  const pwm = pwmLevels.get(gpio)
+  if (pwm) return pwm.duty / ADC_MAX
+  return gpioLevels.get(gpio) === 1 ? 1 : 0
+}
+
 /** 보드는 하나뿐이라 id가 따로 없다 — 드래그/선택 상태에서 부품·브레드보드와 같은
  *  모양으로 다루려고 이 고정 문자열을 그 자리에 쓴다. */
 const BOARD_ID = 'pico-board'
@@ -141,7 +156,7 @@ type DragTarget = { id: string; kind: 'component' | 'breadboard' | 'board'; dx: 
 type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' } | null
 
 function CircuitCanvas(
-  { gpioLevels, onButtonChange, onAnalogChange, locked = false }: CircuitCanvasProps,
+  { gpioLevels, pwmLevels, onButtonChange, onAnalogChange, locked = false }: CircuitCanvasProps,
   ref: React.Ref<CircuitCanvasHandle>,
 ) {
   const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
@@ -158,6 +173,7 @@ function CircuitCanvas(
   // 노브를 잡고 도는 중인 부품 id. 부품 드래그(dragging)와 별개로 둬야 노브를 돌릴 때
   // 부품이 같이 끌려오지 않는다.
   const [knobDrag, setKnobDrag] = useState<string | null>(null)
+
   // 지금부터 새로 잇는 전선에 쓸 색 — 팔레트에서 고르면 바뀐다(finishWire 참고).
   const [wireColor, setWireColor] = useState(DEFAULT_WIRE_COLOR)
   // 부품마다 "✕ 삭제"/"↻ 회전" 글자를 따로 두면 부품이 많아질수록 화면이 빽빽해지고
@@ -778,6 +794,7 @@ function CircuitCanvas(
                 key={c.id}
                 component={c}
                 gpioLevels={gpioLevels}
+                pwmLevels={pwmLevels}
                 gpioForPin={(pin) => gpioForPin(c.id, pin)}
                 active={activeInputs.has(c.id)}
                 analogValue={analogValues.get(c.id) ?? 0}
@@ -1408,6 +1425,7 @@ function BoardPinDot({
 function ComponentGlyph({
   component,
   gpioLevels,
+  pwmLevels,
   gpioForPin,
   active,
   analogValue,
@@ -1421,6 +1439,7 @@ function ComponentGlyph({
 }: {
   component: PlacedComponent
   gpioLevels: Map<number, 0 | 1>
+  pwmLevels: Map<number, { freq: number; duty: number }>
   gpioForPin: (pin: string) => number | undefined
   active: boolean
   /** 가변저항 노브 위치(0~1). 다른 부품에선 안 쓴다. */
@@ -1435,10 +1454,23 @@ function ComponentGlyph({
 }) {
   const pins = COMPONENT_PINS[component.type]
   const pivot = COMPONENT_PIVOT[component.type]
-  const isOn = (pin: string) => {
+  /** 핀에 실제로 걸린 세기(0~1). 단순 on/off 면 0 또는 1이고, PWM 이 걸려 있으면
+   *  duty 비율이다 — 그래야 LED 가 "켜짐/꺼짐" 두 단계가 아니라 밝기로 보인다. */
+  const levelOf = (pin: string) => levelOfGpio(gpioForPin(pin), gpioLevels, pwmLevels)
+  const isOn = (pin: string) => levelOf(pin) > 0
+  /** 이 핀에 걸린 PWM 주파수(Hz). PWM 이 아니면 없음 — 부저가 음 높이를 보여줄 때 쓴다. */
+  const freqOf = (pin: string) => {
     const gpio = gpioForPin(pin)
-    return gpio !== undefined && gpioLevels.get(gpio) === 1
+    if (gpio === undefined) return undefined
+    const pwm = pwmLevels.get(gpio)
+    return pwm && pwm.duty > 0 ? pwm.freq : undefined
   }
+
+  // LED 는 두 다리 중 어느 쪽에 신호가 와도 켜진 것으로 본다(극성까지 따지진 않는다).
+  const ledLit = Math.max(levelOf('anode'), levelOf('cathode'))
+  // RGB 는 채널마다 세기가 다를 수 있다 — PWM 을 쓰면 실제로 색이 섞인다.
+  const rgbChannel = (pin: string) => Math.round(90 + 165 * levelOf(pin))
+  const buzzerFreq = freqOf('positive') ?? freqOf('negative')
 
   /** 부품 몸통에서 각 핀까지 내려가는 다리(리드선) — 실제 부품처럼 보이게 한다. */
   const Legs = () => (
@@ -1524,15 +1556,21 @@ function ComponentGlyph({
           style={{ filter: 'url(#chico-shadow)' }}
         >
           <path d="M -13 20 A 13 13 0 1 1 13 20 L 13 26 L -13 26 Z" fill="#78716c" opacity={0.35} />
-          <circle
-            cx={0}
-            cy={18}
-            r={14}
-            fill={isOn('anode') || isOn('cathode') ? '#fde047' : '#fca5a5'}
-            stroke={isOn('anode') || isOn('cathode') ? '#f59e0b' : '#b91c1c'}
-            strokeWidth={2}
-            style={isOn('anode') || isOn('cathode') ? { filter: 'drop-shadow(0 0 9px #fbbf24)' } : undefined}
-          />
+          {/* 꺼진 알을 항상 깔고, 켜진 알을 그 위에 세기만큼 투명도로 덮는다 — PWM 이
+              걸리면 duty 에 따라 실제로 어둡게/밝게 보인다(켜짐·꺼짐 두 단계가 아니라). */}
+          <circle cx={0} cy={18} r={14} fill="#fca5a5" stroke="#b91c1c" strokeWidth={2} />
+          {ledLit > 0 && (
+            <circle
+              cx={0}
+              cy={18}
+              r={14}
+              fill="#fde047"
+              stroke="#f59e0b"
+              strokeWidth={2}
+              opacity={0.25 + 0.75 * ledLit}
+              style={{ filter: `drop-shadow(0 0 ${3 + 8 * ledLit}px #fbbf24)` }}
+            />
+          )}
           <ellipse cx={-4} cy={13} rx={4} ry={2.5} fill="#ffffff" opacity={0.5} />
         </g>
       )}
@@ -1548,7 +1586,7 @@ function ComponentGlyph({
             cx={0}
             cy={18}
             r={15}
-            fill={`rgb(${isOn('r') ? 255 : 90}, ${isOn('g') ? 255 : 90}, ${isOn('b') ? 255 : 90})`}
+            fill={`rgb(${rgbChannel('r')}, ${rgbChannel('g')}, ${rgbChannel('b')})`}
             stroke="#57534e"
             strokeWidth={2}
             opacity={0.9}
@@ -1580,6 +1618,13 @@ function ComponentGlyph({
           <text x={0} y={22} fontSize={8} textAnchor="middle" fill="#fafaf9">
             🔔
           </text>
+          {/* PWM 으로 울릴 땐 몇 Hz 인지 같이 보여준다 — 음계 실습에서 "지금 무슨 음을
+              내고 있는가"가 눈으로 보여야 한다. */}
+          {buzzerFreq !== undefined && (
+            <text x={0} y={-6} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#b91c1c" className="select-none">
+              {buzzerFreq}Hz
+            </text>
+          )}
         </g>
       )}
 
