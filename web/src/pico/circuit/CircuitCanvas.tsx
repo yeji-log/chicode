@@ -36,6 +36,7 @@ import {
   type Point,
   pinRefKey,
   rotateAround,
+  type Wire,
   WIRE_COLORS,
 } from './types'
 
@@ -155,7 +156,11 @@ function levelOfGpio(
  *  모양으로 다루려고 이 고정 문자열을 그 자리에 쓴다. */
 const BOARD_ID = 'pico-board'
 type DragTarget = { id: string; kind: 'component' | 'breadboard' | 'board'; dx: number; dy: number }
-type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' } | null
+type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' | 'wire' } | null
+
+/** 선택한 전선의 한쪽 끝을 잡아 다른 핀으로 옮기는 중인 상태. end 는 "잡고 있는 쪽"이고,
+ *  반대쪽 끝은 제자리에 붙어 있다. */
+type Rewiring = { wireId: string; end: 'from' | 'to' } | null
 
 function CircuitCanvas(
   { gpioLevels, pwmLevels, onButtonChange, onAnalogChange, locked = false }: CircuitCanvasProps,
@@ -175,6 +180,17 @@ function CircuitCanvas(
   // 노브를 잡고 도는 중인 부품 id. 부품 드래그(dragging)와 별개로 둬야 노브를 돌릴 때
   // 부품이 같이 끌려오지 않는다.
   const [knobDrag, setKnobDrag] = useState<string | null>(null)
+  /** 다시 잇는 중인 전선. ref 와 state 를 같이 두는 이유: finishWire 는 포인터 이벤트
+   *  핸들러 안에서 "지금" 값을 읽어야 하는데, state 만 쓰면 pointerdown 과 pointerup
+   *  사이에 리렌더가 없었을 때 옛 값(null)을 보고 전선을 옮기는 대신 새로 그어버린다
+   *  (실제로 재현했다 — 원래 전선은 그대로 남고 엉뚱한 전선이 하나 더 생겼다).
+   *  화면 표시는 state 쪽을 쓴다. */
+  const rewiringRef = useRef<Rewiring>(null)
+  const [rewiring, setRewiringState] = useState<Rewiring>(null)
+  const setRewiring = (next: Rewiring) => {
+    rewiringRef.current = next
+    setRewiringState(next)
+  }
 
   // 지금부터 새로 잇는 전선에 쓸 색 — 팔레트에서 고르면 바뀐다(finishWire 참고).
   const [wireColor, setWireColor] = useState(DEFAULT_WIRE_COLOR)
@@ -336,8 +352,42 @@ function CircuitCanvas(
     setDraft({ from: ref, to: point })
   }
 
+  /** 선택한 전선의 한쪽 끝을 잡는다. 잡은 쪽은 떨어져 포인터를 따라오고(draft),
+   *  반대쪽 끝은 제자리에 붙어 있다 — 새 전선을 긋는 것과 같은 화면이 된다. */
+  const startRewire = (wire: Wire, end: 'from' | 'to') => {
+    if (locked) return
+    setRewiring({ wireId: wire.id, end })
+    setDraft({ from: end === 'from' ? wire.to : wire.from, to: pinPoint(wire[end]) })
+  }
+
   const finishWire = (ref: PinRef) => {
     if (locked) return
+
+    // 다시 잇는 중이면 새 전선을 만드는 게 아니라 잡고 있던 끝만 옮긴다.
+    if (rewiringRef.current) {
+      const target = rewiringRef.current
+      setRewiring(null)
+      setDraft(null)
+      setState((s) => {
+        const wire = s.wires.find((w) => w.id === target.wireId)
+        if (!wire) return s
+        const from = target.end === 'from' ? ref : wire.from
+        const to = target.end === 'to' ? ref : wire.to
+        // 같은 핀끼리는 못 잇는다. 이미 같은 두 핀을 잇는 다른 전선이 있어도 무시한다
+        // (새로 그을 때와 같은 규칙 — 겹친 전선이 두 개 생기면 지우기도 헷갈린다).
+        if (pinRefKey(from) === pinRefKey(to)) return s
+        const duplicate = s.wires.some(
+          (w) =>
+            w.id !== wire.id &&
+            ((pinRefKey(w.from) === pinRefKey(from) && pinRefKey(w.to) === pinRefKey(to)) ||
+              (pinRefKey(w.to) === pinRefKey(from) && pinRefKey(w.from) === pinRefKey(to))),
+        )
+        if (duplicate) return s
+        return { ...s, wires: s.wires.map((w) => (w.id === wire.id ? { ...w, from, to } : w)) }
+      })
+      return
+    }
+
     setDraft((current) => {
       if (!current) return null
       if (pinRefKey(current.from) === pinRefKey(ref)) return null
@@ -436,6 +486,7 @@ function CircuitCanvas(
     }
     setDragging(null)
     setDraft(null) // 빈 곳에서 놓으면 배선 취소
+    setRewiring(null) // 다시 잇기도 마찬가지 — 전선은 원래 자리에 그대로 남는다
   }
 
   const onBackgroundPointerDown = (event: React.PointerEvent) => {
@@ -452,8 +503,8 @@ function CircuitCanvas(
     setState((s) => ({ ...s, wires: s.wires.filter((w) => w.id !== id) }))
   }
 
-  /** 오른쪽 클릭으로 이미 그은 전선의 색을 지금 고른 색(wireColor)으로 바꾼다 — 왼쪽
-   *  클릭(삭제)의 의미는 그대로 두고 색만 따로 바꿀 방법을 준다. */
+  /** 오른쪽 클릭으로 이미 그은 전선의 색을 지금 고른 색(wireColor)으로 바꾼다.
+   *  왼쪽 클릭은 선택(양 끝 손잡이 표시)이라 색 바꾸기는 이 자리에 그대로 둔다. */
   const recolorWire = (id: string, event: React.MouseEvent) => {
     event.preventDefault()
     if (locked) return
@@ -557,7 +608,8 @@ function CircuitCanvas(
   const deleteSelected = () => {
     if (locked || !selected || selected.kind === 'board') return
     if (selected.kind === 'component') removeComponent(selected.id)
-    else removeBreadboard(selected.id)
+    else if (selected.kind === 'breadboard') removeBreadboard(selected.id)
+    else removeWire(selected.id)
     setSelected(null)
   }
 
@@ -565,7 +617,7 @@ function CircuitCanvas(
     if (!selected) return
     if (selected.kind === 'component') rotateComponent(selected.id)
     else if (selected.kind === 'board') rotateBoard()
-    else rotateBreadboard(selected.id)
+    else if (selected.kind === 'breadboard') rotateBreadboard(selected.id)
   }
 
   // R = 선택한 항목(부품/보드) 90도 회전, Delete/Backspace = 선택한 항목 삭제.
@@ -679,7 +731,9 @@ function CircuitCanvas(
       ? (COMPONENT_LIST.find((c) => c.type === components.find((comp) => comp.id === selected.id)?.type)?.label ?? '부품')
       : selected?.kind === 'breadboard'
         ? '브레드보드'
-        : null
+        : selected?.kind === 'wire'
+          ? '전선'
+          : null
 
   return (
     <div className="flex flex-col gap-2">
@@ -776,6 +830,7 @@ function CircuitCanvas(
             />
 
             {wires.map((w) => {
+              if (rewiring?.wireId === w.id) return null
               const a = pinPoint(w.from)
               const b = pinPoint(w.to)
               return (
@@ -783,11 +838,11 @@ function CircuitCanvas(
                   key={w.id}
                   d={wirePath(a, b)}
                   stroke={w.color ?? DEFAULT_WIRE_COLOR}
-                  strokeWidth={3.5}
+                  strokeWidth={selected?.kind === 'wire' && selected.id === w.id ? 5.5 : 3.5}
                   fill="none"
                   strokeLinecap="round"
                   className={locked ? '' : 'cursor-pointer hover:opacity-70'}
-                  onClick={() => removeWire(w.id)}
+                  onClick={() => !locked && setSelected({ kind: 'wire', id: w.id })}
                   onContextMenu={(e) => recolorWire(w.id, e)}
                 />
               )
@@ -795,6 +850,7 @@ function CircuitCanvas(
             {/* 실제 선(3.5px)은 클릭하기 얇아서, 안 보이는 굵은 선을 하나 더 깔아 클릭 영역을 넓힌다. */}
             {!locked &&
               wires.map((w) => (
+                rewiring?.wireId === w.id ? null : (
                 <path
                   key={`${w.id}-hit`}
                   d={wirePath(pinPoint(w.from), pinPoint(w.to))}
@@ -802,9 +858,10 @@ function CircuitCanvas(
                   strokeWidth={14}
                   fill="none"
                   className="cursor-pointer"
-                  onClick={() => removeWire(w.id)}
+                  onClick={() => setSelected({ kind: 'wire', id: w.id })}
                   onContextMenu={(e) => recolorWire(w.id, e)}
                 />
+                )
               ))}
 
             {draft && (
@@ -853,6 +910,36 @@ function CircuitCanvas(
                 }}
               />
             ))}
+            {/* 선택한 전선의 양 끝 손잡이. 부품 뒤에 그려서(=화면상 위) 핀보다 먼저
+                잡히게 한다 — 평소엔 아예 안 그리므로 핀을 가리지 않는다(방식 B).
+                끌면 그 끝이 떨어져 다른 핀으로 옮겨간다. */}
+            {!locked &&
+              selected?.kind === 'wire' &&
+              (() => {
+                const wire = wires.find((w) => w.id === selected.id)
+                if (!wire) return null
+                return (['from', 'to'] as const).map((end) => {
+                  const p = pinPoint(wire[end])
+                  const grabbed = rewiring?.wireId === wire.id && rewiring.end === end
+                  return (
+                    <circle
+                      key={end}
+                      cx={p.x}
+                      cy={p.y}
+                      r={7}
+                      fill={grabbed ? '#2563eb' : '#ffffff'}
+                      stroke="#2563eb"
+                      strokeWidth={2.5}
+                      className="cursor-grab"
+                      onPointerDown={(event) => {
+                        event.stopPropagation()
+                        startRewire(wire, end)
+                      }}
+                      onPointerUp={(event) => event.stopPropagation()}
+                    />
+                  )
+                })
+              })()}
           </g>
 
           {/* 줌 컨트롤 — transform 그룹 밖에 그려서 확대/축소와 무관하게 항상 같은
@@ -890,7 +977,7 @@ function CircuitCanvas(
       <p className="px-1 text-xs leading-relaxed text-ink-500">
         {locked
           ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
-          : '부품/브레드보드/Pico 보드는 클릭해서 선택 후 R(회전)로 돌리고 끌어서 옮깁니다(보드는 삭제 불가). 삭제는 Delete 키나 휴지통 버튼. 핀(원)을 끌어 전선을 잇고, 전선은 클릭(삭제)·오른쪽 클릭(색 바꾸기)합니다.'}
+          : '부품/브레드보드/Pico 보드는 클릭해서 선택 후 R(회전)로 돌리고 끌어서 옮깁니다(보드는 삭제 불가). 핀(원)을 끌면 전선이 이어지고, 전선을 클릭하면 양 끝에 손잡이가 나와 다른 핀으로 옮길 수 있습니다(오른쪽 클릭은 색 바꾸기). 삭제는 Delete 키나 휴지통 버튼입니다.'}
       </p>
 
       {confirmingClearAll && (
