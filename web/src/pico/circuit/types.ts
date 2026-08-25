@@ -31,7 +31,7 @@ export function pinRefKey(ref: PinRef): string {
  * 안 하는" 상태가 된다. 그건 이 프로젝트가 제일 싫어하는 종류의 거짓말이라 뺐다
  * (계획 문서 4절 "우선 구현할 부품" 참고 — ADC/PWM 은 다음 단계).
  */
-export type ComponentType = 'led' | 'rgb-led' | 'buzzer' | 'button' | 'switch'
+export type ComponentType = 'led' | 'rgb-led' | 'buzzer' | 'button' | 'switch' | 'potentiometer'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -52,6 +52,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
   { type: 'buzzer', category: 'output', label: '부저', short: '부저', emoji: '🔔' },
   { type: 'button', category: 'input', label: '버튼(누르는 동안)', short: '버튼', emoji: '🔘' },
   { type: 'switch', category: 'input', label: '스위치(클릭해서 토글)', short: '스위치', emoji: '🔀' },
+  {
+    type: 'potentiometer',
+    category: 'input',
+    label: '가변저항(노브를 돌려서 조절 · GP26~28에만 연결)',
+    short: '가변저항',
+    emoji: '🎛️',
+  },
 ]
 
 export interface PlacedComponent {
@@ -142,6 +149,13 @@ export interface CircuitSnapshot {
   board?: PlacedBoard
 }
 
+/** 가변저항 노브가 돌아가는 범위(도) — 실물 손잡이처럼 한 바퀴를 다 못 돌고
+ *  좌우로 135도씩, 합쳐서 270도만 움직인다. 0%가 -135도, 100%가 +135도. */
+export const KNOB_SWEEP_DEG = 270
+
+/** 아날로그 입력의 최댓값 — MicroPython 의 ADC.read_u16() 이 0~65535 를 준다. */
+export const ADC_MAX = 65535
+
 /** 부품 종류별로 고정된 핀 이름 + 부품 기준 상대 좌표. */
 export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy: number }[]> = {
   led: [
@@ -166,6 +180,12 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'a', dx: -16, dy: 18 },
     { pin: 'b', dx: 16, dy: 18 },
   ],
+  // 실물 가변저항과 같은 3핀: 양끝이 전원/접지, 가운데가 읽어가는 값(와이퍼).
+  potentiometer: [
+    { pin: 'vcc', dx: -18, dy: 40 },
+    { pin: 'out', dx: 0, dy: 40 },
+    { pin: 'gnd', dx: 18, dy: 40 },
+  ],
 }
 
 /** 부품 종류별 "몸통 중심"(회전 중심) — ComponentGlyph의 몸통 도형 좌표와 맞춰
@@ -178,4 +198,5 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   buzzer: { x: 0, y: 18 },
   button: { x: 0, y: 10 },
   switch: { x: 0, y: 10 },
+  potentiometer: { x: 0, y: 14 },
 }

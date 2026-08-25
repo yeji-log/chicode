@@ -21,6 +21,8 @@ export interface UsePico {
   clearOutput: () => void
   /** 버튼 부품을 누르고/뗄 때 호출한다 — 실행 중인 코드가 실시간으로 볼 수 있다. */
   setButton: (pin: number, pressed: boolean) => void
+  /** 가변저항 노브·조도센서 슬라이더를 움직일 때 호출한다(0~65535). setButton 과 같은 경로. */
+  setAnalog: (pin: number, value: number) => void
 }
 
 /**
@@ -126,5 +128,10 @@ export function usePico(): UsePico {
     workerRef.current?.postMessage(request)
   }, [])
 
-  return { status, output, elapsedMs, bootError, gpio, run, stop, clearOutput, setButton }
+  const setAnalog = useCallback((pin: number, value: number) => {
+    const request: WorkerRequest = { type: 'analog', pin, value }
+    workerRef.current?.postMessage(request)
+  }, [])
+
+  return { status, output, elapsedMs, bootError, gpio, run, stop, clearOutput, setButton, setAnalog }
 }

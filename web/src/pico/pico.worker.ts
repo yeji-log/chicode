@@ -26,6 +26,8 @@ import type { MicroPythonInterface } from './micropython-types'
 export type WorkerRequest =
   | { type: 'run'; code: string }
   | { type: 'button'; pin: number; pressed: boolean }
+  /** 가변저항·조도센서 같은 아날로그 입력의 현재 값(0~65535). 버튼과 같은 경로다. */
+  | { type: 'analog'; pin: number; value: number }
 
 export type WorkerResponse =
   | { type: 'ready' }
@@ -42,6 +44,12 @@ const BASE_URL = import.meta.env.BASE_URL
 
 /** 버튼 등 입력 부품의 현재 상태 — 학생 코드가 pin.value() 로 읽어가는 값. */
 const gpioIn = new Map<number, boolean>()
+
+/** 아날로그 입력(가변저항, 조도센서 등)의 현재 값 — machine.ADC.read_u16() 이
+ *  읽어간다. 버튼(gpioIn)과 완전히 같은 구조라 새 경로를 만들지 않았다.
+ *  실행마다 비우지 않는다 — 노브를 돌려둔 상태는 실행과 무관한 "물리적" 상태다
+ *  (버튼을 누르고 있는 것과 같다). */
+const adcIn = new Map<number, number>()
 
 /** 출력으로 쓴 핀의 마지막 값. 진짜 Pico 는 Pin.OUT 핀도 value() 로 읽으면 방금 쓴
  *  값이 나오는데, 여기엔 이 기록이 없어서 gpioIn(버튼 상태)을 대신 읽고 있었다.
@@ -85,6 +93,11 @@ async function boot(): Promise<MicroPythonInterface> {
     pin_clear_out(pin: number) {
       gpioOut.delete(pin)
     },
+    /** ADC 로 읽는 값(0~65535). 아무것도 안 물려 있으면 0 — 실제 보드에서 뜬 핀은
+     *  값이 떠다니지만, 그걸 흉내 내면 "왜 자꾸 숫자가 바뀌냐"는 질문만 늘어난다. */
+    adc_read(pin: number) {
+      return adcIn.get(pin) ?? 0
+    },
     // 유일하게 async 인 다리. await 로 불리면 JS 이벤트 루프에 제어권을 돌려줘서
     // 그 사이에 쌓인 'button' 메시지가 처리된다 (실측으로 확인한 방식).
     async sleep_ms(ms: number) {
@@ -107,6 +120,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
   if (message.type === 'button') {
     gpioIn.set(message.pin, message.pressed)
+    return
+  }
+
+  if (message.type === 'analog') {
+    adcIn.set(message.pin, Math.max(0, Math.min(65535, Math.round(message.value))))
     return
   }
 
@@ -177,6 +195,14 @@ const MACHINE_MODULE_SOURCE = `
 import sys
 import _chico_hw
 
+# 진짜 Pico 도 ADC 는 이 세 핀뿐이다(GP29 는 내부 전압 측정용이라 헤더에 안 나온다).
+# 여기서 관대하게 아무 핀이나 받아주면, 시뮬레이터에서만 되는 코드를 가르치게 된다.
+#
+# 이름이 _chico_ 로 시작해야 한다 — RESET_GLOBALS_SOURCE 가 매 실행 전에 _chico 로
+# 시작하지 않는 전역을 전부 지우기 때문에, _ADC_PINS 로 뒀더니 ADC() 안에서
+# NameError: name '_ADC_PINS' isn't defined 가 났다(실제로 재현해서 찾았다).
+_chico_adc_pins = (26, 27, 28)
+
 def _chico_build_machine():
     # types.ModuleType 은 이 MicroPython WASM 빌드에서 직접 인스턴스화가 안 된다
     # ("TypeError: can't create 'module' instances", 실행해보고 확인함).
@@ -222,8 +248,22 @@ def _chico_build_machine():
         def toggle(self):
             self.value(0 if self.value() else 1)
 
+    class ADC:
+        def __init__(self, pin):
+            # machine.ADC(26) 처럼 번호를 바로 주는 것도, ADC(Pin(26)) 도 둘 다 받는다.
+            id = pin.id if hasattr(pin, "id") else pin
+            if id not in _chico_adc_pins:
+                raise ValueError(
+                    "ADC는 GP26, GP27, GP28에서만 쓸 수 있어요 (받은 핀: GP%d)" % id
+                )
+            self.id = id
+
+        def read_u16(self):
+            return _chico_hw.adc_read(self.id)
+
     mod = _Module()
     mod.Pin = Pin
+    mod.ADC = ADC
     return mod
 
 sys.modules["machine"] = _chico_build_machine()

@@ -18,6 +18,7 @@ import {
 } from './breadboard'
 import { resolveConnectivity } from './connectivity'
 import {
+  ADC_MAX,
   BREADBOARD_SIZES,
   type BreadboardSize,
   type CircuitSnapshot,
@@ -26,6 +27,7 @@ import {
   COMPONENT_PIVOT,
   type ComponentType,
   DEFAULT_WIRE_COLOR,
+  KNOB_SWEEP_DEG,
   type PinRef,
   type PlacedBoard,
   type PlacedBreadboard,
@@ -117,6 +119,8 @@ export interface CircuitCanvasProps {
   gpioLevels: Map<number, 0 | 1>
   /** 버튼/스위치가 눌리거나 켜질 때, 연결된 GPIO 번호로 알려준다(연결 안 됐으면 안 불림). */
   onButtonChange: (gpio: number, pressed: boolean) => void
+  /** 가변저항 노브를 돌릴 때, 연결된 GPIO 번호로 0~65535 값을 알려준다. */
+  onAnalogChange: (gpio: number, value: number) => void
   /**
    * true 면 배선/부품 편집을 전부 막는다(코드 실행 중). 버튼·스위치를 눌러보는 것만은
    * 계속 된다 — "실행 중인 회로가 실제로 반응하는 걸 보는" 게 이 잠금의 목적이지,
@@ -137,7 +141,7 @@ type DragTarget = { id: string; kind: 'component' | 'breadboard' | 'board'; dx: 
 type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' } | null
 
 function CircuitCanvas(
-  { gpioLevels, onButtonChange, locked = false }: CircuitCanvasProps,
+  { gpioLevels, onButtonChange, onAnalogChange, locked = false }: CircuitCanvasProps,
   ref: React.Ref<CircuitCanvasHandle>,
 ) {
   const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
@@ -147,6 +151,13 @@ function CircuitCanvas(
   const [dragging, setDragging] = useState<DragTarget | null>(null)
   // 버튼(누르는 동안)과 스위치(클릭해서 토글) 둘 다 "지금 켜진 입력 부품 id" 로 통일해서 관리한다.
   const [activeInputs, setActiveInputs] = useState<Set<string>>(new Set())
+  // 가변저항 노브 위치(부품 id → 0~1). 회로 자체(components/wires)와 달리 저장하지
+  // 않는다 — "지금 노브를 어디까지 돌려놨는가"는 버튼을 누르고 있는 것과 같은 순간적인
+  // 물리 상태지 회로의 일부가 아니다.
+  const [analogValues, setAnalogValues] = useState<Map<string, number>>(new Map())
+  // 노브를 잡고 도는 중인 부품 id. 부품 드래그(dragging)와 별개로 둬야 노브를 돌릴 때
+  // 부품이 같이 끌려오지 않는다.
+  const [knobDrag, setKnobDrag] = useState<string | null>(null)
   // 지금부터 새로 잇는 전선에 쓸 색 — 팔레트에서 고르면 바뀐다(finishWire 참고).
   const [wireColor, setWireColor] = useState(DEFAULT_WIRE_COLOR)
   // 부품마다 "✕ 삭제"/"↻ 회전" 글자를 따로 두면 부품이 많아질수록 화면이 빽빽해지고
@@ -184,6 +195,8 @@ function CircuitCanvas(
         setDraft(null)
         setDragging(null)
         setActiveInputs(new Set())
+        setAnalogValues(new Map())
+        setKnobDrag(null)
         setSelected(null)
       },
     }),
@@ -231,6 +244,18 @@ function CircuitCanvas(
     observer.observe(svg)
     return () => observer.disconnect()
   }, [])
+
+  /** 가변저항 값도, 노브를 돌릴 때뿐 아니라 배선이 바뀔 때도 최신 GPIO 로 다시 알려준다
+   *  (버튼의 위 useEffect 와 같은 이유). 안 이어졌으면 알릴 곳이 없으니 건너뛴다. */
+  useEffect(() => {
+    for (const c of components) {
+      if (c.type !== 'potentiometer') continue
+      const gpio = gpioForPin(c.id, 'out')
+      if (gpio === undefined) continue
+      onAnalogChange(gpio, Math.round((analogValues.get(c.id) ?? 0) * ADC_MAX))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analogValues, connectivity, components])
 
   const toSvgPoint = useCallback((clientX: number, clientY: number): Point => {
     const svg = svgRef.current
@@ -330,6 +355,14 @@ function CircuitCanvas(
       })
       return
     }
+    // 노브 돌리기는 locked(실행 중) 여도 된다 — 잠금의 목적은 배선 편집 금지지
+    // 상호작용 금지가 아니다(버튼/스위치와 같은 이유).
+    if (knobDrag) {
+      const c = components.find((comp) => comp.id === knobDrag)
+      if (c) setAnalogValues((prev) => new Map(prev).set(c.id, knobValueAt(c, toModelPoint(event.clientX, event.clientY))))
+      return
+    }
+
     if (locked) return
     const p = toModelPoint(event.clientX, event.clientY)
     if (draft) setDraft((d) => (d ? { ...d, to: p } : d))
@@ -356,6 +389,7 @@ function CircuitCanvas(
    *  그리드에 스냅한다 — 매 프레임 스냅하면 뚝뚝 끊겨 보인다(팅커캐드도 이 방식). */
   const onPointerUp = () => {
     panStartRef.current = null
+    setKnobDrag(null)
     if (dragging) {
       const target = dragging
       setState((s) => {
@@ -577,6 +611,19 @@ function CircuitCanvas(
     return { x: comp.x + rotated.x, y: comp.y + rotated.y }
   }
 
+  /** 포인터가 가리키는 방향을 노브 값(0~1)으로 바꾼다. 노브 "위쪽"이 가운데(50%)가
+   *  아니라, 왼쪽 끝(-135도)이 0%이고 오른쪽 끝(+135도)이 100%다 — 실물 손잡이와 같다.
+   *  부품이 회전해 있으면 그만큼 빼야 화면에 보이는 대로 돈다. */
+  const knobValueAt = (component: PlacedComponent, p: Point): number => {
+    const pivot = COMPONENT_PIVOT[component.type]
+    const deg = (Math.atan2(p.y - (component.y + pivot.y), p.x - (component.x + pivot.x)) * 180) / Math.PI
+    // atan2 의 0도는 오른쪽이라 +90 을 해서 "위"를 0도로 옮긴 뒤 -180~180 으로 정규화한다.
+    const raw = deg + 90 - (component.rotation ?? 0)
+    const rel = (((raw + 180) % 360) + 360) % 360 - 180
+    const half = KNOB_SWEEP_DEG / 2
+    return (Math.max(-half, Math.min(half, rel)) + half) / KNOB_SWEEP_DEG
+  }
+
   /** Tinkercad 처럼 전선이 부드러운 곡선(케이블)으로 처지게 그린다 — 직각 꺾임 대신. */
   const wirePath = (a: Point, b: Point) => {
     const dx = Math.max(30, Math.abs(b.x - a.x) * 0.55)
@@ -733,6 +780,7 @@ function CircuitCanvas(
                 gpioLevels={gpioLevels}
                 gpioForPin={(pin) => gpioForPin(c.id, pin)}
                 active={activeInputs.has(c.id)}
+                analogValue={analogValues.get(c.id) ?? 0}
                 locked={locked}
                 selected={selected?.kind === 'component' && selected.id === c.id}
                 onBodyPointerDown={(event) => {
@@ -750,6 +798,14 @@ function CircuitCanvas(
                   finishWire({ kind: 'component', componentId: c.id, pin })
                 }}
                 onInputActiveChange={(active) => setInputActive(c.id, active)}
+                onKnobPointerDown={(event) => {
+                  event.stopPropagation()
+                  setSelected({ kind: 'component', id: c.id })
+                  setKnobDrag(c.id)
+                  setAnalogValues((prev) =>
+                    new Map(prev).set(c.id, knobValueAt(c, toModelPoint(event.clientX, event.clientY))),
+                  )
+                }}
               />
             ))}
           </g>
@@ -1354,23 +1410,28 @@ function ComponentGlyph({
   gpioLevels,
   gpioForPin,
   active,
+  analogValue,
   locked,
   selected,
   onBodyPointerDown,
   onPinPointerDown,
   onPinPointerUp,
   onInputActiveChange,
+  onKnobPointerDown,
 }: {
   component: PlacedComponent
   gpioLevels: Map<number, 0 | 1>
   gpioForPin: (pin: string) => number | undefined
   active: boolean
+  /** 가변저항 노브 위치(0~1). 다른 부품에선 안 쓴다. */
+  analogValue: number
   locked: boolean
   selected: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGGElement>) => void
   onPinPointerDown: (pin: string, e: React.PointerEvent) => void
   onPinPointerUp: (pin: string, e: React.PointerEvent) => void
   onInputActiveChange: (active: boolean) => void
+  onKnobPointerDown: (e: React.PointerEvent) => void
 }) {
   const pins = COMPONENT_PINS[component.type]
   const pivot = COMPONENT_PIVOT[component.type]
@@ -1411,7 +1472,50 @@ function ComponentGlyph({
           pinPoint()가 rotateAround로 계산하는 것과 같은 중심·방향(시계 방향)
           이라야 전선이 실제 보이는 핀 위치에 붙는다. */}
       <g transform={`rotate(${component.rotation ?? 0} ${pivot.x} ${pivot.y})`}>
-      {(component.type === 'led' || component.type === 'rgb-led' || component.type === 'buzzer') && <Legs />}
+      {(component.type === 'led' ||
+        component.type === 'rgb-led' ||
+        component.type === 'buzzer' ||
+        component.type === 'potentiometer') && <Legs />}
+
+      {component.type === 'potentiometer' && (
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          {/* 실물 트리머처럼 사각 베이스 위에 둥근 노브가 얹혀 있다. 베이스는 평소처럼
+              끌어서 옮기는 곳이고, 노브만 돌리기용으로 따로 받는다. 처음엔 베이스를
+              원(r=17)으로 그렸는데 노브(r=13)와의 테두리가 4px 밖에 안 남아서 부품을
+              잡아 옮길 데가 사실상 없었다 — 특히 손가락으로는. 사각으로 바꾸니 네
+              귀퉁이가 잡을 자리로 남는다. */}
+          <rect
+            x={-19}
+            y={-4}
+            width={38}
+            height={36}
+            rx={4}
+            fill="#1f2937"
+            stroke="#111827"
+            strokeWidth={1.5}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
+          <circle
+            cx={0}
+            cy={14}
+            r={13}
+            fill="#e7e5e4"
+            stroke="#57534e"
+            strokeWidth={1.5}
+            className="cursor-pointer"
+            onPointerDown={onKnobPointerDown}
+          />
+          {/* 지금 값이 가리키는 방향을 그리는 눈금 하나. 0%가 왼쪽 아래(-135도),
+              100%가 오른쪽 아래(+135도) — knobValueAt() 과 같은 기준이다. */}
+          <g transform={`rotate(${analogValue * KNOB_SWEEP_DEG - KNOB_SWEEP_DEG / 2} 0 14)`}>
+            <line x1={0} y1={14} x2={0} y2={3} stroke="#dc2626" strokeWidth={2.5} strokeLinecap="round" />
+          </g>
+          <text x={0} y={-9} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+            {Math.round(analogValue * 100)}%
+          </text>
+        </g>
+      )}
 
       {component.type === 'led' && (
         <g
