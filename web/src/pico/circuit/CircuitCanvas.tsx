@@ -42,6 +42,10 @@ import {
   ledColorOf,
   mirrorX,
   NEOPIXEL_COUNT,
+  PIR_DEFAULT_DISTANCE_RATIO,
+  PIR_DEFAULT_RANGE_RATIO,
+  pirDistanceM,
+  pirRangeM,
   ULTRASONIC_DEFAULT_RATIO,
   ultrasonicDistance,
   type PinRef,
@@ -393,6 +397,20 @@ function CircuitCanvas(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analogValues, connectivity, components])
+
+  /** PIR 은 클릭이 아니라 두 슬라이더(감지 범위 / 사람까지 거리)로 켜지고 꺼진다.
+   *  사람이 범위 안에 들어오면 켜진 것으로 보고, 나머지 경로(activeInputs →
+   *  onButtonChange)는 버튼·스위치와 그대로 공유한다. */
+  useEffect(() => {
+    for (const c of components) {
+      if (c.type !== 'pir') continue
+      const range = pirRangeM(analogValues.get(analogKey(c.id, 'range')) ?? PIR_DEFAULT_RANGE_RATIO)
+      const distance = pirDistanceM(analogValues.get(analogKey(c.id)) ?? PIR_DEFAULT_DISTANCE_RATIO)
+      const detected = distance <= range
+      if (activeInputs.has(c.id) !== detected) setInputActive(c.id, detected)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analogValues, components, connectivity, activeInputs])
 
   /** 초음파는 값 하나가 아니라 "어느 핀이 trig 이고 어느 핀이 echo 인가" 까지 워커가
    *  알아야 한다 — 워커가 trig 의 내림 edge 를 보고 echo 펄스를 직접 만들기 때문이다.
@@ -887,7 +905,10 @@ function CircuitCanvas(
   /** 포인터 위치를 아날로그 입력값(0~1)으로 바꾼다. 가변저항은 노브 각도로,
    *  조도센서는 슬라이더의 가로 위치로 정해진다. */
   const analogValueAt = (component: PlacedComponent, p: Point): number =>
-    component.type === 'ldr' || component.type === 'dht' || component.type === 'ultrasonic'
+    component.type === 'ldr' ||
+    component.type === 'dht' ||
+    component.type === 'ultrasonic' ||
+    component.type === 'pir'
       ? sliderValueAt(component, p)
       : knobValueAt(component, p)
 
@@ -1102,10 +1123,15 @@ function CircuitCanvas(
                 active={activeInputs.has(c.id)}
                 analogValue={
                   analogValues.get(analogKey(c.id)) ??
-                  (c.type === 'ultrasonic' ? ULTRASONIC_DEFAULT_RATIO : 0)
+                  (c.type === 'ultrasonic'
+                    ? ULTRASONIC_DEFAULT_RATIO
+                    : c.type === 'pir'
+                      ? PIR_DEFAULT_DISTANCE_RATIO
+                      : 0)
                 }
                 tempValue={analogValues.get(analogKey(c.id, 'temp')) ?? DHT_DEFAULT_TEMP_RATIO}
                 humidityValue={analogValues.get(analogKey(c.id, 'hum')) ?? DHT_DEFAULT_HUMIDITY_RATIO}
+                rangeValue={analogValues.get(analogKey(c.id, 'range')) ?? PIR_DEFAULT_RANGE_RATIO}
                 locked={locked}
                 selected={selected?.kind === 'component' && selected.id === c.id}
                 onBodyPointerDown={(event) => {
@@ -1862,6 +1888,7 @@ function ComponentGlyph({
   analogValue,
   tempValue,
   humidityValue,
+  rangeValue,
   locked,
   selected,
   onBodyPointerDown,
@@ -1881,6 +1908,8 @@ function ComponentGlyph({
   /** 온습도 센서의 두 슬라이더 위치(0~1). */
   tempValue: number
   humidityValue: number
+  /** PIR 감지 범위 슬라이더 위치(0~1). 사람까지 거리는 analogValue 를 쓴다. */
+  rangeValue: number
   locked: boolean
   selected: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGGElement>) => void
@@ -2380,12 +2409,9 @@ function ComponentGlyph({
 
       {component.type === 'pir' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
-          {/* 초록 보드가 렌즈 돔보다 넓게 나와 있어야 부품을 잡아 옮길 자리가 남는다 —
-              처음엔 돔이 보드를 거의 다 덮어서 끌 데가 없었다(실제로 재현해서 찾았다).
-              가변저항·버튼과 같은 규칙: 몸통은 끌고, 안쪽 조작부는 누른다. */}
           <rect
             x={-22}
-            y={6}
+            y={12}
             width={44}
             height={24}
             rx={2}
@@ -2395,26 +2421,61 @@ function ComponentGlyph({
             onPointerDown={locked ? undefined : onBodyPointerDown}
             className={locked ? '' : 'cursor-grab'}
           />
+          {/* 렌즈 돔. 사람이 감지 범위 안에 들어오면 초록으로 빛난다. */}
           <circle
             cx={0}
-            cy={8}
+            cy={14}
             r={13}
             fill={active ? '#bbf7d0' : '#f5f5f4'}
             stroke="#a8a29e"
             strokeWidth={1.5}
-            className="cursor-pointer"
+            className="pointer-events-none"
             style={active ? { filter: 'drop-shadow(0 0 7px #4ade80)' } : undefined}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              onInputActiveChange(!active)
-            }}
           />
-          <path d="M -8 2 A 8 8 0 0 1 8 2" fill="none" stroke="#d6d3d1" strokeWidth={1.2} className="pointer-events-none" />
+          <path d="M -8 8 A 8 8 0 0 1 8 8" fill="none" stroke="#d6d3d1" strokeWidth={1.2} className="pointer-events-none" />
           {active && (
-            <text x={0} y={12} fontSize={10} textAnchor="middle" className="pointer-events-none select-none">
-              🚶
-            </text>
+            <Unflip>
+              <text x={0} y={18} fontSize={10} textAnchor="middle" className="pointer-events-none select-none">
+                🚶
+              </text>
+            </Unflip>
           )}
+
+          <Unflip>
+            <text x={0} y={-26} fontSize={8.5} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              사람 {pirDistanceM(analogValue)}m · 범위 {pirRangeM(rangeValue)}m
+            </text>
+          </Unflip>
+          {/* 위(파랑)가 사람까지 거리, 아래(빨강)가 이 센서의 감지 범위다.
+              실물 HC-SR501 도 거리 조절용 가변저항이 달려 있다. */}
+          {[
+            { channel: 'value' as const, y: -18, value: analogValue, fill: '#38bdf8', stroke: '#075985' },
+            { channel: 'range' as const, y: -6, value: rangeValue, fill: '#ef4444', stroke: '#7f1d1d' },
+          ].map((slider) => (
+            <g key={slider.channel}>
+              <line
+                x1={-LDR_TRACK_HALF_WIDTH}
+                y1={slider.y}
+                x2={LDR_TRACK_HALF_WIDTH}
+                y2={slider.y}
+                stroke="#a8a29e"
+                strokeWidth={3}
+                strokeLinecap="round"
+                className="cursor-pointer"
+                onPointerDown={(e) => onKnobPointerDown(e, slider.channel)}
+              />
+              <circle
+                cx={-LDR_TRACK_HALF_WIDTH + slider.value * LDR_TRACK_HALF_WIDTH * 2}
+                cy={slider.y}
+                r={5.5}
+                fill={slider.fill}
+                stroke={slider.stroke}
+                strokeWidth={1.5}
+                className="cursor-pointer"
+                onPointerDown={(e) => onKnobPointerDown(e, slider.channel)}
+              />
+            </g>
+          ))}
         </g>
       )}
 

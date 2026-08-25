@@ -426,7 +426,9 @@ while True:
     code: `from machine import Pin
 import time
 
-pir = Pin(14, Pin.IN)       # 인체감지 센서 (눌러서 감지 켜기/끄기)
+pir = Pin(14, Pin.IN)       # 인체감지 센서
+                            # 파란 슬라이더로 사람을 가까이/멀리,
+                            # 빨간 슬라이더로 센서의 감지 범위를 바꿔 보세요
 relay = Pin(15, Pin.OUT)    # 릴레이 - 진짜 전등을 켜는 스위치
 
 while True:

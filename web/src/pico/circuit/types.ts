@@ -112,7 +112,7 @@ export const COMPONENT_LIST: ComponentMeta[] = [
   {
     type: 'pir',
     category: 'input',
-    label: 'PIR 인체감지(클릭해서 감지 켜기/끄기)',
+    label: 'PIR 인체감지(감지 범위 + 사람까지 거리)',
     short: 'PIR',
     emoji: '🚶',
   },
@@ -332,8 +332,8 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
   // 버튼·스위치와 똑같이 "디지털 IN 한 개" 구조라 핀 배치도 같다 — 다른 건 생김새와
   // 조작 방식뿐이다(TOGGLE_INPUT_TYPES 참고).
   pir: [
-    { pin: 'a', dx: -16, dy: 46 },
-    { pin: 'b', dx: 16, dy: 46 },
+    { pin: 'a', dx: -16, dy: 52 },
+    { pin: 'b', dx: 16, dy: 52 },
   ],
   tilt: [
     { pin: 'a', dx: -14, dy: 46 },
@@ -482,7 +482,7 @@ export function dhtHumidity(ratio: number): number {
 
 /** 아날로그 조작부가 여러 개인 부품(온습도)이 있어서, 값은 부품 id 가 아니라
  *  "부품 id + 채널" 로 저장한다. 조작부가 하나뿐인 부품은 채널이 'value' 다. */
-export type AnalogChannel = 'value' | 'temp' | 'hum'
+export type AnalogChannel = 'value' | 'temp' | 'hum' | 'range'
 export function analogKey(componentId: string, channel: AnalogChannel = 'value'): string {
   return `${componentId}:${channel}`
 }
@@ -499,6 +499,25 @@ export const MOMENTARY_INPUT_TYPES: ComponentType[] = ['button']
 
 export function isDigitalInput(type: ComponentType): boolean {
   return TOGGLE_INPUT_TYPES.includes(type) || MOMENTARY_INPUT_TYPES.includes(type)
+}
+
+/**
+ * PIR 인체감지 센서. 실물 HC-SR501 에는 감지 거리를 조절하는 가변저항이 달려 있어서
+ * 대략 3~7m 사이로 맞춘다. 그래서 여기도 슬라이더가 둘이다 — "이 센서가 얼마나 멀리
+ * 까지 보는가(범위)" 와 "지금 사람이 얼마나 떨어져 있는가(거리)".
+ * 사람이 범위 안에 들어오면 출력이 켜진다.
+ */
+export const PIR_MAX_RANGE_M = 7
+export const PIR_MAX_DISTANCE_M = 10
+/** 기본값: 범위 3m 에 사람은 5m — 켜자마자 "아직 감지 안 됨" 에서 시작한다. */
+export const PIR_DEFAULT_RANGE_RATIO = 3 / PIR_MAX_RANGE_M
+export const PIR_DEFAULT_DISTANCE_RATIO = 5 / PIR_MAX_DISTANCE_M
+
+export function pirRangeM(ratio: number): number {
+  return Math.round(ratio * PIR_MAX_RANGE_M * 10) / 10
+}
+export function pirDistanceM(ratio: number): number {
+  return Math.round(ratio * PIR_MAX_DISTANCE_M * 10) / 10
 }
 
 /** 조도센서 밝기 슬라이더의 가로 범위(부품 기준 상대 좌표). */
