@@ -41,6 +41,9 @@ import {
   LED_COLORS,
   ledColorOf,
   mirrorX,
+  LCD_COLUMNS,
+  LCD_I2C_ADDR,
+  LCD_LINES,
   NEOPIXEL_COUNT,
   PIR_DEFAULT_DISTANCE_RATIO,
   PIR_DEFAULT_RANGE_RATIO,
@@ -145,12 +148,16 @@ export interface CircuitCanvasProps {
   pwmLevels: Map<number, { freq: number; duty: number }>
   /** 네오픽셀 핀별 색 목록. write() 를 부른 시점의 값이다. */
   neopixelColors: Map<number, string[]>
+  /** I2C LCD 화면 글자(sda 핀 → 줄 목록). */
+  lcdLines: Map<number, string[]>
   /** 버튼/스위치가 눌리거나 켜질 때, 연결된 GPIO 번호로 알려준다(연결 안 됐으면 안 불림). */
   onButtonChange: (gpio: number, pressed: boolean) => void
   /** 가변저항 노브를 돌릴 때, 연결된 GPIO 번호로 0~65535 값을 알려준다. */
   onAnalogChange: (gpio: number, value: number) => void
   /** 온습도 센서 슬라이더를 움직일 때, 연결된 GPIO 번호로 온도(℃)·습도(%)를 알려준다. */
   onDhtChange: (gpio: number, temperature: number, humidity: number) => void
+  /** I2C LCD 배선을 알려준다. scan() 이 무엇을 돌려줘야 하는지 워커가 알아야 한다. */
+  onLcdConfigChange: (screens: { sda: number; addr: number }[]) => void
   /** 초음파 센서의 배선(trig/echo 짝)과 거리를 알려준다. 워커가 trig 를 보고 echo
    *  펄스를 만들어야 해서 값 하나가 아니라 목록 통째로 보낸다. */
   onUltrasonicChange: (sensors: { trig: number; echo: number; distanceCm: number }[]) => void
@@ -197,7 +204,7 @@ type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' | 'wir
 type Rewiring = { wireId: string; end: 'from' | 'to' } | null
 
 function CircuitCanvas(
-  { gpioLevels, pwmLevels, neopixelColors, onButtonChange, onAnalogChange, onDhtChange, onUltrasonicChange, locked = false }: CircuitCanvasProps,
+  { gpioLevels, pwmLevels, neopixelColors, lcdLines, onButtonChange, onAnalogChange, onDhtChange, onUltrasonicChange, onLcdConfigChange, locked = false }: CircuitCanvasProps,
   ref: React.Ref<CircuitCanvasHandle>,
 ) {
   const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
@@ -411,6 +418,20 @@ function CircuitCanvas(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analogValues, components, connectivity, activeInputs])
+
+  /** LCD 도 배선을 워커가 알아야 한다 — scan() 이 무엇을 돌려줄지, 그리고 어느 화면에
+   *  글자를 보낼지 정해야 하기 때문이다. */
+  useEffect(() => {
+    const screens: { sda: number; addr: number }[] = []
+    for (const c of components) {
+      if (c.type !== 'lcd') continue
+      const sda = gpioForPin(c.id, 'sda')
+      if (sda === undefined) continue
+      screens.push({ sda, addr: LCD_I2C_ADDR })
+    }
+    onLcdConfigChange(screens)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectivity, components])
 
   /** 초음파는 값 하나가 아니라 "어느 핀이 trig 이고 어느 핀이 echo 인가" 까지 워커가
    *  알아야 한다 — 워커가 trig 의 내림 edge 를 보고 echo 펄스를 직접 만들기 때문이다.
@@ -1119,6 +1140,7 @@ function CircuitCanvas(
                 gpioLevels={gpioLevels}
                 pwmLevels={pwmLevels}
                 neopixelColors={neopixelColors}
+                lcdLines={lcdLines}
                 gpioForPin={(pin) => gpioForPin(c.id, pin)}
                 active={activeInputs.has(c.id)}
                 analogValue={
@@ -1883,6 +1905,7 @@ function ComponentGlyph({
   gpioLevels,
   pwmLevels,
   neopixelColors,
+  lcdLines,
   gpioForPin,
   active,
   analogValue,
@@ -1901,6 +1924,7 @@ function ComponentGlyph({
   gpioLevels: Map<number, 0 | 1>
   pwmLevels: Map<number, { freq: number; duty: number }>
   neopixelColors: Map<number, string[]>
+  lcdLines: Map<number, string[]>
   gpioForPin: (pin: string) => number | undefined
   active: boolean
   /** 가변저항 노브·조도센서 슬라이더 위치(0~1). 다른 부품에선 안 쓴다. */
@@ -1946,6 +1970,12 @@ function ComponentGlyph({
   // RGB 는 채널마다 세기가 다를 수 있다 — PWM 을 쓰면 실제로 색이 섞인다.
   const rgbChannel = (pin: string) => Math.round(90 + 165 * levelOf(pin))
   const buzzerFreq = freqOf('positive') ?? freqOf('negative')
+  // LCD 화면 글자는 sda 핀 기준으로 온다. 아직 아무것도 안 찍었으면 빈 줄.
+  const lcdText = (() => {
+    const gpio = gpioForPin('sda')
+    const lines = gpio === undefined ? undefined : lcdLines.get(gpio)
+    return Array.from({ length: LCD_LINES }, (_, i) => (lines?.[i] ?? '').padEnd(LCD_COLUMNS, ' '))
+  })()
   // 네오픽셀은 데이터 핀 하나로 칸 전체 색이 온다. write() 전에는 아무것도 안 온다.
   const pixels = (() => {
     const gpio = gpioForPin('din')
@@ -2020,7 +2050,8 @@ function ComponentGlyph({
         component.type === 'dht' ||
         component.type === 'seven-segment' ||
         component.type === 'neopixel' ||
-        component.type === 'ultrasonic') && <Legs />}
+        component.type === 'ultrasonic' ||
+        component.type === 'lcd') && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -2252,6 +2283,35 @@ function ComponentGlyph({
             className="cursor-pointer"
             onPointerDown={onKnobPointerDown}
           />
+        </g>
+      )}
+
+      {component.type === 'lcd' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          {/* 파란 배경에 밝은 글자 — 시중 1602 모듈이 대부분 이 색이다. */}
+          <rect x={-42} y={2} width={84} height={44} rx={3} fill="#1e3a8a" stroke="#172554" strokeWidth={1.5} />
+          <rect x={-38} y={7} width={76} height={34} rx={2} fill="#1d4ed8" />
+          {lcdText.map((line, row) => (
+            <text
+              key={row}
+              x={-35}
+              y={20 + row * 15}
+              fontSize={9}
+              fontFamily="'SF Mono', Menlo, Consolas, monospace"
+              fill="#dbeafe"
+              className="select-none"
+              // 16칸이 항상 같은 폭을 차지해야 실물처럼 보인다.
+              textLength={70}
+              lengthAdjust="spacingAndGlyphs"
+              xmlSpace="preserve"
+            >
+              {line}
+            </text>
+          ))}
         </g>
       )}
 

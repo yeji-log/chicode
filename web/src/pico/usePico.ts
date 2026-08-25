@@ -20,6 +20,8 @@ export interface UsePico {
   pwm: Map<number, { freq: number; duty: number }>
   /** 네오픽셀 핀별 색 목록(CSS 색 문자열). write() 를 부른 시점의 값이다. */
   neopixel: Map<number, string[]>
+  /** I2C LCD 화면 글자(sda 핀 → 줄 목록). */
+  lcd: Map<number, string[]>
   run: (code: string) => void
   stop: () => void
   clearOutput: () => void
@@ -29,6 +31,8 @@ export interface UsePico {
   setAnalog: (pin: number, value: number) => void
   /** 온습도 센서 슬라이더를 움직일 때 호출한다(온도 ℃, 습도 %). */
   setDht: (pin: number, temperature: number, humidity: number) => void
+  /** I2C LCD 목록을 알려준다. scan() 이 무엇을 돌려줘야 하는지 워커가 알아야 한다. */
+  setLcdConfig: (screens: { sda: number; addr: number }[]) => void
   /** 초음파 센서 배선·거리를 알려준다. 워커가 trig 를 보고 echo 펄스를 만들어야 해서
    *  값 하나가 아니라 목록 통째로 보낸다. */
   setUltrasonic: (sensors: { trig: number; echo: number; distanceCm: number }[]) => void
@@ -48,12 +52,12 @@ export function usePico(): UsePico {
    * 두 가지를 고친다.
    * 1) 첫 렌더에서 회로 쪽 effect 가 워커 생성 effect 보다 먼저 돈다(자식 effect 가
    *    부모보다 먼저다). 그래서 배선 설정이 workerRef.current === null 인 채로 나가
-   *    조용히 버려졌다.
+   *    조용히 버려졌다 — LCD 가 scan() 에서 빈 배열을 받은 게 이것 때문이다.
    * 2) 중지하면 워커를 통째로 새로 띄우는데, 그때도 배선·슬라이더 값이 전부 날아갔다.
    *    다음에 슬라이더를 건드릴 때까지 센서가 죽은 것처럼 보인다.
    *
    * 키는 "같은 대상의 최신 값만 남기면 되는" 단위로 잡는다(핀별 버튼/아날로그,
-   * 그리고 목록 통째로 오는 초음파).
+   * 그리고 목록 통째로 오는 초음파·LCD).
    */
   const deviceStateRef = useRef(new Map<string, WorkerRequest>())
 
@@ -69,6 +73,7 @@ export function usePico(): UsePico {
   const [gpio, setGpio] = useState<Map<number, 0 | 1>>(new Map())
   const [pwm, setPwm] = useState<Map<number, { freq: number; duty: number }>>(new Map())
   const [neopixel, setNeopixel] = useState<Map<number, string[]>>(new Map())
+  const [lcd, setLcd] = useState<Map<number, string[]>>(new Map())
 
   const append = useCallback((stream: OutputLine['stream'], text: string) => {
     setOutput((prev) => [...prev, { id: lineId.current++, stream, text }])
@@ -118,6 +123,9 @@ export function usePico(): UsePico {
         case 'neopixel':
           setNeopixel((prev) => new Map(prev).set(message.pin, message.colors))
           break
+        case 'lcd':
+          setLcd((prev) => new Map(prev).set(message.sda, message.lines))
+          break
         case 'done':
           if (!message.ok && message.error) append('err', message.error)
           if (!message.interactive) {
@@ -157,6 +165,7 @@ export function usePico(): UsePico {
       setGpio(new Map())
       setPwm(new Map())
       setNeopixel(new Map())
+      setLcd(new Map())
       setStatus('running')
 
       const request: WorkerRequest = { type: 'run', code }
@@ -173,6 +182,7 @@ export function usePico(): UsePico {
     setGpio(new Map())
     setPwm(new Map())
     setNeopixel(new Map())
+    setLcd(new Map())
     append('sys', '실행을 중지했습니다.')
     setStatus('booting')
     spawnWorker()
@@ -205,6 +215,11 @@ export function usePico(): UsePico {
     [send],
   )
 
+  const setLcdConfig = useCallback(
+    (screens: { sda: number; addr: number }[]) => send('lcd-config', { type: 'lcd-config', screens }),
+    [send],
+  )
+
   return {
     status,
     output,
@@ -213,6 +228,7 @@ export function usePico(): UsePico {
     gpio,
     pwm,
     neopixel,
+    lcd,
     run,
     stop,
     clearOutput,
@@ -220,5 +236,6 @@ export function usePico(): UsePico {
     setAnalog,
     setDht,
     setUltrasonic,
+    setLcdConfig,
   }
 }

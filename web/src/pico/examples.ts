@@ -262,6 +262,18 @@ function ultrasonicOnly(): CircuitSnapshot {
   }
 }
 
+function lcdOnly(): CircuitSnapshot {
+  return {
+    components: [{ id: 'lcd1', type: 'lcd', x: PART_X, y: 120 }],
+    breadboards: [],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'lcd1', pin: 'sda' }, to: { kind: 'board', pinId: GP0 }, color: '#dc2626' },
+      { id: 'w2', from: { kind: 'component', componentId: 'lcd1', pin: 'scl' }, to: { kind: 'board', pinId: GP1 }, color: '#eab308' },
+      { id: 'w3', from: { kind: 'component', componentId: 'lcd1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
+    ],
+  }
+}
+
 export const EXAMPLES: Example[] = [
   {
     name: '1. LED 켜고 끄기',
@@ -591,6 +603,34 @@ while True:
             print('  너무 가까워요!')
 
     time.sleep(0.4)
+`,
+  },
+  {
+    name: '16. LCD 화면에 글자 띄우기',
+    circuit: lcdOnly(),
+    code: `from machine import Pin, I2C
+from pico_i2c_lcd import I2cLcd
+import time
+
+i2c = I2C(0, sda=Pin(0), scl=Pin(1), freq=400000)
+print('찾은 주소:', [hex(a) for a in i2c.scan()])
+
+lcd = I2cLcd(i2c, 0x27, 2, 16)   # 2줄 16칸
+
+lcd.putstr('Hello CHICODE!')
+lcd.move_to(0, 1)                # 둘째 줄 맨 앞으로
+lcd.putstr('Pico 2 W')
+time.sleep(2)
+
+count = 0
+while True:
+    lcd.clear()
+    lcd.putstr('count = ' + str(count))
+    lcd.move_to(0, 1)
+    lcd.putstr('*' * (count % 16))
+    print('count', count)
+    count = count + 1
+    time.sleep(0.6)
 `,
   },
 ]

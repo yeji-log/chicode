@@ -30,6 +30,8 @@ export type WorkerRequest =
   | { type: 'analog'; pin: number; value: number }
   /** 온습도 센서가 그 핀에서 읽어갈 값. 온도는 ℃, 습도는 %. */
   | { type: 'dht'; pin: number; temperature: number; humidity: number }
+  /** I2C LCD 목록. scan() 이 무엇을 돌려줘야 하는지 워커가 알아야 해서 UI 가 알려준다. */
+  | { type: 'lcd-config'; screens: { sda: number; addr: number }[] }
   /** 초음파 센서 목록. 워커가 trig 의 내림 edge 를 보고 echo 펄스를 만들어야 해서,
    *  어느 핀이 짝인지(배선)를 UI 가 알려줘야 한다. */
   | { type: 'ultrasonic'; sensors: { trig: number; echo: number; distanceCm: number }[] }
@@ -44,6 +46,8 @@ export type WorkerResponse =
   | { type: 'pwm'; pin: number; freq: number; duty: number }
   /** 네오픽셀 한 줄의 현재 색. write() 를 불러야 나간다(실물과 같다). */
   | { type: 'neopixel'; pin: number; colors: string[] }
+  /** I2C LCD 화면에 지금 찍혀 있는 글자. sda 핀으로 어느 LCD 인지 가린다. */
+  | { type: 'lcd'; sda: number; lines: string[] }
   | { type: 'done'; ok: boolean; error?: string; elapsedMs: number; interactive: boolean }
 
 const post = (message: WorkerResponse) => self.postMessage(message)
@@ -59,6 +63,61 @@ const gpioIn = new Map<number, boolean>()
  *  실행마다 비우지 않는다 — 노브를 돌려둔 상태는 실행과 무관한 "물리적" 상태다
  *  (버튼을 누르고 있는 것과 같다). */
 const adcIn = new Map<number, number>()
+
+/**
+ * I2C LCD(1602 + PCF8574 백팩). 진짜 프로토콜을 해석한다 — 학생이 드라이버를 쓰든
+ * 직접 바이트를 쓰든 같은 화면이 나와야 하기 때문이다.
+ *
+ * PCF8574 로 나가는 바이트 한 개의 뜻: [D7 D6 D5 D4 | BL E RW RS]
+ * HD44780 은 4비트 모드라 한 바이트를 두 번(상위 니블 → 하위 니블)에 나눠 받고,
+ * E 가 1→0 으로 떨어지는 순간에 니블을 집어간다. RS=0 이면 명령, RS=1 이면 글자.
+ */
+const LCD_COLS = 16
+const LCD_ROWS = 2
+/** 두 번째 줄의 DDRAM 시작 주소. 1602 는 0x00 과 0x40 두 군데로 갈린다. */
+const LCD_ROW_ADDR = [0x00, 0x40]
+
+interface LcdState {
+  sda: number
+  addr: number
+  /** 화면 글자(행 x 열). */
+  cells: string[][]
+  /** 지금 커서가 가리키는 DDRAM 주소. */
+  cursor: number
+  /** 4비트 모드라 상위 니블을 먼저 받아 들고 있어야 한다. */
+  pendingHigh: number | null
+  /** E 의 직전 값 — 1→0 으로 떨어질 때만 니블을 집어간다. */
+  lastEnable: boolean
+}
+const lcds = new Map<number, LcdState>() // key: I2C 주소
+
+function blankCells(): string[][] {
+  return Array.from({ length: LCD_ROWS }, () => Array.from({ length: LCD_COLS }, () => ' '))
+}
+
+/** DDRAM 주소를 화면의 몇 행 몇 열인지로 바꾼다. 범위를 벗어나면 안 보이는 자리다. */
+function lcdCellOf(cursor: number): { row: number; col: number } | null {
+  for (let row = 0; row < LCD_ROWS; row++) {
+    const col = cursor - LCD_ROW_ADDR[row]
+    if (col >= 0 && col < LCD_COLS) return { row, col }
+  }
+  return null
+}
+
+/** 완성된 한 바이트를 LCD 가 받았을 때. rs=false 면 명령, true 면 글자. */
+function lcdReceive(lcd: LcdState, byte: number, rs: boolean) {
+  if (!rs) {
+    if (byte & 0x80) lcd.cursor = byte & 0x7f // DDRAM 주소 지정
+    else if (byte & 0x01 && byte < 0x02) {
+      lcd.cells = blankCells() // clear
+      lcd.cursor = 0
+    } else if (byte & 0x02 && byte < 0x04) lcd.cursor = 0 // home
+    return
+  }
+  const at = lcdCellOf(lcd.cursor)
+  if (at) lcd.cells[at.row][at.col] = String.fromCharCode(byte)
+  lcd.cursor += 1
+}
 
 /**
  * 초음파 센서. 실물 HC-SR04 는 trig 에 짧은 펄스를 넣으면 잠시 뒤 echo 를 거리에
@@ -155,6 +214,32 @@ async function boot(): Promise<MicroPythonInterface> {
         : []
       post({ type: 'neopixel', pin, colors })
     },
+    /** I2C 로 바이트를 흘려보낸다. 지금은 PCF8574 백팩 뒤의 LCD 만 알아듣는다. */
+    i2c_write(addr: number, packed: string) {
+      const lcd = lcds.get(addr)
+      if (!lcd) return
+      for (const part of packed.split(',')) {
+        const byte = Number(part) & 0xff
+        const enable = (byte & 0x04) !== 0
+        // E 가 1 → 0 으로 떨어지는 순간에만 니블이 넘어간다(실물 타이밍 그대로).
+        if (lcd.lastEnable && !enable) {
+          const nibble = (byte >> 4) & 0x0f
+          const rs = (byte & 0x01) !== 0
+          if (lcd.pendingHigh === null) {
+            lcd.pendingHigh = nibble
+          } else {
+            lcdReceive(lcd, (lcd.pendingHigh << 4) | nibble, rs)
+            lcd.pendingHigh = null
+          }
+        }
+        lcd.lastEnable = enable
+      }
+      post({ type: 'lcd', sda: lcd.sda, lines: lcd.cells.map((row) => row.join('')) })
+    },
+    /** 이 버스(sda 핀)에 붙어 있는 주소들. 실물 scan() 과 같은 뜻이다. */
+    i2c_scan(sda: number) {
+      return [...lcds.values()].filter((l) => l.sda === sda).map((l) => l.addr).join(',')
+    },
     pwm_set(pin: number, freq: number, duty: number) {
       // PWM 이 걸린 핀은 더는 단순 on/off 가 아니다 — Pin.value() 가 옛 출력값을
       // 읽지 않도록 기록을 지운다.
@@ -209,6 +294,24 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     return
   }
 
+  if (message.type === 'lcd-config') {
+    const next = new Map<number, LcdState>()
+    for (const screen of message.screens) {
+      const prev = lcds.get(screen.addr)
+      next.set(screen.addr, {
+        sda: screen.sda,
+        addr: screen.addr,
+        cells: prev?.cells ?? blankCells(),
+        cursor: prev?.cursor ?? 0,
+        pendingHigh: prev?.pendingHigh ?? null,
+        lastEnable: prev?.lastEnable ?? false,
+      })
+    }
+    lcds.clear()
+    for (const [k, v] of next) lcds.set(k, v)
+    return
+  }
+
   if (message.type === 'ultrasonic') {
     // 배선이 바뀌면 통째로 다시 온다. 진행 중이던 펄스는 유지한다(거리만 바뀌는
     // 경우가 대부분이라, 재측정 중에 창이 사라지면 학생 코드가 타임아웃에 걸린다).
@@ -250,6 +353,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     // 실행마다 이전 실행의 전역 변수가 남지 않도록 정리한다(Python 실습의
     // "매번 새 namespace" 와 같은 이유 — "지웠는데 왜 되지?" 방지).
     gpioOut.clear()
+    // 실행할 때마다 화면도 초기화된다 — 실물도 보드를 리셋하면 그렇다.
+    for (const lcd of lcds.values()) {
+      lcd.cells = blankCells()
+      lcd.cursor = 0
+      lcd.pendingHigh = null
+      lcd.lastEnable = false
+      post({ type: 'lcd', sda: lcd.sda, lines: lcd.cells.map((row) => row.join('')) })
+    }
     await mp.runPythonAsync(RESET_GLOBALS_SOURCE)
     await mp.runPythonAsync(interactive ? INSTALL_INTERACTIVE_TIME_SOURCE : RESTORE_REAL_TIME_SOURCE)
     await mp.runPythonAsync(INSTALL_PRECISE_TICKS_SOURCE)
@@ -430,10 +541,38 @@ def _chico_build_machine():
                 return -1
         return _chico_us_since(t0)
 
+    class I2C:
+        """machine.I2C(0, scl=Pin(1), sda=Pin(0)). 지금 이 시뮬레이터가 알아듣는
+        장치는 PCF8574 백팩 뒤의 1602 LCD 뿐이지만, 오가는 바이트는 실물과 같다 —
+        드라이버가 보내는 니블을 워커가 그대로 해석한다."""
+
+        def __init__(self, id=0, scl=None, sda=None, freq=400000, **kwargs):
+            self.id = id
+            self.scl = scl.id if hasattr(scl, "id") else scl
+            self.sda = sda.id if hasattr(sda, "id") else sda
+            self.freq = freq
+
+        def scan(self):
+            found = _chico_hw.i2c_scan(self.sda)
+            return [int(a) for a in found.split(",")] if found else []
+
+        def writeto(self, addr, buf, stop=True):
+            _chico_hw.i2c_write(addr, ",".join(str(b) for b in buf))
+            return len(buf)
+
+        def writeto_mem(self, addr, memaddr, buf, addrsize=8):
+            self.writeto(addr, bytes([memaddr]) + bytes(buf))
+
+        def readfrom(self, addr, nbytes, stop=True):
+            # 읽기가 필요한 장치는 아직 없다. 실물처럼 0 으로 채워 돌려준다.
+            return bytes(nbytes)
+
     mod = _Module()
     mod.Pin = Pin
     mod.ADC = ADC
     mod.PWM = PWM
+    mod.I2C = I2C
+    mod.SoftI2C = I2C
     mod.time_pulse_us = time_pulse_us
     return mod
 
@@ -529,6 +668,106 @@ def _chico_build_neopixel():
 
 sys.modules["neopixel"] = _chico_build_neopixel()
 del _chico_build_neopixel
+
+
+def _chico_build_lcd():
+    """pico_i2c_lcd — 실물 Pico 수업에서 그대로 쓰는 드라이버다. 원래는 학생이
+    lcd_api.py / pico_i2c_lcd.py 두 파일을 보드에 올려놓고 import 하는데, 이
+    시뮬레이터엔 파일을 올릴 곳이 없어서 미리 넣어둔 모듈로 준다.
+
+    중요한 건 이 드라이버가 진짜로 I2C 바이트를 흘려보낸다는 것이다 — 학생이
+    드라이버를 안 쓰고 직접 writeto() 를 해도 같은 화면이 나온다."""
+
+    class _Module:
+        pass
+
+    MASK_RS = 0x01
+    MASK_E = 0x04
+    BACKLIGHT = 0x08
+
+    class I2cLcd:
+        def __init__(self, i2c, i2c_addr, num_lines=2, num_columns=16):
+            self.i2c = i2c
+            self.addr = i2c_addr
+            self.num_lines = num_lines
+            self.num_columns = num_columns
+            self.cursor_x = 0
+            self.cursor_y = 0
+            # 4비트 모드로 들어가는 초기화 시퀀스(실물 드라이버와 같다)
+            for _ in range(3):
+                self._nibble(0x03)
+            self._nibble(0x02)
+            self._cmd(0x28)  # 4비트, 2줄
+            self._cmd(0x0C)  # 화면 켜기, 커서 끄기
+            self._cmd(0x06)  # 쓰면 커서가 오른쪽으로
+            self.clear()
+
+        def _pulse(self, byte):
+            self.i2c.writeto(self.addr, bytes([byte | MASK_E]))
+            self.i2c.writeto(self.addr, bytes([byte & ~MASK_E]))
+
+        def _nibble(self, nibble, rs=0):
+            self._pulse(((nibble & 0x0F) << 4) | BACKLIGHT | rs)
+
+        def _send(self, value, rs):
+            self._nibble(value >> 4, rs)
+            self._nibble(value & 0x0F, rs)
+
+        def _cmd(self, value):
+            self._send(value, 0)
+
+        def clear(self):
+            self._cmd(0x01)
+            self.cursor_x = 0
+            self.cursor_y = 0
+
+        def home(self):
+            self._cmd(0x02)
+            self.cursor_x = 0
+            self.cursor_y = 0
+
+        def move_to(self, cursor_x, cursor_y):
+            self.cursor_x = cursor_x
+            self.cursor_y = cursor_y
+            addr = cursor_x & 0x3F
+            if cursor_y & 1:
+                addr += 0x40
+            self._cmd(0x80 | addr)
+
+        def putchar(self, char):
+            # chr(10) = 줄바꿈. 이 소스는 TS 템플릿 리터럴 안이라 백슬래시 n 이라고 쓰면
+            # 템플릿이 먼저 진짜 줄바꿈으로 바꿔버려 Python 문자열이 깨진다(실제로 밟았다).
+            if char == chr(10):
+                self.cursor_x = self.num_columns
+            else:
+                self._send(ord(char), MASK_RS)
+                self.cursor_x += 1
+            if self.cursor_x >= self.num_columns:
+                self.cursor_x = 0
+                self.cursor_y += 1
+                if self.cursor_y >= self.num_lines:
+                    self.cursor_y = 0
+                self.move_to(self.cursor_x, self.cursor_y)
+
+        def putstr(self, string):
+            for char in string:
+                self.putchar(char)
+
+        def backlight_on(self):
+            pass
+
+        def backlight_off(self):
+            pass
+
+    mod = _Module()
+    mod.I2cLcd = I2cLcd
+    return mod
+
+
+_chico_lcd_mod = _chico_build_lcd()
+sys.modules["pico_i2c_lcd"] = _chico_lcd_mod
+sys.modules["lcd_api"] = _chico_lcd_mod
+del _chico_build_lcd, _chico_lcd_mod
 `
 
 /**

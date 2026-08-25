@@ -54,6 +54,7 @@ export type ComponentType =
   | 'seven-segment'
   | 'neopixel'
   | 'ultrasonic'
+  | 'lcd'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -136,6 +137,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '네오픽셀 8칸(write() 를 불러야 켜집니다)',
     short: '네오픽셀',
     emoji: '✨',
+  },
+  {
+    type: 'lcd',
+    category: 'output',
+    label: 'I2C LCD 1602(16칸 2줄 · 주소 0x27)',
+    short: 'LCD',
+    emoji: '🖥️',
   },
   {
     type: 'seven-segment',
@@ -365,6 +373,13 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'din', dx: 0, dy: 40 },
     { pin: 'gnd', dx: 24, dy: 40 },
   ],
+  // I2C LCD 백팩과 같은 4핀. 선 두 가닥(sda/scl)으로 글자를 다 보낸다.
+  lcd: [
+    { pin: 'gnd', dx: -30, dy: 60 },
+    { pin: 'vcc', dx: -10, dy: 60 },
+    { pin: 'sda', dx: 10, dy: 60 },
+    { pin: 'scl', dx: 30, dy: 60 },
+  ],
   // 획 a~g + 소수점(dp) + 공통 음극. 실물은 핀이 위아래 두 줄이지만 여기선 아래
   // 한 줄로 폈다 — Legs 가 몸통 아래로만 다리를 그리기도 하고, 배선할 때 한쪽만
   // 보면 되는 게 학생한테 낫다.
@@ -437,7 +452,13 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   'seven-segment': { x: 0, y: 38 },
   neopixel: { x: 0, y: 14 },
   ultrasonic: { x: 0, y: 20 },
+  lcd: { x: 0, y: 24 },
 }
+
+/** I2C LCD 백팩의 주소. 시중 모듈은 0x27 아니면 0x3F 인데, 여기선 0x27 하나로 둔다. */
+export const LCD_I2C_ADDR = 0x27
+export const LCD_COLUMNS = 16
+export const LCD_LINES = 2
 
 /** 초음파 거리 슬라이더 범위(cm). 실물 HC-SR04 도 2cm 아래는 못 재고 400cm 쯤이 한계다. */
 export const ULTRASONIC_MIN_CM = 2

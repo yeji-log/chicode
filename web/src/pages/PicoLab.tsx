@@ -24,7 +24,7 @@ export default function PicoLab() {
   // MIN_VIEW_WIDTH 주석에 실측값). 콘솔은 탭 밖에 둬서 어느 탭에서든 보인다.
   const [tab, setTab] = useState<LabTab>('circuit')
 
-  const { status, output, elapsedMs, bootError, gpio, pwm, neopixel, run, stop, clearOutput, setButton, setAnalog, setDht, setUltrasonic } =
+  const { status, output, elapsedMs, bootError, gpio, pwm, neopixel, lcd, run, stop, clearOutput, setButton, setAnalog, setDht, setUltrasonic, setLcdConfig } =
     usePico()
   const outputRef = useRef<HTMLDivElement>(null)
   const circuitRef = useRef<CircuitCanvasHandle>(null)
@@ -171,10 +171,12 @@ export default function PicoLab() {
               gpioLevels={gpio}
               pwmLevels={pwm}
               neopixelColors={neopixel}
+              lcdLines={lcd}
               onButtonChange={setButton}
               onAnalogChange={setAnalog}
               onDhtChange={setDht}
               onUltrasonicChange={setUltrasonic}
+              onLcdConfigChange={setLcdConfig}
               locked={running}
             />
           </div>
