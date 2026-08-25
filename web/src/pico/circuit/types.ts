@@ -39,6 +39,7 @@ export type ComponentType =
   | 'switch'
   | 'potentiometer'
   | 'servo'
+  | 'ldr'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -72,6 +73,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '가변저항(노브를 돌려서 조절 · GP26~28에만 연결)',
     short: '가변저항',
     emoji: '🎛️',
+  },
+  {
+    type: 'ldr',
+    category: 'input',
+    label: '조도센서(밝기 슬라이더 · GP26~28에만 연결)',
+    short: '조도',
+    emoji: '🔆',
   },
 ]
 
@@ -194,6 +202,14 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'a', dx: -16, dy: 18 },
     { pin: 'b', dx: 16, dy: 18 },
   ],
+  // 조도센서 모듈(CDS + 저항이 보드에 같이 붙은 형태)과 같은 3핀. 실물 CDS 알맹이만
+  // 쓰면 분압 저항을 따로 달아야 하는데, 이 시뮬레이터엔 저항 부품 자체가 없다 —
+  // 모듈 형태로 두는 게 학생이 실제로 사는 부품과도 맞고 거짓말도 아니다.
+  ldr: [
+    { pin: 'vcc', dx: -14, dy: 46 },
+    { pin: 'out', dx: 0, dy: 46 },
+    { pin: 'gnd', dx: 14, dy: 46 },
+  ],
   // 실물 서보와 같은 3선: 신호(주황), 전원(빨강), 접지(갈색).
   servo: [
     { pin: 'signal', dx: -14, dy: 46 },
@@ -220,7 +236,11 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   switch: { x: 0, y: 10 },
   potentiometer: { x: 0, y: 14 },
   servo: { x: 0, y: 14 },
+  ldr: { x: 0, y: 16 },
 }
+
+/** 조도센서 밝기 슬라이더의 가로 범위(부품 기준 상대 좌표). */
+export const LDR_TRACK_HALF_WIDTH = 18
 
 /**
  * 서보가 알아듣는 펄스 폭(ms) → 각도. SG90 계열 기준으로 0.5ms 가 0도, 2.5ms 가 180도다.

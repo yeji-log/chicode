@@ -29,6 +29,7 @@ import {
   type ComponentType,
   DEFAULT_WIRE_COLOR,
   KNOB_SWEEP_DEG,
+  LDR_TRACK_HALF_WIDTH,
   type PinRef,
   type PlacedBoard,
   type PlacedBreadboard,
@@ -178,9 +179,9 @@ function CircuitCanvas(
   // 않는다 — "지금 노브를 어디까지 돌려놨는가"는 버튼을 누르고 있는 것과 같은 순간적인
   // 물리 상태지 회로의 일부가 아니다.
   const [analogValues, setAnalogValues] = useState<Map<string, number>>(new Map())
-  // 노브를 잡고 도는 중인 부품 id. 부품 드래그(dragging)와 별개로 둬야 노브를 돌릴 때
-  // 부품이 같이 끌려오지 않는다.
-  const [knobDrag, setKnobDrag] = useState<string | null>(null)
+  // 아날로그 입력(가변저항 노브 / 조도센서 슬라이더)을 잡고 있는 부품 id. 부품
+  // 드래그(dragging)와 별개로 둬야 조작할 때 부품이 같이 끌려오지 않는다.
+  const [analogDrag, setAnalogDrag] = useState<string | null>(null)
   /** 다시 잇는 중인 전선. ref 와 state 를 같이 두는 이유: finishWire 는 포인터 이벤트
    *  핸들러 안에서 "지금" 값을 읽어야 하는데, state 만 쓰면 pointerdown 과 pointerup
    *  사이에 리렌더가 없었을 때 옛 값(null)을 보고 전선을 옮기는 대신 새로 그어버린다
@@ -293,7 +294,7 @@ function CircuitCanvas(
         setDragging(null)
         setActiveInputs(new Set())
         setAnalogValues(new Map())
-        setKnobDrag(null)
+        setAnalogDrag(null)
         setSelected(null)
       },
     }),
@@ -346,7 +347,7 @@ function CircuitCanvas(
    *  (버튼의 위 useEffect 와 같은 이유). 안 이어졌으면 알릴 곳이 없으니 건너뛴다. */
   useEffect(() => {
     for (const c of components) {
-      if (c.type !== 'potentiometer') continue
+      if (c.type !== 'potentiometer' && c.type !== 'ldr') continue
       const gpio = gpioForPin(c.id, 'out')
       if (gpio === undefined) continue
       onAnalogChange(gpio, Math.round((analogValues.get(c.id) ?? 0) * ADC_MAX))
@@ -490,9 +491,9 @@ function CircuitCanvas(
     }
     // 노브 돌리기는 locked(실행 중) 여도 된다 — 잠금의 목적은 배선 편집 금지지
     // 상호작용 금지가 아니다(버튼/스위치와 같은 이유).
-    if (knobDrag) {
-      const c = components.find((comp) => comp.id === knobDrag)
-      if (c) setAnalogValues((prev) => new Map(prev).set(c.id, knobValueAt(c, toModelPoint(event.clientX, event.clientY))))
+    if (analogDrag) {
+      const c = components.find((comp) => comp.id === analogDrag)
+      if (c) setAnalogValues((prev) => new Map(prev).set(c.id, analogValueAt(c, toModelPoint(event.clientX, event.clientY))))
       return
     }
 
@@ -527,7 +528,7 @@ function CircuitCanvas(
    *  그리드에 스냅한다 — 매 프레임 스냅하면 뚝뚝 끊겨 보인다(팅커캐드도 이 방식). */
   const onPointerUp = () => {
     panStartRef.current = null
-    setKnobDrag(null)
+    setAnalogDrag(null)
     if (dragging) {
       const target = dragging
       setState((s) => {
@@ -790,6 +791,24 @@ function CircuitCanvas(
   // 부저를 지웠거나 회로를 갈아끼웠을 때 소리가 남아 계속 울리면 안 된다.
   useEffect(() => () => buzzerAudio.stopAll(), [])
 
+  /** 포인터 위치를 아날로그 입력값(0~1)으로 바꾼다. 가변저항은 노브 각도로,
+   *  조도센서는 슬라이더의 가로 위치로 정해진다. */
+  const analogValueAt = (component: PlacedComponent, p: Point): number =>
+    component.type === 'ldr' ? sliderValueAt(component, p) : knobValueAt(component, p)
+
+  /** 조도센서 슬라이더 — 부품이 회전해 있으면 포인터를 반대로 돌려서 부품 기준 좌표로
+   *  바꾼 뒤 가로 위치만 본다. */
+  const sliderValueAt = (component: PlacedComponent, p: Point): number => {
+    const pivot = COMPONENT_PIVOT[component.type]
+    const local = rotateAround(
+      { x: p.x - component.x, y: p.y - component.y },
+      pivot,
+      -(component.rotation ?? 0),
+    )
+    const ratio = (local.x + LDR_TRACK_HALF_WIDTH) / (LDR_TRACK_HALF_WIDTH * 2)
+    return Math.max(0, Math.min(1, ratio))
+  }
+
   /** 포인터가 가리키는 방향을 노브 값(0~1)으로 바꾼다. 노브 "위쪽"이 가운데(50%)가
    *  아니라, 왼쪽 끝(-135도)이 0%이고 오른쪽 끝(+135도)이 100%다 — 실물 손잡이와 같다.
    *  부품이 회전해 있으면 그만큼 빼야 화면에 보이는 대로 돈다. */
@@ -991,9 +1010,9 @@ function CircuitCanvas(
                 onKnobPointerDown={(event) => {
                   event.stopPropagation()
                   setSelected({ kind: 'component', id: c.id })
-                  setKnobDrag(c.id)
+                  setAnalogDrag(c.id)
                   setAnalogValues((prev) =>
-                    new Map(prev).set(c.id, knobValueAt(c, toModelPoint(event.clientX, event.clientY))),
+                    new Map(prev).set(c.id, analogValueAt(c, toModelPoint(event.clientX, event.clientY))),
                   )
                 }}
               />
@@ -1768,7 +1787,8 @@ function ComponentGlyph({
         component.type === 'rgb-led' ||
         component.type === 'buzzer' ||
         component.type === 'potentiometer' ||
-        component.type === 'servo') && <Legs />}
+        component.type === 'servo' ||
+        component.type === 'ldr') && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -1886,6 +1906,61 @@ function ComponentGlyph({
               {buzzerFreq}Hz
             </text>
           )}
+        </g>
+      )}
+
+      {component.type === 'ldr' && (
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          {/* 모듈 보드는 평소처럼 끌어서 옮기고, 위쪽 슬라이더만 밝기 조절용으로 받는다. */}
+          <rect
+            x={-21}
+            y={2}
+            width={42}
+            height={28}
+            rx={3}
+            fill="#14532d"
+            stroke="#052e16"
+            strokeWidth={1.5}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
+          {/* CDS 알맹이 — 밝을수록 밝은 노랑으로. 실물도 빛을 받으면 하얗게 반짝인다. */}
+          <circle
+            cx={0}
+            cy={16}
+            r={9}
+            fill={`rgb(${60 + 195 * analogValue}, ${55 + 190 * analogValue}, ${40 + 120 * analogValue})`}
+            stroke="#052e16"
+            strokeWidth={1.5}
+          />
+          <path d="M -5 12 Q 0 16 -5 20 Q 0 16 5 12 Q 0 16 5 20" fill="none" stroke="#1c1917" strokeWidth={1.2} opacity={0.7} />
+
+          {/* 밝기 슬라이더. 눈금이 아니라 "지금 이 센서에 얼마나 빛이 오는가"를 학생이
+              직접 정하는 손잡이다 — 실행 중에도 움직일 수 있어야 한다. */}
+          <line
+            x1={-LDR_TRACK_HALF_WIDTH}
+            y1={-8}
+            x2={LDR_TRACK_HALF_WIDTH}
+            y2={-8}
+            stroke="#a8a29e"
+            strokeWidth={3}
+            strokeLinecap="round"
+            className="cursor-pointer"
+            onPointerDown={onKnobPointerDown}
+          />
+          <circle
+            cx={-LDR_TRACK_HALF_WIDTH + analogValue * LDR_TRACK_HALF_WIDTH * 2}
+            cy={-8}
+            r={6}
+            fill="#fde047"
+            stroke="#a16207"
+            strokeWidth={1.5}
+            className="cursor-pointer"
+            onPointerDown={onKnobPointerDown}
+          />
+          <text x={0} y={-18} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+            {Math.round(analogValue * 100)}%
+          </text>
         </g>
       )}
 

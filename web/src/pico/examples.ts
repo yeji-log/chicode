@@ -19,6 +19,8 @@ const PART_X = 450
 const GP15 = 'L20'
 const GP14 = 'L19'
 const GND = 'L18'
+// GP26 은 오른쪽 열이다 — 아래에서 위로 세는 자리라 id 가 R31 이다(board.ts 참고).
+const GP26 = 'R31'
 
 function ledOnly(): CircuitSnapshot {
   return {
@@ -65,6 +67,22 @@ function servoOnly(): CircuitSnapshot {
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'servo1', pin: 'signal' }, to: { kind: 'board', pinId: GP15 } },
       { id: 'w2', from: { kind: 'component', componentId: 'servo1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
+function ldrAndLed(): CircuitSnapshot {
+  return {
+    components: [
+      { id: 'ldr1', type: 'ldr', x: PART_X, y: 90 },
+      { id: 'led1', type: 'led', x: PART_X, y: 240 },
+    ],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'ldr1', pin: 'out' }, to: { kind: 'board', pinId: GP26 } },
+      { id: 'w2', from: { kind: 'component', componentId: 'ldr1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w3', from: { kind: 'component', componentId: 'led1', pin: 'anode' }, to: { kind: 'board', pinId: GP15 } },
+      { id: 'w4', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: { kind: 'board', pinId: GND } },
     ],
   }
 }
@@ -154,6 +172,28 @@ while True:
         servo.duty_ns(int(pulse_ms * 1000000))
         print(angle, '도')
         time.sleep(0.8)
+`,
+  },
+  {
+    name: '6. 어두우면 불 켜기 (조도센서)',
+    circuit: ldrAndLed(),
+    code: `from machine import Pin, ADC
+import time
+
+cds = ADC(Pin(26))   # 조도센서는 ADC 핀(GP26~28)에만 연결된다
+led = Pin(15, Pin.OUT)
+
+while True:
+    light = cds.read_u16()      # 0(어두움) ~ 65535(밝음)
+    percent = light * 100 // 65535
+    print('밝기', percent, '%')
+
+    if percent < 30:            # 어두우면
+        led.on()
+    else:
+        led.off()
+
+    time.sleep(0.3)
 `,
   },
 ]
