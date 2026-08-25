@@ -15,6 +15,21 @@ export interface Example {
  */
 const PART_X = 450
 
+/**
+ * GND 를 모으는 브레드보드. 부품이 둘 이상인 예제에서만 쓴다 — 여러 부품의 접지를
+ * − 레일 한 줄에 모으고, 레일에서 보드로 한 줄만 나간다. 이게 브레드보드의 본래
+ * 용도이고 "같은 줄 = 같은 노드" 규칙을 눈으로 보여주는 자리다.
+ *
+ * 부품이 하나뿐인 예제에는 아예 안 놓는다. 예전엔 모든 예제에 브레드보드를 깔아뒀는데
+ * 정작 전선이 하나도 안 붙어 있어서, 쓰는 것처럼 보이기만 하고 실제로는 장식이었다.
+ */
+const SHARED_BREADBOARD = { id: 'bb1', size: 'mini', x: 150, y: 330 } as const
+/** 브레드보드 − 레일의 col 번째 구멍. 부품마다 다른 구멍에 꽂는다 — 실제 레일도
+ *  구멍이 여러 개고, 한 구멍에 여러 선을 몰아 꽂으면 보기도 어렵고 배선을 배우는
+ *  의미도 없다(전기적으로는 같은 레일이면 어느 구멍이든 한 노드다). */
+const minusRail = (col: number) =>
+  ({ kind: 'breadboardRail', boardId: 'bb1', rail: 'minus', col }) as const
+
 // 보드 핀 id 는 web/src/pico/circuit/board.ts 참고 — L20=GP15, L19=GP14, L18=GND.
 const GP15 = 'L20'
 const GP14 = 'L19'
@@ -37,10 +52,10 @@ const GP26 = 'R31'
 function ledOnly(): CircuitSnapshot {
   return {
     components: [{ id: 'led1', type: 'led', x: PART_X, y: 120 }],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: { kind: 'board', pinId: GP15 } },
-      { id: 'w2', from: { kind: 'component', componentId: 'led1', pin: 'anode' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w2', from: { kind: 'component', componentId: 'led1', pin: 'anode' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -51,12 +66,13 @@ function ledAndButton(): CircuitSnapshot {
       { id: 'led1', type: 'led', x: PART_X, y: 120 },
       { id: 'button1', type: 'button', x: PART_X, y: 260 },
     ],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [SHARED_BREADBOARD],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: { kind: 'board', pinId: GP15 } },
-      { id: 'w2', from: { kind: 'component', componentId: 'led1', pin: 'anode' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w2', from: { kind: 'component', componentId: 'led1', pin: 'anode' }, to: minusRail(1), color: '#1f2937' },
       { id: 'w3', from: { kind: 'component', componentId: 'button1', pin: 'a' }, to: { kind: 'board', pinId: GP14 } },
-      { id: 'w4', from: { kind: 'component', componentId: 'button1', pin: 'b' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w4', from: { kind: 'component', componentId: 'button1', pin: 'b' }, to: minusRail(4), color: '#1f2937' },
+      { id: 'w5', from: minusRail(8), to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -64,10 +80,10 @@ function ledAndButton(): CircuitSnapshot {
 function buzzerOnly(): CircuitSnapshot {
   return {
     components: [{ id: 'buzzer1', type: 'buzzer', x: PART_X, y: 140 }],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'buzzer1', pin: 'positive' }, to: { kind: 'board', pinId: GP15 } },
-      { id: 'w2', from: { kind: 'component', componentId: 'buzzer1', pin: 'negative' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w2', from: { kind: 'component', componentId: 'buzzer1', pin: 'negative' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -75,10 +91,10 @@ function buzzerOnly(): CircuitSnapshot {
 function servoOnly(): CircuitSnapshot {
   return {
     components: [{ id: 'servo1', type: 'servo', x: PART_X, y: 150 }],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'servo1', pin: 'signal' }, to: { kind: 'board', pinId: GP15 } },
-      { id: 'w2', from: { kind: 'component', componentId: 'servo1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w2', from: { kind: 'component', componentId: 'servo1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -89,12 +105,13 @@ function ldrAndLed(): CircuitSnapshot {
       { id: 'ldr1', type: 'ldr', x: PART_X, y: 90 },
       { id: 'led1', type: 'led', x: PART_X, y: 240 },
     ],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [SHARED_BREADBOARD],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'ldr1', pin: 'out' }, to: { kind: 'board', pinId: GP26 } },
-      { id: 'w2', from: { kind: 'component', componentId: 'ldr1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w2', from: { kind: 'component', componentId: 'ldr1', pin: 'gnd' }, to: minusRail(1), color: '#1f2937' },
       { id: 'w3', from: { kind: 'component', componentId: 'led1', pin: 'anode' }, to: { kind: 'board', pinId: GP15 } },
-      { id: 'w4', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w4', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: minusRail(4), color: '#1f2937' },
+      { id: 'w5', from: minusRail(8), to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -105,12 +122,13 @@ function potAndLed(): CircuitSnapshot {
       { id: 'pot1', type: 'potentiometer', x: PART_X, y: 90 },
       { id: 'led1', type: 'led', x: PART_X, y: 250 },
     ],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [SHARED_BREADBOARD],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'pot1', pin: 'out' }, to: { kind: 'board', pinId: GP26 } },
-      { id: 'w2', from: { kind: 'component', componentId: 'pot1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w2', from: { kind: 'component', componentId: 'pot1', pin: 'gnd' }, to: minusRail(1), color: '#1f2937' },
       { id: 'w3', from: { kind: 'component', componentId: 'led1', pin: 'anode' }, to: { kind: 'board', pinId: GP15 } },
-      { id: 'w4', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w4', from: { kind: 'component', componentId: 'led1', pin: 'cathode' }, to: minusRail(4), color: '#1f2937' },
+      { id: 'w5', from: minusRail(8), to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -118,12 +136,12 @@ function potAndLed(): CircuitSnapshot {
 function trafficLight(): CircuitSnapshot {
   return {
     components: [{ id: 'tl1', type: 'traffic-light', x: PART_X, y: 110 }],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'tl1', pin: 'red' }, to: { kind: 'board', pinId: GP15 } },
       { id: 'w2', from: { kind: 'component', componentId: 'tl1', pin: 'yellow' }, to: { kind: 'board', pinId: GP16 } },
       { id: 'w3', from: { kind: 'component', componentId: 'tl1', pin: 'green' }, to: { kind: 'board', pinId: GP17 } },
-      { id: 'w4', from: { kind: 'component', componentId: 'tl1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w4', from: { kind: 'component', componentId: 'tl1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -134,12 +152,13 @@ function pirAndRelay(): CircuitSnapshot {
       { id: 'pir1', type: 'pir', x: PART_X, y: 90 },
       { id: 'relay1', type: 'relay', x: PART_X, y: 250 },
     ],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [SHARED_BREADBOARD],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'pir1', pin: 'a' }, to: { kind: 'board', pinId: GP14 } },
-      { id: 'w2', from: { kind: 'component', componentId: 'pir1', pin: 'b' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w2', from: { kind: 'component', componentId: 'pir1', pin: 'b' }, to: minusRail(1), color: '#1f2937' },
       { id: 'w3', from: { kind: 'component', componentId: 'relay1', pin: 'a' }, to: { kind: 'board', pinId: GP15 } },
-      { id: 'w4', from: { kind: 'component', componentId: 'relay1', pin: 'b' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w4', from: { kind: 'component', componentId: 'relay1', pin: 'b' }, to: minusRail(4), color: '#1f2937' },
+      { id: 'w5', from: minusRail(8), to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -147,12 +166,12 @@ function pirAndRelay(): CircuitSnapshot {
 function rgbLed(): CircuitSnapshot {
   return {
     components: [{ id: 'rgb1', type: 'rgb-led', x: PART_X, y: 130 }],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'rgb1', pin: 'r' }, to: { kind: 'board', pinId: GP13 } },
       { id: 'w2', from: { kind: 'component', componentId: 'rgb1', pin: 'g' }, to: { kind: 'board', pinId: GP14 } },
       { id: 'w3', from: { kind: 'component', componentId: 'rgb1', pin: 'b' }, to: { kind: 'board', pinId: GP15 } },
-      { id: 'w4', from: { kind: 'component', componentId: 'rgb1', pin: 'common' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w4', from: { kind: 'component', componentId: 'rgb1', pin: 'common' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -164,14 +183,15 @@ function tiltAndBuzzer(): CircuitSnapshot {
       { id: 'buzzer1', type: 'buzzer', x: PART_X, y: 250 },
       { id: 'vib1', type: 'vibration', x: PART_X + 130, y: 250 },
     ],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [SHARED_BREADBOARD],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'tilt1', pin: 'a' }, to: { kind: 'board', pinId: GP14 } },
-      { id: 'w2', from: { kind: 'component', componentId: 'tilt1', pin: 'b' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w2', from: { kind: 'component', componentId: 'tilt1', pin: 'b' }, to: minusRail(1), color: '#1f2937' },
       { id: 'w3', from: { kind: 'component', componentId: 'buzzer1', pin: 'positive' }, to: { kind: 'board', pinId: GP15 } },
-      { id: 'w4', from: { kind: 'component', componentId: 'buzzer1', pin: 'negative' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w4', from: { kind: 'component', componentId: 'buzzer1', pin: 'negative' }, to: minusRail(3), color: '#1f2937' },
       { id: 'w5', from: { kind: 'component', componentId: 'vib1', pin: 'a' }, to: { kind: 'board', pinId: GP16 } },
-      { id: 'w6', from: { kind: 'component', componentId: 'vib1', pin: 'b' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w6', from: { kind: 'component', componentId: 'vib1', pin: 'b' }, to: minusRail(5), color: '#1f2937' },
+      { id: 'w7', from: minusRail(8), to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -179,10 +199,10 @@ function tiltAndBuzzer(): CircuitSnapshot {
 function dhtOnly(): CircuitSnapshot {
   return {
     components: [{ id: 'dht1', type: 'dht', x: PART_X, y: 130 }],
-    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    breadboards: [],
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'dht1', pin: 'out' }, to: { kind: 'board', pinId: GP14 } },
-      { id: 'w2', from: { kind: 'component', componentId: 'dht1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+      { id: 'w2', from: { kind: 'component', componentId: 'dht1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
