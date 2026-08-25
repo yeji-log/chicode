@@ -43,6 +43,15 @@ const BASE_URL = import.meta.env.BASE_URL
 /** 버튼 등 입력 부품의 현재 상태 — 학생 코드가 pin.value() 로 읽어가는 값. */
 const gpioIn = new Map<number, boolean>()
 
+/** 출력으로 쓴 핀의 마지막 값. 진짜 Pico 는 Pin.OUT 핀도 value() 로 읽으면 방금 쓴
+ *  값이 나오는데, 여기엔 이 기록이 없어서 gpioIn(버튼 상태)을 대신 읽고 있었다.
+ *  그래서 출력 핀은 value() 가 항상 0 이었고, toggle() 이 `value(0 if value() else 1)`
+ *  이라 매번 1 만 쓰게 돼서 "LED 깜빡이기" 예제가 한 번 켜지고 그대로 멈췄다
+ *  (실제로 재현해서 찾았다 — on()/off()/toggle() 직후 value() 가 전부 0 으로 찍힌다).
+ *  실행마다 비운다 — 이전 실행의 핀 상태가 남으면 안 된다(UI 쪽 setGpio(new Map())
+ *  와 같은 이유). */
+const gpioOut = new Map<number, boolean>()
+
 const bootPromise = boot()
 
 async function boot(): Promise<MicroPythonInterface> {
@@ -63,10 +72,18 @@ async function boot(): Promise<MicroPythonInterface> {
 
   mp.registerJsModule('_chico_hw', {
     pin_write(pin: number, value: number) {
+      gpioOut.set(pin, !!value)
       post({ type: 'gpio', pin, value: value ? 1 : 0 })
     },
     pin_read(pin: number) {
-      return gpioIn.get(pin) ?? false
+      // 출력으로 쓴 적이 있는 핀이면 그 값을, 아니면 입력(버튼/스위치) 상태를 준다.
+      const out = gpioOut.get(pin)
+      return out !== undefined ? out : (gpioIn.get(pin) ?? false)
+    },
+    /** 핀을 입력으로 다시 선언하면 출력 기록을 지운다 — 같은 실행 안에서 한 핀을
+     *  OUT 으로 썼다가 IN 으로 바꾸면 옛날 출력값이 계속 읽히는 걸 막는다. */
+    pin_clear_out(pin: number) {
+      gpioOut.delete(pin)
     },
     // 유일하게 async 인 다리. await 로 불리면 JS 이벤트 루프에 제어권을 돌려줘서
     // 그 사이에 쌓인 'button' 메시지가 처리된다 (실측으로 확인한 방식).
@@ -109,6 +126,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   try {
     // 실행마다 이전 실행의 전역 변수가 남지 않도록 정리한다(Python 실습의
     // "매번 새 namespace" 와 같은 이유 — "지웠는데 왜 되지?" 방지).
+    gpioOut.clear()
     await mp.runPythonAsync(RESET_GLOBALS_SOURCE)
     await mp.runPythonAsync(interactive ? INSTALL_INTERACTIVE_TIME_SOURCE : RESTORE_REAL_TIME_SOURCE)
 
@@ -174,11 +192,15 @@ def _chico_build_machine():
 
         def __init__(self, id, mode=None, pull=None):
             self.id = id
+            self._mode = None
             if mode is not None:
                 self.init(mode, pull)
 
         def init(self, mode=None, pull=None):
             self._mode = mode
+            # 입력으로 선언하면 이 핀의 출력 기록을 지운다(_chico_hw.pin_read 주석 참고).
+            if mode == 0:
+                _chico_hw.pin_clear_out(self.id)
 
         def value(self, v=None):
             if v is None:

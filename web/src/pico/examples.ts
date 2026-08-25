@@ -45,10 +45,12 @@ export const EXAMPLES: Example[] = [
     name: '1. LED 켜고 끄기',
     circuit: ledOnly(),
     code: `from machine import Pin
+import time
 
 led = Pin(15, Pin.OUT)
 
 led.value(1)   # 켜기
+time.sleep(1)  # 1초 기다리기 — 이게 없으면 눈에 안 보인다
 led.value(0)   # 끄기
 `,
   },
