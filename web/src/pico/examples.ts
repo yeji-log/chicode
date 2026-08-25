@@ -355,7 +355,25 @@ function oledOnly(): CircuitSnapshot {
 
 export const EXAMPLES: Example[] = [
   {
-    name: '1. LED 켜고 끄기',
+    // 배선이 하나도 없는 예제는 이것뿐이다 — 보드에 원래 붙어 있는 LED 라서 전선을
+    // 꽂을 필요가 없다. 회로를 배우기 전에 "코드가 실제로 뭔가를 움직인다"를 먼저
+    // 보여주는 자리라 맨 앞에 둔다.
+    name: '1. 보드 내장 LED 깜빡이기 (배선 없이)',
+    circuit: { components: [], breadboards: [], wires: [] },
+    code: `from machine import Pin
+import time
+
+# Pico 2 W 의 내장 LED 는 번호가 아니라 이름으로 연다 — 이 LED 는 GPIO 가 아니라
+# 무선 칩에 붙어 있어서 GP 번호가 없다. (무선 없는 옛날 Pico 는 Pin(25) 였다)
+led = Pin("LED", Pin.OUT)
+
+while True:
+    led.toggle()
+    time.sleep(0.5)
+`,
+  },
+  {
+    name: '2. LED 켜고 끄기',
     circuit: ledOnly(),
     code: `from machine import Pin
 import time
@@ -368,7 +386,7 @@ led.value(0)   # 끄기
 `,
   },
   {
-    name: '2. LED 깜빡이기',
+    name: '3. LED 깜빡이기',
     circuit: ledOnly(),
     code: `from machine import Pin
 import time
@@ -381,7 +399,7 @@ while True:
 `,
   },
   {
-    name: '3. 버튼 누르면 LED (실시간 반응)',
+    name: '4. 버튼 누르면 LED (실시간 반응)',
     circuit: ledAndButton(),
     code: `from machine import Pin
 import time
@@ -398,7 +416,7 @@ while True:
 `,
   },
   {
-    name: '4. 부저로 도레미 연주하기',
+    name: '5. 부저로 도레미 연주하기',
     circuit: buzzerOnly(),
     code: `from machine import Pin, PWM
 import time
@@ -421,7 +439,7 @@ buzzer.deinit()  # 소리 끄기
 `,
   },
   {
-    name: '5. 서보모터 움직이기',
+    name: '6. 서보모터 움직이기',
     circuit: servoOnly(),
     code: `from machine import Pin, PWM
 import time
@@ -441,7 +459,7 @@ while True:
 `,
   },
   {
-    name: '6. 어두우면 불 켜기 (조도센서)',
+    name: '7. 어두우면 불 켜기 (조도센서)',
     circuit: ldrAndLed(),
     code: `from machine import Pin, ADC
 import time
@@ -463,7 +481,7 @@ while True:
 `,
   },
   {
-    name: '7. 가변저항으로 LED 밝기 조절',
+    name: '8. 가변저항으로 LED 밝기 조절',
     circuit: potAndLed(),
     code: `from machine import Pin, ADC, PWM
 import time
@@ -480,7 +498,7 @@ while True:
 `,
   },
   {
-    name: '8. 신호등 만들기',
+    name: '9. 신호등 만들기',
     circuit: trafficLight(),
     code: `from machine import Pin
 import time
@@ -512,7 +530,7 @@ while True:
 `,
   },
   {
-    name: '9. 사람이 오면 불 켜기 (PIR + 릴레이)',
+    name: '10. 사람이 오면 불 켜기 (PIR + 릴레이)',
     circuit: pirAndRelay(),
     code: `from machine import Pin
 import time
@@ -533,7 +551,7 @@ while True:
 `,
   },
   {
-    name: '10. RGB LED로 색 섞기',
+    name: '11. RGB LED로 색 섞기',
     circuit: rgbLed(),
     code: `from machine import Pin
 import time
@@ -559,7 +577,7 @@ while True:
 `,
   },
   {
-    name: '11. 기울이면 알려주기 (틸트 + 부저 + 진동)',
+    name: '12. 기울이면 알려주기 (틸트 + 부저 + 진동)',
     circuit: tiltAndBuzzer(),
     code: `from machine import Pin, PWM
 import time
@@ -582,7 +600,7 @@ while True:
 `,
   },
   {
-    name: '12. 온습도 재기 (DHT11)',
+    name: '13. 온습도 재기 (DHT11)',
     circuit: dhtOnly(),
     code: `import dht
 from machine import Pin
@@ -606,7 +624,7 @@ while True:
 `,
   },
   {
-    name: '13. 7세그먼트로 숫자 세기',
+    name: '14. 7세그먼트로 숫자 세기',
     circuit: sevenSegment(),
     code: `from machine import Pin
 import time
@@ -630,7 +648,7 @@ while True:
 `,
   },
   {
-    name: '14. 네오픽셀 무지개',
+    name: '15. 네오픽셀 무지개',
     circuit: neopixelStrip(),
     code: `import neopixel
 from machine import Pin
@@ -654,7 +672,7 @@ while True:
 `,
   },
   {
-    name: '15. 초음파로 거리 재기',
+    name: '16. 초음파로 거리 재기',
     circuit: ultrasonicOnly(),
     code: `from machine import Pin, time_pulse_us
 import time
@@ -685,7 +703,7 @@ while True:
 `,
   },
   {
-    name: '16. LCD 화면에 글자 띄우기',
+    name: '17. LCD 화면에 글자 띄우기',
     circuit: lcdOnly(),
     code: `from machine import Pin, I2C
 from pico_i2c_lcd import I2cLcd
@@ -713,7 +731,7 @@ while True:
 `,
   },
   {
-    name: '17. 흙이 마르면 알려주기 (토양 수분)',
+    name: '18. 흙이 마르면 알려주기 (토양 수분)',
     circuit: soilAndBuzzer(),
     code: `from machine import Pin, ADC, PWM
 import time
@@ -736,7 +754,7 @@ while True:
 `,
   },
   {
-    name: '18. 아날로그 온도센서 읽기 (TMP36)',
+    name: '19. 아날로그 온도센서 읽기 (TMP36)',
     circuit: tempAnalog(),
     code: `from machine import Pin, ADC
 import time
@@ -753,7 +771,7 @@ while True:
 `,
   },
   {
-    name: '19. 조이스틱으로 방향 읽기',
+    name: '20. 조이스틱으로 방향 읽기',
     circuit: joystick(),
     code: `from machine import Pin, ADC
 import time
@@ -787,7 +805,7 @@ while True:
 `,
   },
   {
-    name: '20. DC 모터 속도와 방향',
+    name: '21. DC 모터 속도와 방향',
     circuit: dcMotor(),
     code: `from machine import Pin, PWM
 import time
@@ -821,7 +839,7 @@ while True:
 `,
   },
   {
-    name: '21. 스텝모터 한 칸씩 돌리기',
+    name: '22. 스텝모터 한 칸씩 돌리기',
     circuit: stepper(),
     code: `from machine import Pin
 import time
@@ -845,7 +863,7 @@ while True:
 `,
   },
   {
-    name: '22. OLED에 글자와 그림 그리기',
+    name: '23. OLED에 글자와 그림 그리기',
     circuit: oledOnly(),
     code: `from machine import Pin, I2C
 import ssd1306

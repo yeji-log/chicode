@@ -22,6 +22,7 @@
  * GPIO/sleep) 실시간 상호작용 모드로 돌린다.
  */
 import type { MicroPythonInterface } from './micropython-types'
+import { ONBOARD_LED_PIN } from './circuit/board'
 
 export type WorkerRequest =
   | { type: 'run'; code: string }
@@ -203,6 +204,12 @@ const dhtIn = new Map<number, { temperature: number; humidity: number }>()
  *  와 같은 이유). */
 const gpioOut = new Map<number, boolean>()
 
+/** GP25 에 쓴 적이 있는지(실행마다 초기화). 무선 없는 옛날 Pico 는 내장 LED 가 GP25 라
+ *  교재도 인터넷 예제도 Pin(25) 로 되어 있는 게 많은데, Pico 2 W 는 이 LED 가 무선 칩에
+ *  달려 있어서 GP25 를 켜도 아무 일도 안 일어난다 — 화면에서도 그 핀은 헤더에 없다.
+ *  아무 반응이 없으면 학생은 자기 코드가 틀린 줄 알고 헤매니, 한 번만 짚어준다. */
+let warnedAboutGp25 = false
+
 const bootPromise = boot()
 
 async function boot(): Promise<MicroPythonInterface> {
@@ -223,6 +230,13 @@ async function boot(): Promise<MicroPythonInterface> {
 
   mp.registerJsModule('_chico_hw', {
     pin_write(pin: number, value: number) {
+      if (pin === 25 && !warnedAboutGp25) {
+        warnedAboutGp25 = true
+        post({
+          type: 'stdout',
+          text: '[안내] Pico 2 W 의 내장 LED 는 GP25 가 아닙니다. Pin("LED") 로 여세요.\n',
+        })
+      }
       const was = gpioOut.get(pin)
       gpioOut.set(pin, !!value)
       // trig 가 1 → 0 으로 떨어지는 순간이 "재라"는 신호다(실물과 같다).
@@ -462,6 +476,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     // 실행마다 이전 실행의 전역 변수가 남지 않도록 정리한다(Python 실습의
     // "매번 새 namespace" 와 같은 이유 — "지웠는데 왜 되지?" 방지).
     gpioOut.clear()
+    warnedAboutGp25 = false
     for (const oled of oleds.values()) {
       oled.buffer = blankOled()
       oled.page = 0
@@ -535,6 +550,29 @@ import _chico_hw
 # NameError: name '_ADC_PINS' isn't defined 가 났다(실제로 재현해서 찾았다).
 _chico_adc_pins = (26, 27, 28)
 
+# 보드 내장 LED. 진짜 Pico 2 W 도 이 LED 는 GPIO 가 아니라 무선 칩(CYW43)에 달려 있어서
+# 번호가 없고 machine.Pin("LED") 처럼 이름으로 연다 — 여기서도 이름으로만 열리게 하고,
+# 안에서만 쓰는 번호(board.ts 의 ONBOARD_LED_PIN)로 바꿔서 다닌다.
+# 옛날 Pico(무선 없는 모델)의 Pin(25) 는 일부러 안 받는다. 그걸 받아주면 진짜 2 W 에서는
+# 안 도는 코드를 가르치게 된다(ADC 를 GP26~28 로 묶어둔 것과 같은 이유).
+_chico_onboard_led = ${ONBOARD_LED_PIN}
+_chico_onboard_names = ("LED", "WL_GPIO0")
+
+def _chico_pin_id(id):
+    """Pin(15) / Pin("LED") / Pin(Pin.board.LED) 를 전부 내부 번호로 바꾼다."""
+    if hasattr(id, "id"):
+        return id.id
+    if isinstance(id, str):
+        if id.upper() in _chico_onboard_names:
+            return _chico_onboard_led
+        raise ValueError(
+            '이름으로 열 수 있는 핀은 "LED"(보드 내장 LED) 뿐이에요 (받은 이름: %s)' % id
+        )
+    return int(id)
+
+def _chico_pin_name(id):
+    return "보드 내장 LED" if id == _chico_onboard_led else "GP%d" % id
+
 def _chico_us_since(t0):
     d = (_chico_hw.now_us() - t0) & 0x3FFFFFFF
     return d - 0x40000000 if d >= 0x20000000 else d
@@ -557,7 +595,7 @@ def _chico_build_machine():
         PULL_DOWN = 2
 
         def __init__(self, id, mode=None, pull=None):
-            self.id = id
+            self.id = _chico_pin_id(id)
             self._mode = None
             if mode is not None:
                 self.init(mode, pull)
@@ -588,13 +626,22 @@ def _chico_build_machine():
         def toggle(self):
             self.value(0 if self.value() else 1)
 
+    # 실물에도 있는 이름. Pin.board.LED 로 바로 켜도 되고, Pin(Pin.board.LED) 처럼
+    # 다시 감싸도 된다(_chico_pin_id 가 Pin 객체도 받는다).
+    class _PinNames:
+        pass
+
+    Pin.board = _PinNames()
+    Pin.board.LED = Pin("LED")
+
     class ADC:
         def __init__(self, pin):
             # machine.ADC(26) 처럼 번호를 바로 주는 것도, ADC(Pin(26)) 도 둘 다 받는다.
-            id = pin.id if hasattr(pin, "id") else pin
+            id = _chico_pin_id(pin)
             if id not in _chico_adc_pins:
                 raise ValueError(
-                    "ADC는 GP26, GP27, GP28에서만 쓸 수 있어요 (받은 핀: GP%d)" % id
+                    "ADC는 GP26, GP27, GP28에서만 쓸 수 있어요 (받은 핀: %s)"
+                    % _chico_pin_name(id)
                 )
             self.id = id
 
@@ -606,7 +653,13 @@ def _chico_build_machine():
         인자 없이 부르면 지금 값을 돌려주는 것(getter)까지 실물과 같다."""
 
         def __init__(self, dest, freq=None, duty_u16=None):
-            self.id = dest.id if hasattr(dest, "id") else dest
+            self.id = _chico_pin_id(dest)
+            if self.id == _chico_onboard_led:
+                raise ValueError(
+                    "보드 내장 LED 는 PWM(밝기 조절)이 안 돼요 — 진짜 Pico 2 W 도 이 LED 가"
+                    " 무선 칩에 달려 있어서 켜고 끄기만 됩니다. 밝기를 조절하려면 GP 핀에"
+                    " LED 를 연결하세요."
+                )
             self._freq = 1000
             self._duty = 0
             if freq is not None:

@@ -62,3 +62,14 @@ export const BOARD_PINS: BoardPin[] = [
     side: 'right',
   })),
 ]
+
+/**
+ * 보드 내장 LED 를 나타내는 "핀 번호". 헤더에 나오는 핀이 아니라서 GP 번호가 없다 —
+ * Pico 2 W 는 이 LED 가 GPIO 가 아니라 무선 칩(CYW43) 쪽에 달려 있어서, 진짜 보드에서도
+ * machine.Pin(25) 가 아니라 machine.Pin("LED") 처럼 이름으로 연다.
+ *
+ * 그래도 워커↔UI 사이를 오가는 GPIO 메시지는 전부 숫자 하나로 되어 있어서(gpio/pwm),
+ * 내장 LED 만 따로 길을 내는 대신 실제 핀과 겹치지 않는 음수를 배정해 같은 길로 보낸다.
+ * 배선(전선)은 이 번호를 절대 만들어내지 않으므로 부품 쪽과 부딪히지 않는다.
+ */
+export const ONBOARD_LED_PIN = -1

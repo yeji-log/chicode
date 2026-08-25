@@ -132,6 +132,11 @@ export default function PicoLab() {
       <SupportNote>
         <li>machine.Pin(디지털 입출력)만 지원합니다 — ADC/PWM/I2C/SPI/UART는 아직입니다</li>
         <li>
+          보드에 붙어 있는 LED 는 전선 없이 machine.Pin("LED") 로 켜고 끕니다 — 진짜 Pico 2 W
+          도 이 LED 는 GP 번호가 없어서 이름으로 엽니다(무선 없는 옛날 Pico 의 Pin(25) 가
+          아닙니다). 무선 칩에 달려 있어 밝기(PWM) 조절은 안 됩니다
+        </li>
+        <li>
           함수(def)를 쓰지 않고 코드를 그대로 최상위(또는 while 문 안)에 적으면 실행 중에도
           버튼을 눌러 바로 반응을 볼 수 있습니다. 함수를 쓰면 실행이 끝난 뒤 결과만 볼 수
           있습니다

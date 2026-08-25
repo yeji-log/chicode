@@ -9,7 +9,15 @@ import {
 } from 'react'
 
 import Modal from '../../components/Modal'
-import { BOARD_HEIGHT, BOARD_PINS, BOARD_WIDTH, DEFAULT_BOARD_X, DEFAULT_BOARD_Y, type BoardPin } from './board'
+import {
+  BOARD_HEIGHT,
+  BOARD_PINS,
+  BOARD_WIDTH,
+  DEFAULT_BOARD_X,
+  DEFAULT_BOARD_Y,
+  ONBOARD_LED_PIN,
+  type BoardPin,
+} from './board'
 import {
   type BreadboardLayout,
   breadboardAnchor,
@@ -1374,6 +1382,7 @@ function CircuitCanvas(
               board={boardPos}
               locked={locked}
               selected={selected?.kind === 'board'}
+              ledOn={gpioLevels.get(ONBOARD_LED_PIN) === 1}
               onBodyPointerDown={(event) => {
                 if (locked) return
                 setSelected({ kind: 'board', id: BOARD_ID })
@@ -2115,6 +2124,7 @@ function PicoBoard({
   board,
   locked,
   selected,
+  ledOn,
   onBodyPointerDown,
   onPinPointerDown,
   onPinPointerUp,
@@ -2122,6 +2132,8 @@ function PicoBoard({
   board: PlacedBoard
   locked: boolean
   selected: boolean
+  /** 실행 중인 코드가 machine.Pin("LED") 를 켰는지. 보드 내장 LED 를 그리는 데 쓴다. */
+  ledOn: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
   onPinPointerDown: (pin: BoardPin) => void
   onPinPointerUp: (pin: BoardPin) => void
@@ -2163,9 +2175,26 @@ function PicoBoard({
         {/* 내장(온보드) LED — 실제 보드에도 BOOTSEL 옆에 작은 초록 LED가 있다.
             보드 안쪽(회전 그룹)에 그리므로 보드를 옮기거나 돌리면 같이 움직이고,
             보드는 삭제 대상이 아니라서 "따로 삭제"할 방법도 없다 — 둘 다 사용자
-            요청대로다. 지금은 장식일 뿐 코드로 켜고 끌 수는 없다(machine.Pin("LED")
-            같은 문자열 핀은 아직 구현 안 함 — 필요하면 별도로 만들 것).  */}
+            요청대로다. machine.Pin("LED") 로 실제로 켜고 끌 수 있다(board.ts 의
+            ONBOARD_LED_PIN 참고). 부품 LED와 같은 방식으로, 꺼진 알을 항상 깔고
+            켜졌을 때만 밝은 알을 덮는다 — 다만 PWM 이 안 걸리는 자리라 두 단계뿐이다.
+            글자는 실물 실크스크린 그대로 'LED' 라고 적어둔다 — 코드에서 쓰는 이름이
+            바로 이것이라, 학생이 화면만 보고도 Pin("LED") 를 떠올릴 수 있게. */}
         <circle cx={cx + 24} cy={72} r={4} fill="#166534" stroke="#0b2f1f" strokeWidth={1} />
+        {ledOn && (
+          <circle
+            cx={cx + 24}
+            cy={72}
+            r={4}
+            fill="#4ade80"
+            stroke="#bbf7d0"
+            strokeWidth={1}
+            style={{ filter: 'drop-shadow(0 0 6px #4ade80)' }}
+          />
+        )}
+        <text x={cx + 24} y={62} fontSize={6} fill="#bfe3d2" textAnchor="middle">
+          LED
+        </text>
         {/* 칩 */}
         <rect x={cx - 22} y={130} width={44} height={44} rx={2} fill="#111827" stroke="#000" />
         <text
