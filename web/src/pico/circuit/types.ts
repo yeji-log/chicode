@@ -294,7 +294,18 @@ export const KNOB_SWEEP_DEG = 270
 /** 아날로그 입력의 최댓값 — MicroPython 의 ADC.read_u16() 이 0~65535 를 준다. */
 export const ADC_MAX = 65535
 
-/** 부품 종류별로 고정된 핀 이름 + 부품 기준 상대 좌표. */
+/**
+ * 부품을 그리는 배율. 부품 도형과 핀 좌표(COMPONENT_PINS)는 전부 "원래 크기" 로
+ * 적어두고, 화면에 낼 때만 이 값을 곱한다 — 한 군데만 고치면 전 부품이 같이 커진다.
+ *
+ * 왜 필요했나: 보드가 200x560 인데 부품은 폭 20~64 라 나란히 두면 부품이 부스러기처럼
+ * 보였다. 실물 비율로 따지면 오히려 부품이 훨씬 커야 한다 — HC-SR04(45x20mm)는 Pico
+ * (51x21mm)와 거의 같은 크기다. 다만 실물 비율을 그대로 쓰면 모듈 하나가 캔버스를
+ * 다 먹어서, 눈에 편한 선으로 1.5배를 골랐다.
+ */
+export const COMPONENT_SCALE = 1.5
+
+/** 부품 종류별로 고정된 핀 이름 + 부품 기준 상대 좌표(원래 크기 기준). */
 export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy: number }[]> = {
   led: [
     { pin: 'anode', dx: -10, dy: 46 },

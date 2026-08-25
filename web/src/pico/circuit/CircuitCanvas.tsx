@@ -26,6 +26,7 @@ import {
   COMPONENT_LIST,
   COMPONENT_PINS,
   COMPONENT_PIVOT,
+  COMPONENT_SCALE,
   type ComponentType,
   DEFAULT_WIRE_COLOR,
   isDigitalInput,
@@ -160,6 +161,12 @@ export interface CircuitCanvasProps {
 /** "예제 불러오기" 가 코드와 함께 회로도 같이 구성할 수 있도록 여는 창구. */
 export interface CircuitCanvasHandle {
   loadCircuit: (circuit: CircuitSnapshot) => void
+}
+
+/** 부품의 회전 중심을 화면 배율까지 반영해서 돌려준다. */
+function scaledPivot(type: ComponentType): Point {
+  const pivot = COMPONENT_PIVOT[type]
+  return { x: pivot.x * COMPONENT_SCALE, y: pivot.y * COMPONENT_SCALE }
 }
 
 /** 핀에 실제로 걸린 세기(0~1). 단순 on/off 면 0 또는 1이고, PWM 이 걸려 있으면 duty
@@ -851,10 +858,11 @@ function CircuitCanvas(
     // 거는 rotate()와 같은 중심·각도라야 전선이 실제로 보이는 핀 자리에 붙는다.
     // 회전 중심은 부품 로컬 원점(0,0)이 아니라 몸통 한가운데(COMPONENT_PIVOT) —
     // 안 그러면 몸통이 원점을 축으로 궤도를 그리며 돈다.
-    const pivot = COMPONENT_PIVOT[comp.type]
-    // 반전이 먼저, 회전이 나중 — ComponentGlyph 의 transform 순서와 같아야 전선이
-    // 화면에 보이는 핀 자리에 붙는다.
-    const local = comp.flipped ? mirrorX({ x: spec.dx, y: spec.dy }, pivot.x) : { x: spec.dx, y: spec.dy }
+    const pivot = scaledPivot(comp.type)
+    // 배율 → 반전 → 회전 순서다. ComponentGlyph 의 transform 목록과 같은 순서여야
+    // 전선이 화면에 보이는 핀 자리에 붙는다(SVG 는 목록 오른쪽이 먼저 적용된다).
+    const scaled = { x: spec.dx * COMPONENT_SCALE, y: spec.dy * COMPONENT_SCALE }
+    const local = comp.flipped ? mirrorX(scaled, pivot.x) : scaled
     const rotated = rotateAround(local, pivot, comp.rotation ?? 0)
     return { x: comp.x + rotated.x, y: comp.y + rotated.y }
   }
@@ -883,28 +891,32 @@ function CircuitCanvas(
       ? sliderValueAt(component, p)
       : knobValueAt(component, p)
 
-  /** 조도센서 슬라이더 — 부품이 회전해 있으면 포인터를 반대로 돌려서 부품 기준 좌표로
-   *  바꾼 뒤 가로 위치만 본다. */
+  /** 포인터(모델 좌표)를 부품의 "원래 크기 기준" 로컬 좌표로 바꾼다. 화면에 건 것과
+   *  정확히 반대 순서로 되돌린다 — 회전을 풀고, 반전을 풀고, 배율을 나눈다. 이렇게
+   *  해두면 아래 값 계산들이 도형을 적은 좌표(배율 이전)를 그대로 쓸 수 있다. */
+  const toComponentLocal = (component: PlacedComponent, p: Point): Point => {
+    const pivot = scaledPivot(component.type)
+    let q = rotateAround({ x: p.x - component.x, y: p.y - component.y }, pivot, -(component.rotation ?? 0))
+    if (component.flipped) q = mirrorX(q, pivot.x)
+    return { x: q.x / COMPONENT_SCALE, y: q.y / COMPONENT_SCALE }
+  }
+
+  /** 조도센서·온습도·초음파 슬라이더 — 로컬 좌표의 가로 위치만 본다. */
   const sliderValueAt = (component: PlacedComponent, p: Point): number => {
-    const pivot = COMPONENT_PIVOT[component.type]
-    const local = rotateAround(
-      { x: p.x - component.x, y: p.y - component.y },
-      pivot,
-      -(component.rotation ?? 0),
-    )
+    const local = toComponentLocal(component, p)
     const ratio = (local.x + LDR_TRACK_HALF_WIDTH) / (LDR_TRACK_HALF_WIDTH * 2)
     return Math.max(0, Math.min(1, ratio))
   }
 
   /** 포인터가 가리키는 방향을 노브 값(0~1)으로 바꾼다. 노브 "위쪽"이 가운데(50%)가
    *  아니라, 왼쪽 끝(-135도)이 0%이고 오른쪽 끝(+135도)이 100%다 — 실물 손잡이와 같다.
-   *  부품이 회전해 있으면 그만큼 빼야 화면에 보이는 대로 돈다. */
+   *  회전·반전은 toComponentLocal 이 이미 풀어준다. */
   const knobValueAt = (component: PlacedComponent, p: Point): number => {
     const pivot = COMPONENT_PIVOT[component.type]
-    const deg = (Math.atan2(p.y - (component.y + pivot.y), p.x - (component.x + pivot.x)) * 180) / Math.PI
+    const local = toComponentLocal(component, p)
+    const deg = (Math.atan2(local.y - pivot.y, local.x - pivot.x) * 180) / Math.PI
     // atan2 의 0도는 오른쪽이라 +90 을 해서 "위"를 0도로 옮긴 뒤 -180~180 으로 정규화한다.
-    const raw = deg + 90 - (component.rotation ?? 0)
-    const rel = (((raw + 180) % 360) + 360) % 360 - 180
+    const rel = (((deg + 90 + 180) % 360) + 360) % 360 - 180
     const half = KNOB_SWEEP_DEG / 2
     return (Math.max(-half, Math.min(half, rel)) + half) / KNOB_SWEEP_DEG
   }
@@ -1879,7 +1891,7 @@ function ComponentGlyph({
 }) {
   const pins = COMPONENT_PINS[component.type]
   const pivot = COMPONENT_PIVOT[component.type]
-  /** 핀에 실제로 걸린 세기(0~1). 단순 on/off 면 0 또는 1이고, PWM 이 걸려 있으면
+/** 핀에 실제로 걸린 세기(0~1). 단순 on/off 면 0 또는 1이고, PWM 이 걸려 있으면
    *  duty 비율이다 — 그래야 LED 가 "켜짐/꺼짐" 두 단계가 아니라 밝기로 보인다. */
   const levelOf = (pin: string) => levelOfGpio(gpioForPin(pin), gpioLevels, pwmLevels)
   const isOn = (pin: string) => levelOf(pin) > 0
@@ -1940,7 +1952,15 @@ function ComponentGlyph({
           보여야 한다 — 중심이 어긋나 있으면 부품이 선택 링 밖으로 궤도를 그리며
           도는 것처럼 보인다, 실제로 지적받은 문제). */}
       {selected && (
-        <circle cx={pivot.x} cy={pivot.y} r={26} fill="none" stroke="#2563eb" strokeWidth={2} strokeDasharray="5 3" />
+        <circle
+          cx={pivot.x * COMPONENT_SCALE}
+          cy={pivot.y * COMPONENT_SCALE}
+          r={26 * COMPONENT_SCALE}
+          fill="none"
+          stroke="#2563eb"
+          strokeWidth={2}
+          strokeDasharray="5 3"
+        />
       )}
       {/* rotation은 이 안쪽 그룹에만 건다 — 바깥 그룹(선택 표시 원)까지 돌 이유는
           없다. 회전 중심을 몸통 중심(pivot)으로 명시해야 몸통이 제자리에서 돈다
@@ -1949,8 +1969,9 @@ function ComponentGlyph({
           이라야 전선이 실제 보이는 핀 위치에 붙는다. */}
       <g
         transform={[
-          `rotate(${component.rotation ?? 0} ${pivot.x} ${pivot.y})`,
-          component.flipped ? `translate(${2 * pivot.x} 0) scale(-1 1)` : '',
+          `rotate(${component.rotation ?? 0} ${pivot.x * COMPONENT_SCALE} ${pivot.y * COMPONENT_SCALE})`,
+          component.flipped ? `translate(${2 * pivot.x * COMPONENT_SCALE} 0) scale(-1 1)` : '',
+          `scale(${COMPONENT_SCALE})`,
         ]
           .filter(Boolean)
           .join(' ')}
