@@ -316,6 +316,31 @@ function joystick(): CircuitSnapshot {
   }
 }
 
+function dcMotor(): CircuitSnapshot {
+  return {
+    components: [{ id: 'dc1', type: 'dc-motor', x: PART_X, y: 130 }],
+    breadboards: [],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'dc1', pin: 'ena' }, to: { kind: 'board', pinId: GP15 }, color: '#dc2626' },
+      { id: 'w2', from: { kind: 'component', componentId: 'dc1', pin: 'in1' }, to: { kind: 'board', pinId: GP16 }, color: '#eab308' },
+      { id: 'w3', from: { kind: 'component', componentId: 'dc1', pin: 'in2' }, to: { kind: 'board', pinId: GP17 }, color: '#16a34a' },
+    ],
+  }
+}
+
+function stepper(): CircuitSnapshot {
+  return {
+    components: [{ id: 'st1', type: 'stepper', x: PART_X, y: 120 }],
+    breadboards: [],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'st1', pin: 'in1' }, to: { kind: 'board', pinId: GP0 }, color: '#dc2626' },
+      { id: 'w2', from: { kind: 'component', componentId: 'st1', pin: 'in2' }, to: { kind: 'board', pinId: GP1 }, color: '#eab308' },
+      { id: 'w3', from: { kind: 'component', componentId: 'st1', pin: 'in3' }, to: { kind: 'board', pinId: GP2 }, color: '#16a34a' },
+      { id: 'w4', from: { kind: 'component', componentId: 'st1', pin: 'in4' }, to: { kind: 'board', pinId: GP3 }, color: '#2563eb' },
+    ],
+  }
+}
+
 export const EXAMPLES: Example[] = [
   {
     name: '1. LED 켜고 끄기',
@@ -747,6 +772,64 @@ while True:
 
     print(x, y, 방향)
     time.sleep(0.3)
+`,
+  },
+  {
+    name: '20. DC 모터 속도와 방향',
+    circuit: dcMotor(),
+    code: `from machine import Pin, PWM
+import time
+
+speed = PWM(Pin(15))    # ENA - 얼마나 빠르게
+speed.freq(1000)
+in1 = Pin(16, Pin.OUT)  # IN1, IN2 - 어느 쪽으로
+in2 = Pin(17, Pin.OUT)
+
+while True:
+    # 정방향으로 천천히 → 빠르게
+    in1.on()
+    in2.off()
+    for duty in (20000, 40000, 65535):
+        speed.duty_u16(duty)
+        print('정방향', duty * 100 // 65535, '%')
+        time.sleep(1)
+
+    # 역방향
+    in1.off()
+    in2.on()
+    speed.duty_u16(40000)
+    print('역방향')
+    time.sleep(2)
+
+    # 둘 다 켜면 브레이크
+    in1.on()
+    in2.on()
+    print('정지')
+    time.sleep(1)
+`,
+  },
+  {
+    name: '21. 스텝모터 한 칸씩 돌리기',
+    circuit: stepper(),
+    code: `from machine import Pin
+import time
+
+coils = [Pin(0, Pin.OUT), Pin(1, Pin.OUT), Pin(2, Pin.OUT), Pin(3, Pin.OUT)]
+
+# 코일을 이 순서대로 켜면 축이 한 칸씩 돈다. 순서를 뒤집으면 반대로 돈다
+sequence = [
+    [1, 0, 0, 0], [1, 1, 0, 0], [0, 1, 0, 0], [0, 1, 1, 0],
+    [0, 0, 1, 0], [0, 0, 1, 1], [0, 0, 0, 1], [1, 0, 0, 1],
+]
+
+step = 0
+while True:
+    pattern = sequence[step % 8]
+    for i in range(4):
+        coils[i].value(pattern[i])
+    print('step', step)
+    step = step + 1
+    time.sleep(0.15)
 `,
   },
 ]

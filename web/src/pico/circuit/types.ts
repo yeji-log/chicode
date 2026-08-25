@@ -61,6 +61,8 @@ export type ComponentType =
   | 'temp-analog'
   | 'ir-obstacle'
   | 'joystick'
+  | 'dc-motor'
+  | 'stepper'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -79,6 +81,20 @@ export const COMPONENT_LIST: ComponentMeta[] = [
   { type: 'led', category: 'output', label: 'LED', short: 'LED', emoji: '💡' },
   { type: 'rgb-led', category: 'output', label: 'RGB LED', short: 'RGB', emoji: '🌈' },
   { type: 'buzzer', category: 'output', label: '부저', short: '부저', emoji: '🔔' },
+  {
+    type: 'dc-motor',
+    category: 'output',
+    label: 'DC 모터 + 드라이버(PWM 속도 · IN1/IN2 방향)',
+    short: 'DC모터',
+    emoji: '🌀',
+  },
+  {
+    type: 'stepper',
+    category: 'output',
+    label: '스텝모터 28BYJ-48(디지털 4핀 시퀀스)',
+    short: '스텝',
+    emoji: '⚙',
+  },
   {
     type: 'servo',
     category: 'output',
@@ -498,6 +514,19 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'out', dx: 0, dy: 46 },
     { pin: 'gnd', dx: 14, dy: 46 },
   ],
+  // 모터 드라이버(L9110/TB6612 계열)와 같은 3핀. ENA 로 속도, IN1/IN2 로 방향.
+  'dc-motor': [
+    { pin: 'ena', dx: -20, dy: 52 },
+    { pin: 'in1', dx: 0, dy: 52 },
+    { pin: 'in2', dx: 20, dy: 52 },
+  ],
+  // 28BYJ-48 + ULN2003 드라이버. 코일 네 개를 순서대로 켜면 축이 한 칸씩 돈다.
+  stepper: [
+    { pin: 'in1', dx: -24, dy: 56 },
+    { pin: 'in2', dx: -8, dy: 56 },
+    { pin: 'in3', dx: 8, dy: 56 },
+    { pin: 'in4', dx: 24, dy: 56 },
+  ],
   // 실물 서보와 같은 3선: 신호(주황), 전원(빨강), 접지(갈색).
   servo: [
     { pin: 'signal', dx: -14, dy: 46 },
@@ -542,6 +571,26 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   'temp-analog': { x: 0, y: 16 },
   'ir-obstacle': { x: 0, y: 16 },
   joystick: { x: 0, y: 22 },
+  'dc-motor': { x: 0, y: 22 },
+  stepper: { x: 0, y: 24 },
+}
+
+/**
+ * 스텝모터가 한 칸(step) 돌 때의 각도. 28BYJ-48 은 감속비까지 합쳐 한 바퀴가 4096
+ * 스텝이라 실제로는 훨씬 잘게 도는데, 그대로 그리면 화면에서 움직임이 안 보인다.
+ * 여기선 "코일 시퀀스 한 칸 = 눈에 보이는 한 칸" 으로 잡았다 — 순서를 잘못 짜면
+ * 안 도는 것을 눈으로 확인하는 게 이 부품의 수업 내용이라, 각도의 정확도보다
+ * 그쪽이 중요하다.
+ */
+export const STEPPER_DEG_PER_STEP = 11.25
+
+/** 코일 네 개 중 지금 켜진 조합이 시퀀스의 몇 번째인지. 아니면 null(잘못된 조합). */
+export function stepperPhaseOf(on: boolean[]): number | null {
+  const key = on.map((v) => (v ? '1' : '0')).join('')
+  // 28BYJ-48 을 반스텝으로 돌릴 때 흔히 쓰는 8단계 순서.
+  const sequence = ['1000', '1100', '0100', '0110', '0010', '0011', '0001', '1001']
+  const index = sequence.indexOf(key)
+  return index >= 0 ? index : null
 }
 
 /** 조이스틱 스틱이 움직이는 반경(부품 기준 상대 좌표). 가운데가 50%, 끝이 0%/100%. */

@@ -43,6 +43,8 @@ import {
   mirrorX,
   ANALOG_SENSORS,
   JOYSTICK_RADIUS,
+  STEPPER_DEG_PER_STEP,
+  stepperPhaseOf,
   LCD_COLUMNS,
   LCD_I2C_ADDR,
   LCD_LINES,
@@ -443,6 +445,42 @@ function CircuitCanvas(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analogValues, components, connectivity, activeInputs])
+
+  /** 스텝모터는 "지금 어느 코일이 켜졌나" 만 봐서는 각도를 알 수 없다 — 순서가 한 칸씩
+   *  넘어간 횟수를 세야 한다. 그래서 부품마다 직전 단계와 누적 각도를 들고 있는다.
+   *  ref 에 쌓고 state 로 내보내는 이유: 매 gpio 변화마다 새 Map 을 만들지 않으려고. */
+  const stepperRef = useRef(new Map<string, { phase: number | null; angle: number }>())
+  const [stepperAngles, setStepperAngles] = useState<Map<string, number>>(new Map())
+
+  useEffect(() => {
+    let moved = false
+    for (const c of components) {
+      if (c.type !== 'stepper') continue
+      const on = ['in1', 'in2', 'in3', 'in4'].map((pin) => {
+        const gpio = gpioForPin(c.id, pin)
+        return gpio !== undefined && gpioLevels.get(gpio) === 1
+      })
+      const phase = stepperPhaseOf(on)
+      if (phase === null) continue // 시퀀스에 없는 조합이면 축이 안 돈다(실물도 그렇다)
+      const state = stepperRef.current.get(c.id) ?? { phase: null, angle: 0 }
+      if (state.phase !== null && phase !== state.phase) {
+        // 순서가 한 칸 앞이면 정방향, 한 칸 뒤면 역방향. 건너뛰면 안 돈 것으로 본다.
+        if ((state.phase + 1) % 8 === phase) {
+          state.angle += STEPPER_DEG_PER_STEP
+          moved = true
+        } else if ((state.phase + 7) % 8 === phase) {
+          state.angle -= STEPPER_DEG_PER_STEP
+          moved = true
+        }
+      }
+      state.phase = phase
+      stepperRef.current.set(c.id, state)
+    }
+    if (moved) {
+      setStepperAngles(new Map([...stepperRef.current].map(([id, v]) => [id, v.angle])))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gpioLevels, components, connectivity])
 
   /** LCD 도 배선을 워커가 알아야 한다 — scan() 이 무엇을 돌려줄지, 그리고 어느 화면에
    *  글자를 보낼지 정해야 하기 때문이다. */
@@ -1192,6 +1230,7 @@ function CircuitCanvas(
                 pwmLevels={pwmLevels}
                 neopixelColors={neopixelColors}
                 lcdLines={lcdLines}
+                stepperAngle={stepperAngles.get(c.id) ?? 0}
                 gpioForPin={(pin) => gpioForPin(c.id, pin)}
                 active={activeInputs.has(c.id)}
                 analogValue={
@@ -1957,6 +1996,7 @@ function ComponentGlyph({
   pwmLevels,
   neopixelColors,
   lcdLines,
+  stepperAngle,
   gpioForPin,
   active,
   analogValue,
@@ -1976,6 +2016,8 @@ function ComponentGlyph({
   pwmLevels: Map<number, { freq: number; duty: number }>
   neopixelColors: Map<number, string[]>
   lcdLines: Map<number, string[]>
+  /** 스텝모터가 지금까지 돈 각도(도). 다른 부품에선 안 쓴다. */
+  stepperAngle: number
   gpioForPin: (pin: string) => number | undefined
   active: boolean
   /** 가변저항 노브·조도센서 슬라이더 위치(0~1). 다른 부품에선 안 쓴다. */
@@ -2014,6 +2056,22 @@ function ComponentGlyph({
   const ledLit = Math.max(levelOf('anode'), levelOf('cathode'))
   const ledColor = ledColorOf(component.color)
   const analogSensor = ANALOG_SENSORS[component.type]
+
+  // DC 모터: ena 의 세기가 속도, in1/in2 가 방향. 둘이 같으면 브레이크(정지)다.
+  const motorSpeed = levelOf('ena')
+  const motorForward = isOn('in1') && !isOn('in2')
+  const motorBackward = isOn('in2') && !isOn('in1')
+  const motorRunning = motorSpeed > 0 && (motorForward || motorBackward)
+  const motorSpin = motorRunning
+    ? { seconds: Math.max(0.15, 1.2 - motorSpeed), reverse: motorBackward }
+    : null
+  const motorLabel = motorRunning
+    ? `${Math.round(motorSpeed * 100)}% ${motorForward ? '정방향' : '역방향'}`
+    : motorSpeed > 0
+      ? '정지(브레이크)'
+      : ''
+
+  const coilOn = ['in1', 'in2', 'in3', 'in4'].map((pin) => isOn(pin))
 
   /** 부품을 반전하면 안쪽 글자까지 거울로 뒤집혀 읽을 수 없게 된다. 값 표시만 되돌린다.
    *  부품들의 값 글자가 전부 x=0(textAnchor middle)이라 scale(-1 1) 한 번이면 맞는다. */
@@ -2106,6 +2164,8 @@ function ComponentGlyph({
         component.type === 'lcd' ||
         component.type === 'ir-obstacle' ||
         component.type === 'joystick' ||
+        component.type === 'dc-motor' ||
+        component.type === 'stepper' ||
         ANALOG_SENSORS[component.type]) && <Legs />}
 
       {component.type === 'potentiometer' && (
@@ -2395,6 +2455,71 @@ function ComponentGlyph({
             className="cursor-pointer"
             onPointerDown={onKnobPointerDown}
           />
+        </g>
+      )}
+
+      {component.type === 'dc-motor' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          {/* 은색 몸통 + 축. 속도는 ena 의 PWM duty, 방향은 in1/in2 조합으로 정해진다. */}
+          <rect x={-24} y={6} width={48} height={32} rx={6} fill="#94a3b8" stroke="#475569" strokeWidth={1.5} />
+          <rect x={-30} y={16} width={6} height={12} rx={2} fill="#64748b" stroke="#334155" strokeWidth={1} />
+          <g
+            className={motorSpin ? 'animate-spin' : undefined}
+            style={
+              motorSpin
+                ? {
+                    transformBox: 'fill-box',
+                    transformOrigin: 'center',
+                    animationDuration: `${motorSpin.seconds}s`,
+                    animationDirection: motorSpin.reverse ? 'reverse' : 'normal',
+                  }
+                : undefined
+            }
+          >
+            <circle cx={0} cy={22} r={11} fill="#e2e8f0" stroke="#475569" strokeWidth={1.2} />
+            <line x1={0} y1={22} x2={0} y2={13} stroke="#ef4444" strokeWidth={2.5} strokeLinecap="round" />
+          </g>
+          <Unflip>
+            <text x={0} y={-2} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              {motorLabel}
+            </text>
+          </Unflip>
+        </g>
+      )}
+
+      {component.type === 'stepper' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          {/* 파란 드라이버 보드 + 그 위의 은색 모터. 코일 순서가 한 칸씩 넘어갈 때마다
+              축이 한 칸 돈다 — 순서를 잘못 짜면 제자리에서 떠는 것도 그대로 보인다. */}
+          <rect x={-28} y={26} width={56} height={16} rx={2} fill="#1d4ed8" stroke="#1e3a8a" strokeWidth={1.2} />
+          {[0, 1, 2, 3].map((i) => (
+            <circle
+              key={i}
+              cx={-21 + i * 14}
+              cy={34}
+              r={3}
+              fill={coilOn[i] ? '#fca5a5' : '#1e3a8a'}
+              className="pointer-events-none"
+            />
+          ))}
+          <circle cx={0} cy={14} r={14} fill="#cbd5e1" stroke="#475569" strokeWidth={1.5} />
+          <g transform={`rotate(${stepperAngle} 0 14)`}>
+            <line x1={0} y1={14} x2={0} y2={2} stroke="#ef4444" strokeWidth={2.5} strokeLinecap="round" />
+          </g>
+          <circle cx={0} cy={14} r={3} fill="#64748b" className="pointer-events-none" />
+          <Unflip>
+            <text x={0} y={-6} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              {Math.round(stepperAngle)}°
+            </text>
+          </Unflip>
         </g>
       )}
 
