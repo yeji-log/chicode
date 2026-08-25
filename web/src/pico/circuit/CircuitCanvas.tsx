@@ -841,7 +841,10 @@ function CircuitCanvas(
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-stretch gap-2">
+      {/* 높이는 여기(행)에 고정하고 팔레트·캔버스가 둘 다 h-full 로 따라간다.
+          팔레트에만 스크롤을 걸면 안 된다 — 팔레트의 "내용 높이"가 그대로 행 높이를
+          밀어올리기 때문에, 부품이 늘어나면 사이드바가 캔버스보다 길어져 버린다. */}
+      <div className="flex h-[clamp(520px,58vh,660px)] items-stretch gap-2">
         <Palette
           addComponent={addComponent}
           addBreadboard={addBreadboard}
@@ -858,7 +861,7 @@ function CircuitCanvas(
         <svg
           ref={svgRef}
           viewBox={`0 0 ${viewWidth} ${VIEW_HEIGHT}`}
-          className="h-[clamp(520px,58vh,660px)] min-w-0 flex-1 touch-none rounded-xl border border-cream-deep bg-[#eef2ea] select-none"
+          className="h-full min-w-0 flex-1 touch-none rounded-xl border border-cream-deep bg-[#eef2ea] select-none"
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerLeave={onPointerUp}
@@ -1217,7 +1220,12 @@ function Palette({
   ]
 
   return (
-    <aside className="flex w-[104px] shrink-0 flex-col gap-2 overflow-y-auto rounded-xl border border-cream-deep bg-cream p-1.5">
+    <aside className="flex h-full min-h-0 w-[104px] shrink-0 flex-col gap-2 rounded-xl border border-cream-deep bg-cream p-1.5">
+      {/* 부품 목록만 스크롤한다. 부품이 늘어나도(계획 문서 3·4단계) 전선 색·음소거·
+          삭제는 항상 같은 자리에 남아야 한다 — 사이드바 전체가 스크롤이면 부품을 몇 개만
+          더 넣어도 이 버튼들이 화면 밖으로 밀려난다.
+          -mr-1 pr-1 은 스크롤바가 타일을 덮지 않게 하는 여백이다. */}
+      <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
       {groups.map((g) => (
         <div key={g.key} className="flex flex-col gap-1">
           <PaletteHeading>{g.label}</PaletteHeading>
@@ -1238,6 +1246,8 @@ function Palette({
           </div>
         </div>
       ))}
+
+      </div>
 
       {/* 전선 색 — 지금부터 새로 잇는 전선에 쓰인다. 이미 그은 전선은 오른쪽
           클릭으로 이 색을 입힌다(recolorWire). */}
@@ -1278,8 +1288,8 @@ function Palette({
         <span className="text-[10px] font-bold leading-none">{muted ? '소리 꺼짐' : '소리 켜짐'}</span>
       </button>
 
-      {/* 삭제는 맨 아래로 몰아둔다(mt-auto) — 추가 버튼 사이에 끼어 있으면 잘못 누르기 쉽다. */}
-      <div className="mt-auto flex flex-col gap-1 pt-1">
+      {/* 삭제는 맨 아래에 둔다 — 추가 버튼 사이에 끼어 있으면 잘못 누르기 쉽다. */}
+      <div className="flex flex-col gap-1">
         {/* 부품/브레드보드를 클릭해 선택하면 나타난다 — 휴지통 버튼 하나로 지운다
             (부품마다 작은 삭제 글자를 따로 두던 것 대신, 사용자 요청으로 바꿈). */}
         {selectedLabel && (
