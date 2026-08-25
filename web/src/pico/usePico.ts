@@ -42,6 +42,26 @@ export function usePico(): UsePico {
   const workerRef = useRef<Worker | null>(null)
   const lineId = useRef(0)
 
+  /**
+   * 워커에 보낸 "장치 상태" 를 마지막 것만 들고 있다가, 워커가 새로 생기면 다시 보낸다.
+   *
+   * 두 가지를 고친다.
+   * 1) 첫 렌더에서 회로 쪽 effect 가 워커 생성 effect 보다 먼저 돈다(자식 effect 가
+   *    부모보다 먼저다). 그래서 배선 설정이 workerRef.current === null 인 채로 나가
+   *    조용히 버려졌다.
+   * 2) 중지하면 워커를 통째로 새로 띄우는데, 그때도 배선·슬라이더 값이 전부 날아갔다.
+   *    다음에 슬라이더를 건드릴 때까지 센서가 죽은 것처럼 보인다.
+   *
+   * 키는 "같은 대상의 최신 값만 남기면 되는" 단위로 잡는다(핀별 버튼/아날로그,
+   * 그리고 목록 통째로 오는 초음파).
+   */
+  const deviceStateRef = useRef(new Map<string, WorkerRequest>())
+
+  const send = useCallback((key: string, request: WorkerRequest) => {
+    deviceStateRef.current.set(key, request)
+    workerRef.current?.postMessage(request)
+  }, [])
+
   const [status, setStatus] = useState<PicoStatus>('booting')
   const [output, setOutput] = useState<OutputLine[]>([])
   const [elapsedMs, setElapsedMs] = useState<number | null>(null)
@@ -113,6 +133,8 @@ export function usePico(): UsePico {
     }
 
     workerRef.current = worker
+    // 새 워커는 아무것도 모르는 상태다 — 지금까지의 배선·슬라이더 값을 다시 알려준다.
+    for (const request of deviceStateRef.current.values()) worker.postMessage(request)
     return worker
   }, [append])
 
@@ -161,27 +183,26 @@ export function usePico(): UsePico {
     setElapsedMs(null)
   }, [])
 
-  const setButton = useCallback((pin: number, pressed: boolean) => {
-    const request: WorkerRequest = { type: 'button', pin, pressed }
-    workerRef.current?.postMessage(request)
-  }, [])
+  const setButton = useCallback(
+    (pin: number, pressed: boolean) => send(`button:${pin}`, { type: 'button', pin, pressed }),
+    [send],
+  )
 
-  const setAnalog = useCallback((pin: number, value: number) => {
-    const request: WorkerRequest = { type: 'analog', pin, value }
-    workerRef.current?.postMessage(request)
-  }, [])
+  const setAnalog = useCallback(
+    (pin: number, value: number) => send(`analog:${pin}`, { type: 'analog', pin, value }),
+    [send],
+  )
 
-  const setDht = useCallback((pin: number, temperature: number, humidity: number) => {
-    const request: WorkerRequest = { type: 'dht', pin, temperature, humidity }
-    workerRef.current?.postMessage(request)
-  }, [])
+  const setDht = useCallback(
+    (pin: number, temperature: number, humidity: number) =>
+      send(`dht:${pin}`, { type: 'dht', pin, temperature, humidity }),
+    [send],
+  )
 
   const setUltrasonic = useCallback(
-    (sensors: { trig: number; echo: number; distanceCm: number }[]) => {
-      const request: WorkerRequest = { type: 'ultrasonic', sensors }
-      workerRef.current?.postMessage(request)
-    },
-    [],
+    (sensors: { trig: number; echo: number; distanceCm: number }[]) =>
+      send('ultrasonic', { type: 'ultrasonic', sensors }),
+    [send],
   )
 
   return {
