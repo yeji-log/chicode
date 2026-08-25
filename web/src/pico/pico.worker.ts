@@ -131,6 +131,13 @@ async function boot(): Promise<MicroPythonInterface> {
     adc_read(pin: number) {
       return adcIn.get(pin) ?? 0
     },
+    /** 마이크로초 시계. MicroPython 자체 ticks_us() 는 1ms 단위로만 움직여서
+     *  (재보니 최소 차이가 정확히 1000us) 초음파처럼 us 를 재는 코드가 성립하지
+     *  않는다. performance.now() 는 이 환경에서 0.1ms 해상도라 10배 낫다.
+     *  MicroPython 관례대로 2^30 으로 감싸서 돌려준다(ticks_diff 가 그 전제로 짜여 있다). */
+    now_us() {
+      return Math.round(performance.now() * 1000) % 1073741824
+    },
     // 유일하게 async 인 다리. await 로 불리면 JS 이벤트 루프에 제어권을 돌려줘서
     // 그 사이에 쌓인 'button' 메시지가 처리된다 (실측으로 확인한 방식).
     async sleep_ms(ms: number) {
@@ -185,6 +192,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     gpioOut.clear()
     await mp.runPythonAsync(RESET_GLOBALS_SOURCE)
     await mp.runPythonAsync(interactive ? INSTALL_INTERACTIVE_TIME_SOURCE : RESTORE_REAL_TIME_SOURCE)
+    await mp.runPythonAsync(INSTALL_PRECISE_TICKS_SOURCE)
 
     const source = interactive ? rewriteSleepCallsToAwait(message.code) : message.code
     await mp.runPythonAsync(source)
@@ -240,6 +248,10 @@ import _chico_hw
 # 시작하지 않는 전역을 전부 지우기 때문에, _ADC_PINS 로 뒀더니 ADC() 안에서
 # NameError: name '_ADC_PINS' isn't defined 가 났다(실제로 재현해서 찾았다).
 _chico_adc_pins = (26, 27, 28)
+
+def _chico_us_since(t0):
+    d = (_chico_hw.now_us() - t0) & 0x3FFFFFFF
+    return d - 0x40000000 if d >= 0x20000000 else d
 
 def _chico_clamp_duty(d):
     d = int(d)
@@ -488,6 +500,35 @@ import sys
 import time as _chico_real_time
 sys.modules["time"] = _chico_real_time
 sys.modules["utime"] = _chico_real_time
+`
+
+/**
+ * ticks_us/ticks_ms/ticks_diff 를 JS 시계로 갈아끼운다. 두 모드(실시간·안전) 모두에
+ * 건다 — 초음파처럼 us 를 재는 코드는 대개 함수(def)를 써서 안전 모드로 돌기 때문이다.
+ *
+ * MicroPython 의 ticks_* 는 2^30 으로 감싸는 정수라, ticks_diff 도 그 전제로 부호를
+ * 맞춰준다(그냥 빼면 감싸는 순간 음수 폭탄이 된다).
+ */
+const INSTALL_PRECISE_TICKS_SOURCE = `
+import sys
+import _chico_hw
+
+_chico_tick_mod = sys.modules["time"]
+
+def _chico_ticks_us():
+    return _chico_hw.now_us()
+
+def _chico_ticks_ms():
+    return _chico_hw.now_us() // 1000
+
+def _chico_ticks_diff(a, b):
+    d = (a - b) & 0x3FFFFFFF
+    return d - 0x40000000 if d >= 0x20000000 else d
+
+_chico_tick_mod.ticks_us = _chico_ticks_us
+_chico_tick_mod.ticks_ms = _chico_ticks_ms
+_chico_tick_mod.ticks_diff = _chico_ticks_diff
+del _chico_tick_mod, _chico_ticks_us, _chico_ticks_ms, _chico_ticks_diff
 `
 
 // _chico_ 로 시작하는 이름은 우리 인프라(브릿지, 모듈 로더)라서 지우지 않는다 —
