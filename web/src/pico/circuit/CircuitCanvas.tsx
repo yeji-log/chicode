@@ -92,6 +92,9 @@ const MIN_VIEW_WIDTH = 900
  *  볼 수 있게 한다(계획 문서 "캔버스 기본기" 1단계). 모델 좌표(컴포넌트 x/y 등)는 이
  *  그리드 단위와 무관한 자유 float로 그대로 두고, 렌더링 시점에만 반영한다. */
 const GRID = 20
+/** 전선을 놓을 때 이 거리(모델 단위) 안에 구멍이 있으면 거기 꽂힌 것으로 본다.
+ *  손가락으로는 8px 짜리 핀을 정확히 짚기가 어렵다는 지적을 받고 넣었다. */
+const PIN_SNAP_RADIUS = 24
 const MIN_SCALE = 0.5
 const MAX_SCALE = 2.5
 const snap = (v: number) => Math.round(v / GRID) * GRID
@@ -221,7 +224,8 @@ function CircuitCanvas(
   const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
   // withDefaultBoard가 항상 채워주므로 board는 실제로 항상 있다 — 타입만 optional.
   const boardPos = board ?? DEFAULT_BOARD
-  const [draft, setDraft] = useState<{ from: PinRef; to: Point } | null>(null)
+  /** 지금 긋고 있는 전선. snap 은 "지금 놓으면 여기 꽂힌다" 는 후보 구멍이다. */
+  const [draft, setDraft] = useState<{ from: PinRef; to: Point; snap?: PinRef | null } | null>(null)
   const [dragging, setDragging] = useState<DragTarget | null>(null)
   // 버튼(누르는 동안)과 스위치(클릭해서 토글) 둘 다 "지금 켜진 입력 부품 id" 로 통일해서 관리한다.
   const [activeInputs, setActiveInputs] = useState<Set<string>>(new Set())
@@ -293,6 +297,32 @@ function CircuitCanvas(
   // 팬 제스처 시작 시점의 좌표를 들고 있는다. state 대신 ref 인 이유: 매 pointermove 마다
   // setState 로 다시 만들 필요 없이 시작점만 고정해 두고 델타만 계산하면 되기 때문.
   const panStartRef = useRef<{ svg: Point; view: { x: number; y: number; scale: number } } | null>(null)
+
+  /**
+   * 지금 화면에 닿아 있는 포인터들. 손가락 두 개면 핀치 줌으로 넘어간다 —
+   * 아이패드엔 휠이 없어서 줌 버튼(10px)이 유일한 수단이었는데, 그건 손가락으로
+   * 누르기엔 너무 작다는 지적을 받았다.
+   */
+  const pointersRef = useRef(new Map<number, Point>())
+  const pinchRef = useRef<{
+    distance: number
+    center: Point
+    view: { x: number; y: number; scale: number }
+  } | null>(null)
+
+  const pointerDistance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
+  const pointerCenter = (a: Point, b: Point) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+
+  /** 두 손가락이 닿는 순간 진행 중이던 한 손가락 동작(부품 끌기·배선·슬라이더)을 접는다.
+   *  안 그러면 확대하려다 부품이 딸려 온다. */
+  const cancelSinglePointerGestures = () => {
+    setDragging(null)
+    dragHistoryRef.current = null
+    setDraft(null)
+    setRewiring(null)
+    setAnalogDrag(null)
+    panStartRef.current = null
+  }
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ components, breadboards, wires, board: boardPos }))
@@ -653,7 +683,72 @@ function CircuitCanvas(
     })
   }
 
+  /** 화면의 두 점 사이 거리·중심이 바뀐 만큼 확대/이동한다. 두 손가락 사이에 잡힌
+   *  회로의 그 자리가 손가락을 따라오도록 view.x/y 도 같이 옮긴다. */
+  const applyPinch = (a: Point, b: Point) => {
+    const start = pinchRef.current
+    if (!start || start.distance === 0) return
+    const distance = pointerDistance(a, b)
+    const center = pointerCenter(a, b)
+    const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, (start.view.scale * distance) / start.distance))
+    const modelX = (start.center.x - start.view.x) / start.view.scale
+    const modelY = (start.center.y - start.view.y) / start.view.scale
+    setView({ scale, x: center.x - modelX * scale, y: center.y - modelY * scale })
+  }
+
+  /** 모든 포인터를 여기서 받는다(capture 단계라 자식이 stopPropagation 해도 들어온다). */
+  const onPointerDownCapture = (event: React.PointerEvent<SVGSVGElement>) => {
+    // 새 제스처의 "첫 번째" 포인터가 오면 이전 것들을 싹 비운다.
+    //
+    // 아이패드는 다른 제스처가 끼어들면 pointerup/cancel 을 흘려버리는 일이 있는데,
+    // 그러면 안 눌린 포인터가 목록에 남아 다음 한 손가락 동작이 두 손가락(핀치)으로
+    // 오인된다 — 새로고침 전까지 부품을 못 옮기게 된다(실제로 재현했다).
+    // 두 번째 손가락은 isPrimary 가 false 라 이 정리에 걸리지 않는다.
+    if (event.isPrimary) {
+      pointersRef.current.clear()
+      pinchRef.current = null
+    }
+    pointersRef.current.set(event.pointerId, toSvgPoint(event.clientX, event.clientY))
+
+    // 캔버스 위 컨트롤(줌·되돌리기)은 클릭으로 동작해야 해서 캡처를 걸지 않는다 —
+    // 포인터를 캡처하면 pointerup 이 svg 로 가버려서 click 이 안 만들어진다.
+    const onControl = (event.target as Element | null)?.closest?.('[data-canvas-control]')
+    if (!onControl) {
+      // 애플펜슬·손가락은 빠르게 움직이면 포인터가 부품 밖으로 나가 이벤트를 놓친다.
+      // 캡처해 두면 끝날 때까지 svg 가 모든 이벤트를 받는다.
+      //
+      // try 로 감싸는 이유: setPointerCapture 는 그 pointerId 가 "지금 눌려 있는"
+      // 상태가 아니면 예외를 던진다. 여기서 터지면 아래 핀치 준비까지 통째로
+      // 건너뛰어서 두 손가락 확대가 조용히 안 먹는다(실제로 밟았다).
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {
+        /* 캡처가 안 돼도 동작 자체는 된다 — 빠른 제스처에서 이벤트를 놓칠 수 있을 뿐 */
+      }
+    }
+
+    if (pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()]
+      cancelSinglePointerGestures()
+      pinchRef.current = { distance: pointerDistance(a, b), center: pointerCenter(a, b), view }
+    }
+  }
+
+  const releasePointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    pointersRef.current.delete(event.pointerId)
+    if (pointersRef.current.size < 2) pinchRef.current = null
+  }
+
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (pointersRef.current.has(event.pointerId)) {
+      pointersRef.current.set(event.pointerId, toSvgPoint(event.clientX, event.clientY))
+    }
+    if (pinchRef.current && pointersRef.current.size >= 2) {
+      const [a, b] = [...pointersRef.current.values()]
+      applyPinch(a, b)
+      return
+    }
+
     // 팬은 locked와 무관하게 항상 된다 — 회로를 둘러보는 것 자체는 편집이 아니다.
     if (panStartRef.current) {
       const svgP = toSvgPoint(event.clientX, event.clientY)
@@ -674,7 +769,12 @@ function CircuitCanvas(
 
     if (locked) return
     const p = toModelPoint(event.clientX, event.clientY)
-    if (draft) setDraft((d) => (d ? { ...d, to: p } : d))
+    if (draft) {
+      // 가까운 구멍이 있으면 선 끝을 거기 붙여 보여준다 — 놓기 전에 어디에 꽂힐지
+      // 눈으로 알 수 있어야 손가락으로도 배선을 할 수 있다.
+      const near = nearestPin(p, draft.from)
+      setDraft((d) => (d ? { ...d, to: near ? near.point : p, snap: near?.ref ?? null } : d))
+    }
     if (dragging) {
       // 누르기만 하고 안 움직였으면(=선택만 했으면) 기록하지 않는다.
       if (dragHistoryRef.current) {
@@ -725,8 +825,13 @@ function CircuitCanvas(
     }
     setDragging(null)
     dragHistoryRef.current = null
-    setDraft(null) // 빈 곳에서 놓으면 배선 취소
-    setRewiring(null) // 다시 잇기도 마찬가지 — 전선은 원래 자리에 그대로 남는다
+    // 구멍을 정확히 짚지 않았어도 가까우면 거기 꽂아준다(PIN_SNAP_RADIUS).
+    // 반경 밖이면 예전처럼 취소 — 전선은 원래 자리에 남는다.
+    if (draft?.snap) finishWire(draft.snap)
+    else {
+      setDraft(null)
+      setRewiring(null)
+    }
   }
 
   const onBackgroundPointerDown = (event: React.PointerEvent) => {
@@ -1067,6 +1172,57 @@ function CircuitCanvas(
     return (Math.max(-half, Math.min(half, rel)) + half) / KNOB_SWEEP_DEG
   }
 
+  /** 배선할 수 있는 모든 구멍의 자리. 스냅(가까운 구멍에 맞추기)에 쓴다. */
+  const snapTargets = useMemo(() => {
+    const targets: { ref: PinRef; point: Point }[] = []
+    for (const pin of BOARD_PINS) {
+      const ref: PinRef = { kind: 'board', pinId: pin.id }
+      targets.push({ ref, point: pinPoint(ref) })
+    }
+    for (const b of breadboards) {
+      const layout = breadboardLayouts.get(b.id)
+      if (!layout) continue
+      for (let col = 0; col < layout.columns; col++) {
+        for (const side of ['top', 'bottom'] as const) {
+          const ref: PinRef = { kind: 'breadboard', boardId: b.id, col, side }
+          targets.push({ ref, point: pinPoint(ref) })
+        }
+        for (const rail of ['plus', 'minus'] as const) {
+          const ref: PinRef = { kind: 'breadboardRail', boardId: b.id, rail, col }
+          targets.push({ ref, point: pinPoint(ref) })
+        }
+      }
+    }
+    for (const c of components) {
+      for (const spec of COMPONENT_PINS[c.type]) {
+        const ref: PinRef = { kind: 'component', componentId: c.id, pin: spec.pin }
+        targets.push({ ref, point: pinPoint(ref) })
+      }
+    }
+    return targets
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [components, breadboards, breadboardLayouts, boardPos])
+
+  /** 주어진 자리에서 가장 가까운 구멍. 반경 밖이면 없음. 지금 끌고 있는 전선의
+   *  반대쪽 끝은 후보에서 뺀다(같은 핀끼리는 못 잇는다). */
+  const nearestPin = useCallback(
+    (p: Point, exclude?: PinRef): { ref: PinRef; point: Point } | null => {
+      const excludeKey = exclude ? pinRefKey(exclude) : null
+      let best: { ref: PinRef; point: Point } | null = null
+      let bestDistance = PIN_SNAP_RADIUS
+      for (const target of snapTargets) {
+        if (excludeKey && pinRefKey(target.ref) === excludeKey) continue
+        const distance = Math.hypot(target.point.x - p.x, target.point.y - p.y)
+        if (distance <= bestDistance) {
+          bestDistance = distance
+          best = target
+        }
+      }
+      return best
+    },
+    [snapTargets],
+  )
+
   /** Tinkercad 처럼 전선이 부드러운 곡선(케이블)으로 처지게 그린다 — 직각 꺾임 대신. */
   const wirePath = (a: Point, b: Point) => {
     const dx = Math.max(30, Math.abs(b.x - a.x) * 0.55)
@@ -1116,9 +1272,22 @@ function CircuitCanvas(
           ref={svgRef}
           viewBox={`0 0 ${viewWidth} ${VIEW_HEIGHT}`}
           className="h-full min-w-0 flex-1 touch-none rounded-xl border border-cream-deep bg-[#eef2ea] select-none"
+          onPointerDownCapture={onPointerDownCapture}
           onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerUp}
+          onPointerUp={(event) => {
+            releasePointer(event)
+            onPointerUp()
+          }}
+          onLostPointerCapture={(event) => {
+            // 브라우저가 캡처를 거둬가면 그 포인터는 더 못 따라간다 — 목록에서도 뺀다.
+            releasePointer(event)
+          }}
+          onPointerCancel={(event) => {
+            // 아이패드는 다른 제스처가 끼어들면 포인터를 취소해 버린다. 이걸 안 받으면
+            // 끌던 부품이 손을 뗀 뒤에도 계속 붙어 다닌다(펜슬에서 특히 자주 났다).
+            releasePointer(event)
+            onPointerUp()
+          }}
         >
           <defs>
             <filter id="chico-shadow" x="-40%" y="-40%" width="180%" height="180%">
@@ -1227,6 +1396,19 @@ function CircuitCanvas(
                 )
               ))}
 
+            {/* 지금 놓으면 꽂힐 구멍. 손가락으로는 8px 짜리 핀을 정확히 짚기 어려워서,
+                어디에 붙을지 미리 보여준다. */}
+            {draft?.snap && (
+              <circle
+                cx={draft.to.x}
+                cy={draft.to.y}
+                r={9}
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth={2.5}
+                opacity={0.9}
+              />
+            )}
             {draft && (
               <path
                 d={wirePath(pinPoint(draft.from), draft.to)}
@@ -1326,7 +1508,7 @@ function CircuitCanvas(
           {/* 되돌리기 / 다시 실행. 줌 컨트롤과 같은 이유로 transform 그룹 밖에 둬서
               확대/축소와 무관하게 항상 같은 자리에 있다. 팔레트가 아니라 캔버스 위에
               둔 건 자리가 없어서이기도 하지만, 되돌릴 대상이 캔버스라 여기가 맞다. */}
-          <g transform={`translate(16 ${VIEW_HEIGHT - 40})`}>
+          <g data-canvas-control transform={`translate(16 ${VIEW_HEIGHT - 40})`}>
             <rect x={0} y={0} width={72} height={28} rx={14} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
             {[
               { dx: 20, label: '↶', onClick: () => timeTravel('undo'), aria: '되돌리기', enabled: canUndo },
@@ -1354,7 +1536,7 @@ function CircuitCanvas(
           {/* 줌 컨트롤 — transform 그룹 밖에 그려서 확대/축소와 무관하게 항상 같은
               화면 위치·크기를 유지한다. 휠이 없는 아이패드 등 터치 기기에선 이 버튼이
               줌의 유일한 수단이라 꼭 있어야 한다. */}
-          <g transform={`translate(${viewWidth - 112} ${VIEW_HEIGHT - 40})`}>
+          <g data-canvas-control transform={`translate(${viewWidth - 112} ${VIEW_HEIGHT - 40})`}>
             <rect x={0} y={0} width={104} height={28} rx={14} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
             {[
               { dx: 14, label: '−', onClick: zoomOut, aria: '축소' },
