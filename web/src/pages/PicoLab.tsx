@@ -32,12 +32,16 @@ export default function PicoLab() {
     localStorage.setItem(CODE_KEY, code)
   }, [code])
 
+  // tab 도 의존성에 넣는다 — 코드 탭이 숨겨진(display:none) 동안엔 scrollHeight 가 0
+  // 이라 자동 스크롤이 안 먹어서, 탭을 다시 열면 예전 위치에 멈춰 있게 된다.
   useEffect(() => {
     outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight })
-  }, [output])
+  }, [output, tab])
 
   const running = status === 'running'
   const booting = status === 'booting'
+  // 회로 탭 탭바에 한 줄로 띄울 콘솔 마지막 줄(ConsolePeek 참고).
+  const lastLine = output.length > 0 ? output[output.length - 1] : null
 
   // 최신 code 를 단축키 핸들러가 보게 하려고 ref 로 들고 있는다.
   const latest = useRef({ code, running, booting })
@@ -145,18 +149,18 @@ export default function PicoLab() {
               </button>
             ))}
           </div>
-          <span
-            className={[
-              'px-1 text-xs',
-              running ? 'font-semibold text-cheese-600' : 'text-ink-500',
-            ].join(' ')}
-          >
-            {running
-              ? tab === 'code'
-                ? '실행 중에는 수정할 수 없어요 — 중지를 누르세요'
-                : '실행 중 — 버튼/스위치는 눌러볼 수 있지만 배선은 중지 후에 바꿀 수 있어요'
-              : '⌘/Ctrl + Enter 로 실행'}
-          </span>
+          {tab === 'code' ? (
+            <span
+              className={[
+                'px-1 text-xs',
+                running ? 'font-semibold text-cheese-600' : 'text-ink-500',
+              ].join(' ')}
+            >
+              {running ? '실행 중에는 수정할 수 없어요 — 중지를 누르세요' : '⌘/Ctrl + Enter 로 실행'}
+            </span>
+          ) : (
+            <ConsolePeek line={lastLine} running={running} onOpenConsole={() => setTab('code')} />
+          )}
         </div>
 
         <TabPanel active={tab === 'circuit'}>
@@ -166,7 +170,7 @@ export default function PicoLab() {
         </TabPanel>
 
         <TabPanel active={tab === 'code'}>
-          <div className="h-[420px]">
+          <div className="h-[360px]">
             <Editor
               language="python"
               theme="vs"
@@ -176,47 +180,51 @@ export default function PicoLab() {
               loading={<span className="text-sm text-ink-500">에디터 준비 중…</span>}
             />
           </div>
-        </TabPanel>
-      </section>
 
-      <section className="flex flex-col overflow-hidden rounded-2xl border border-cream-deep bg-board">
-        <div className="flex items-center justify-between px-4 py-2.5">
-          <h2 className="text-sm font-bold text-cheese-200">콘솔</h2>
-          <div className="flex items-center gap-3">
-            {elapsedMs !== null && <span className="text-xs text-cheese-200/70">{elapsedMs}ms</span>}
-            <button
-              onClick={clearOutput}
-              className="text-xs font-semibold text-cheese-200/70 hover:text-cheese-200"
+          {/* 콘솔은 코드 탭 안에 둔다 — 예제 코드가 print() 를 안 써서 회로를 보는
+              동안 콘솔이 실제로 보여줄 건 오류뿐인데, 그것 때문에 220px 를 상시로
+              깔면 회로 탭이 한 화면에 안 들어간다(실측: 콘솔 있으면 1080px,
+              빼면 842px). 대신 회로 탭에선 위 ConsolePeek 이 마지막 한 줄을 보여준다. */}
+          <div className="flex flex-col overflow-hidden border-t border-cream-deep bg-board">
+            <div className="flex items-center justify-between px-4 py-2.5">
+              <h2 className="text-sm font-bold text-cheese-200">콘솔</h2>
+              <div className="flex items-center gap-3">
+                {elapsedMs !== null && <span className="text-xs text-cheese-200/70">{elapsedMs}ms</span>}
+                <button
+                  onClick={clearOutput}
+                  className="text-xs font-semibold text-cheese-200/70 hover:text-cheese-200"
+                >
+                  지우기
+                </button>
+              </div>
+            </div>
+
+            <div
+              ref={outputRef}
+              className="h-[180px] overflow-auto p-4 font-mono text-sm leading-relaxed"
             >
-              지우기
-            </button>
+              {output.length === 0 && !running && (
+                <p className="text-cheese-200/50">실행 버튼을 누르면 여기에 결과가 나옵니다.</p>
+              )}
+              {running && output.length === 0 && <p className="text-cheese-200/60">실행 중…</p>}
+              {output.map((line) => (
+                <pre
+                  key={line.id}
+                  className={[
+                    'whitespace-pre-wrap break-words',
+                    line.stream === 'err'
+                      ? 'text-red-300'
+                      : line.stream === 'sys'
+                        ? 'text-cheese-300 italic'
+                        : 'text-cream',
+                  ].join(' ')}
+                >
+                  {line.text}
+                </pre>
+              ))}
+            </div>
           </div>
-        </div>
-
-        <div
-          ref={outputRef}
-          className="h-[180px] overflow-auto p-4 font-mono text-sm leading-relaxed"
-        >
-          {output.length === 0 && !running && (
-            <p className="text-cheese-200/50">실행 버튼을 누르면 여기에 결과가 나옵니다.</p>
-          )}
-          {running && output.length === 0 && <p className="text-cheese-200/60">실행 중…</p>}
-          {output.map((line) => (
-            <pre
-              key={line.id}
-              className={[
-                'whitespace-pre-wrap break-words',
-                line.stream === 'err'
-                  ? 'text-red-300'
-                  : line.stream === 'sys'
-                    ? 'text-cheese-300 italic'
-                    : 'text-cream',
-              ].join(' ')}
-            >
-              {line.text}
-            </pre>
-          ))}
-        </div>
+        </TabPanel>
       </section>
     </div>
   )
@@ -226,6 +234,51 @@ const TABS: { key: LabTab; label: string }[] = [
   { key: 'circuit', label: '회로' },
   { key: 'code', label: '코드' },
 ]
+
+/** 회로 탭의 탭바 오른쪽 한 줄 — 콘솔이 코드 탭 안으로 들어갔으니, 회로를 보는 동안
+ *  에도 마지막 출력(특히 오류)은 여기서 보이게 한다. 누르면 콘솔 전문이 있는 코드
+ *  탭으로 넘어간다.
+ *
+ *  실행 중 안내("배선은 중지 후에")는 여기 안 쓴다 — 회로 캔버스가 자기 아래에 이미
+ *  같은 말을 띄우고 있어서 두 번 나오게 된다. */
+function ConsolePeek({
+  line,
+  running,
+  onOpenConsole,
+}: {
+  line: { text: string; stream: 'out' | 'err' | 'sys' } | null
+  running: boolean
+  onOpenConsole: () => void
+}) {
+  if (!line) {
+    return (
+      <span className="px-1 text-xs text-ink-500">
+        {running ? '실행 중…' : '⌘/Ctrl + Enter 로 실행'}
+      </span>
+    )
+  }
+  // 오류는 여러 줄짜리 traceback 한 덩어리로 들어온다. 한 줄만 보여줄 자리라
+  // 첫 줄("Traceback (most recent call last):")을 쓰면 정작 원인이 잘려 나가므로,
+  // 마지막 비어있지 않은 줄(= 실제 오류 메시지)을 고른다.
+  const summary = line.text.split('\n').filter((t) => t.trim()).pop() ?? line.text
+
+  return (
+    <button
+      onClick={onOpenConsole}
+      title={`${line.text}\n(눌러서 콘솔 전체 보기)`}
+      className={[
+        'max-w-[46ch] truncate rounded-lg px-2 py-1 text-left font-mono text-xs transition-colors',
+        line.stream === 'err'
+          ? 'bg-red-50 font-bold text-red-700 hover:bg-red-100'
+          : line.stream === 'sys'
+            ? 'text-ink-500 italic hover:bg-cream'
+            : 'text-ink-700 hover:bg-cream',
+      ].join(' ')}
+    >
+      {summary}
+    </button>
+  )
+}
 
 /** 안 보이는 탭도 unmount 하지 않고 hidden(display:none)으로 숨기기만 한다 — Monaco는
  *  다시 mount 하면 실행 취소 기록과 커서 위치가 날아가고, 회로 캔버스는 선택·줌/팬
