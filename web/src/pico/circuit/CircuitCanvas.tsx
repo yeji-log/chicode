@@ -28,6 +28,7 @@ import {
   COMPONENT_PIVOT,
   type ComponentType,
   DEFAULT_WIRE_COLOR,
+  isDigitalInput,
   KNOB_SWEEP_DEG,
   LDR_TRACK_HALF_WIDTH,
   type PinRef,
@@ -321,7 +322,7 @@ function CircuitCanvas(
   /** 입력 부품이 켜져 있는 동안, 연결이 바뀌어도(재배선) 최신 GPIO 로 계속 알려준다. */
   useEffect(() => {
     for (const c of components) {
-      if (c.type !== 'button' && c.type !== 'switch') continue
+      if (!isDigitalInput(c.type)) continue
       if (!activeInputs.has(c.id)) continue
       const gpio = gpioForPin(c.id, 'a') ?? gpioForPin(c.id, 'b')
       if (gpio !== undefined) onButtonChange(gpio, true)
@@ -842,8 +843,9 @@ function CircuitCanvas(
   return (
     <div className="flex flex-col gap-2">
       {/* 높이는 여기(행)에 고정하고 팔레트·캔버스가 둘 다 h-full 로 따라간다.
-          팔레트에만 스크롤을 걸면 안 된다 — 팔레트의 "내용 높이"가 그대로 행 높이를
-          밀어올리기 때문에, 부품이 늘어나면 사이드바가 캔버스보다 길어져 버린다. */}
+          팔레트에만 스크롤을 걸어두면 안 된다 — 팔레트의 "내용 높이"가 그대로 행
+          높이를 밀어올려서, 부품이 늘어나자 사이드바가 캔버스보다 142px 더 길어졌다
+          (실제로 재서 찾았다: 사이드바 664px vs 캔버스 522px). */}
       <div className="flex h-[clamp(520px,58vh,660px)] items-stretch gap-2">
         <Palette
           addComponent={addComponent}
@@ -1222,8 +1224,8 @@ function Palette({
   return (
     <aside className="flex h-full min-h-0 w-[104px] shrink-0 flex-col gap-2 rounded-xl border border-cream-deep bg-cream p-1.5">
       {/* 부품 목록만 스크롤한다. 부품이 늘어나도(계획 문서 3·4단계) 전선 색·음소거·
-          삭제는 항상 같은 자리에 남아야 한다 — 사이드바 전체가 스크롤이면 부품을 몇 개만
-          더 넣어도 이 버튼들이 화면 밖으로 밀려난다.
+          삭제는 항상 같은 자리에 남아야 한다 — 예전엔 사이드바 전체가 스크롤이라
+          부품을 몇 개만 더 넣어도 이 버튼들이 화면 밖으로 밀려났다.
           -mr-1 pr-1 은 스크롤바가 타일을 덮지 않게 하는 여백이다. */}
       <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
       {groups.map((g) => (
@@ -1798,7 +1800,10 @@ function ComponentGlyph({
         component.type === 'buzzer' ||
         component.type === 'potentiometer' ||
         component.type === 'servo' ||
-        component.type === 'ldr') && <Legs />}
+        component.type === 'ldr' ||
+        component.type === 'traffic-light' ||
+        component.type === 'relay' ||
+        component.type === 'vibration') && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -1994,6 +1999,164 @@ function ComponentGlyph({
               {servoAngle}°
             </text>
           )}
+        </g>
+      )}
+
+      {component.type === 'pir' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          {/* 실물 HC-SR501 처럼 하얀 프레넬 렌즈 돔. 감지 중이면 초록으로 빛난다. */}
+          <rect x={-18} y={2} width={36} height={18} rx={2} fill="#14532d" stroke="#052e16" strokeWidth={1.2} />
+          <circle
+            cx={0}
+            cy={2}
+            r={15}
+            fill={active ? '#bbf7d0' : '#f5f5f4'}
+            stroke="#a8a29e"
+            strokeWidth={1.5}
+            className="cursor-pointer"
+            style={active ? { filter: 'drop-shadow(0 0 7px #4ade80)' } : undefined}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              onInputActiveChange(!active)
+            }}
+          />
+          <path d="M -9 -4 A 9 9 0 0 1 9 -4" fill="none" stroke="#d6d3d1" strokeWidth={1.2} />
+          <text x={0} y={5} fontSize={9} textAnchor="middle" className="pointer-events-none select-none">
+            {active ? '🚶' : ''}
+          </text>
+        </g>
+      )}
+
+      {component.type === 'tilt' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          {/* 기울이면 안의 구슬이 굴러가 접점이 붙는다 — 실물 볼 스위치 그대로다. */}
+          <g transform={`rotate(${active ? 28 : 0} 0 10)`}>
+            <rect
+              x={-11}
+              y={0}
+              width={22}
+              height={20}
+              rx={9}
+              fill="#a8a29e"
+              stroke="#57534e"
+              strokeWidth={1.5}
+              className="cursor-pointer"
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                onInputActiveChange(!active)
+              }}
+            />
+            <circle cx={0} cy={active ? 15 : 5} r={5} fill="#292524" className="pointer-events-none" />
+          </g>
+        </g>
+      )}
+
+      {component.type === 'reed' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          {/* 유리관 안의 두 조각이 자석을 대면 붙는다. 자석은 옆에 나타난다. */}
+          <rect
+            x={-14}
+            y={2}
+            width={28}
+            height={14}
+            rx={7}
+            fill="#e7e5e4"
+            fillOpacity={0.85}
+            stroke="#78716c"
+            strokeWidth={1.5}
+            className="cursor-pointer"
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              onInputActiveChange(!active)
+            }}
+          />
+          <line x1={-12} y1={active ? 9 : 6} x2={0} y2={active ? 9 : 6} stroke="#57534e" strokeWidth={2} />
+          <line x1={0} y1={active ? 9 : 12} x2={12} y2={active ? 9 : 12} stroke="#57534e" strokeWidth={2} />
+          {active && (
+            <text x={0} y={-4} fontSize={11} textAnchor="middle" className="pointer-events-none select-none">
+              🧲
+            </text>
+          )}
+        </g>
+      )}
+
+      {component.type === 'relay' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          {/* 파란 상자 + 접점. 켜지면 접점이 붙고 표시등이 들어온다. */}
+          <rect x={-17} y={2} width={34} height={28} rx={2} fill="#1d4ed8" stroke="#1e3a8a" strokeWidth={1.5} />
+          <circle cx={-10} cy={9} r={3} fill={isOn('a') || isOn('b') ? '#fca5a5' : '#7f1d1d'} />
+          <line x1={-2} y1={20} x2={8} y2={20} stroke="#e5e7eb" strokeWidth={2} />
+          <line
+            x1={-2}
+            y1={20}
+            x2={8}
+            y2={isOn('a') || isOn('b') ? 20 : 13}
+            stroke="#fbbf24"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+          />
+          <text x={0} y={-3} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+            {isOn('a') || isOn('b') ? '딸깍' : ''}
+          </text>
+        </g>
+      )}
+
+      {component.type === 'vibration' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          {/* 코인형 진동모터. 돌면 옆으로 떨리는 선을 그린다 — 소리가 없으니 눈으로
+              보여줘야 "지금 돌고 있다"를 알 수 있다. */}
+          <circle cx={0} cy={14} r={13} fill="#57534e" stroke="#292524" strokeWidth={1.5} />
+          <circle cx={0} cy={14} r={5} fill="#a8a29e" />
+          {(isOn('a') || isOn('b')) && (
+            <>
+              <path d="M -20 8 q -4 6 0 12" fill="none" stroke="#f59e0b" strokeWidth={2} strokeLinecap="round" />
+              <path d="M 20 8 q 4 6 0 12" fill="none" stroke="#f59e0b" strokeWidth={2} strokeLinecap="round" />
+            </>
+          )}
+        </g>
+      )}
+
+      {component.type === 'traffic-light' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          <rect x={-14} y={0} width={28} height={52} rx={5} fill="#292524" stroke="#1c1917" strokeWidth={1.5} />
+          {[
+            { pin: 'red', cy: 11, on: '#ef4444', off: '#7f1d1d' },
+            { pin: 'yellow', cy: 26, on: '#facc15', off: '#713f12' },
+            { pin: 'green', cy: 41, on: '#22c55e', off: '#14532d' },
+          ].map((lamp) => (
+            <circle
+              key={lamp.pin}
+              cx={0}
+              cy={lamp.cy}
+              r={6}
+              fill={isOn(lamp.pin) ? lamp.on : lamp.off}
+              style={isOn(lamp.pin) ? { filter: `drop-shadow(0 0 7px ${lamp.on})` } : undefined}
+            />
+          ))}
         </g>
       )}
 

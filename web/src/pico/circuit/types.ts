@@ -40,6 +40,12 @@ export type ComponentType =
   | 'potentiometer'
   | 'servo'
   | 'ldr'
+  | 'pir'
+  | 'tilt'
+  | 'reed'
+  | 'relay'
+  | 'vibration'
+  | 'traffic-light'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -73,6 +79,48 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '가변저항(노브를 돌려서 조절 · GP26~28에만 연결)',
     short: '가변저항',
     emoji: '🎛️',
+  },
+  {
+    type: 'relay',
+    category: 'output',
+    label: '릴레이(켜면 접점이 딸깍 붙는다)',
+    short: '릴레이',
+    emoji: '🔌',
+  },
+  {
+    type: 'vibration',
+    category: 'output',
+    label: '진동모터',
+    short: '진동',
+    emoji: '📳',
+  },
+  {
+    type: 'traffic-light',
+    category: 'output',
+    label: '신호등 LED(빨강·노랑·초록 3핀)',
+    short: '신호등',
+    emoji: '🚦',
+  },
+  {
+    type: 'pir',
+    category: 'input',
+    label: 'PIR 인체감지(클릭해서 감지 켜기/끄기)',
+    short: 'PIR',
+    emoji: '🚶',
+  },
+  {
+    type: 'tilt',
+    category: 'input',
+    label: '틸트 센서(클릭해서 기울이기)',
+    short: '틸트',
+    emoji: '📐',
+  },
+  {
+    type: 'reed',
+    category: 'input',
+    label: '리드 스위치(클릭해서 자석 대기)',
+    short: '리드',
+    emoji: '🧲',
   },
   {
     type: 'ldr',
@@ -202,6 +250,35 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'a', dx: -16, dy: 18 },
     { pin: 'b', dx: 16, dy: 18 },
   ],
+  // 버튼·스위치와 똑같이 "디지털 IN 한 개" 구조라 핀 배치도 같다 — 다른 건 생김새와
+  // 조작 방식뿐이다(TOGGLE_INPUT_TYPES 참고).
+  pir: [
+    { pin: 'a', dx: -16, dy: 22 },
+    { pin: 'b', dx: 16, dy: 22 },
+  ],
+  tilt: [
+    { pin: 'a', dx: -14, dy: 20 },
+    { pin: 'b', dx: 14, dy: 20 },
+  ],
+  reed: [
+    { pin: 'a', dx: -16, dy: 18 },
+    { pin: 'b', dx: 16, dy: 18 },
+  ],
+  relay: [
+    { pin: 'a', dx: -16, dy: 34 },
+    { pin: 'b', dx: 16, dy: 34 },
+  ],
+  vibration: [
+    { pin: 'a', dx: -12, dy: 30 },
+    { pin: 'b', dx: 12, dy: 30 },
+  ],
+  // 신호등은 색마다 핀이 하나씩, 접지는 공통이다(실물 3색 LED 모듈과 같다).
+  'traffic-light': [
+    { pin: 'red', dx: -18, dy: 62 },
+    { pin: 'yellow', dx: -6, dy: 62 },
+    { pin: 'green', dx: 6, dy: 62 },
+    { pin: 'gnd', dx: 18, dy: 62 },
+  ],
   // 조도센서 모듈(CDS + 저항이 보드에 같이 붙은 형태)과 같은 3핀. 실물 CDS 알맹이만
   // 쓰면 분압 저항을 따로 달아야 하는데, 이 시뮬레이터엔 저항 부품 자체가 없다 —
   // 모듈 형태로 두는 게 학생이 실제로 사는 부품과도 맞고 거짓말도 아니다.
@@ -237,6 +314,26 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   potentiometer: { x: 0, y: 14 },
   servo: { x: 0, y: 14 },
   ldr: { x: 0, y: 16 },
+  pir: { x: 0, y: 11 },
+  tilt: { x: 0, y: 10 },
+  reed: { x: 0, y: 9 },
+  relay: { x: 0, y: 16 },
+  vibration: { x: 0, y: 14 },
+  'traffic-light': { x: 0, y: 28 },
+}
+
+/**
+ * 클릭해서 켜고 끄는 디지털 입력 부품들. 스위치와 회로상 완전히 같다 — 핀 두 개짜리
+ * 디지털 IN 이고, 켜져 있는 동안 연결된 GPIO 가 1 로 읽힌다. 다른 건 생김새와 무슨
+ * 상황을 흉내 내는지(사람이 지나감 / 기울어짐 / 자석이 붙음)뿐이다.
+ */
+export const TOGGLE_INPUT_TYPES: ComponentType[] = ['switch', 'pir', 'tilt', 'reed']
+
+/** 눌린 동안에만 켜지는 입력. 지금은 버튼뿐이지만 목록으로 두면 판단이 한 군데에 모인다. */
+export const MOMENTARY_INPUT_TYPES: ComponentType[] = ['button']
+
+export function isDigitalInput(type: ComponentType): boolean {
+  return TOGGLE_INPUT_TYPES.includes(type) || MOMENTARY_INPUT_TYPES.includes(type)
 }
 
 /** 조도센서 밝기 슬라이더의 가로 범위(부품 기준 상대 좌표). */
