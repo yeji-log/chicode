@@ -40,6 +40,17 @@ function ledAndButton(): CircuitSnapshot {
   }
 }
 
+function buzzerOnly(): CircuitSnapshot {
+  return {
+    components: [{ id: 'buzzer1', type: 'buzzer', x: 700, y: 120 }],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'buzzer1', pin: 'positive' }, to: { kind: 'board', pinId: GP15 } },
+      { id: 'w2', from: { kind: 'component', componentId: 'buzzer1', pin: 'negative' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
 export const EXAMPLES: Example[] = [
   {
     name: '1. LED 켜고 끄기',
@@ -82,6 +93,29 @@ while True:
     else:
         led.off()
     time.sleep(0.05)
+`,
+  },
+  {
+    name: '4. 부저로 도레미 연주하기',
+    circuit: buzzerOnly(),
+    code: `from machine import Pin, PWM
+import time
+
+buzzer = PWM(Pin(15))
+
+# 도레미파솔라시도 - 음마다 주파수(Hz)가 정해져 있다
+notes = [
+    ('도', 262), ('레', 294), ('미', 330), ('파', 349),
+    ('솔', 392), ('라', 440), ('시', 494), ('높은 도', 523),
+]
+
+for name, hz in notes:
+    print(name, hz, 'Hz')
+    buzzer.freq(hz)        # 음 높이
+    buzzer.duty_u16(20000) # 소리 크기 (0이면 무음)
+    time.sleep(0.4)
+
+buzzer.deinit()  # 소리 끄기
 `,
   },
 ]

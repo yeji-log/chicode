@@ -16,6 +16,7 @@ import {
   breadboardRailAnchor,
   layoutBreadboard,
 } from './breadboard'
+import { buzzerAudio, DEFAULT_BUZZER_HZ } from './buzzerAudio'
 import { resolveConnectivity } from './connectivity'
 import {
   ADC_MAX,
@@ -39,6 +40,7 @@ import {
 } from './types'
 
 const STORAGE_KEY = 'chicode.pico.circuit'
+const MUTE_KEY = 'chicode.pico.muted'
 
 /** 모델(회로) 좌표계의 세로 크기는 640으로 고정하고, 가로는 캔버스가 실제로 차지한
  *  칸의 비율에 맞춰 늘린다.
@@ -184,6 +186,13 @@ function CircuitCanvas(
   // 브라우저, 일부 아이패드 웹뷰 등)에서 네이티브 confirm()이 아무 반응 없이 조용히
   // 취소로 처리되는 문제가 실제로 보고됐다(사용자가 "확인창 자체가 안 뜬다"고 확인).
   const [confirmingClearAll, setConfirmingClearAll] = useState(false)
+  // 부저 음소거. 수업 중에 소리를 꺼야 할 때가 있어서 저장해 둔다 — 노브 위치와 달리
+  // 이건 "이 컴퓨터를 쓰는 사람의 설정"이지 회로 상태가 아니다.
+  const [muted, setMuted] = useState(() => localStorage.getItem(MUTE_KEY) === '1')
+  useEffect(() => {
+    localStorage.setItem(MUTE_KEY, muted ? '1' : '0')
+    if (muted) buzzerAudio.stopAll()
+  }, [muted])
   // 캔버스 칸이 가로로 넓어진 만큼 viewBox도 넓힌다(위 MIN_VIEW_WIDTH 주석 참고).
   const [viewWidth, setViewWidth] = useState(MIN_VIEW_WIDTH)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -627,6 +636,23 @@ function CircuitCanvas(
     return { x: comp.x + rotated.x, y: comp.y + rotated.y }
   }
 
+  /** 부저를 실제로 울린다. PWM 이 걸렸으면 그 주파수로(패시브 부저), 그냥 전원만
+   *  들어왔으면 기본음으로(액티브 부저) — 둘 다 실물에서 그렇게 동작한다.
+   *  음소거는 여기서 한 번에 막는다. */
+  useEffect(() => {
+    for (const c of components) {
+      if (c.type !== 'buzzer') continue
+      const gpios = ['positive', 'negative'].map((pin) => gpioForPin(c.id, pin))
+      const level = Math.max(...gpios.map((g) => levelOfGpio(g, gpioLevels, pwmLevels)))
+      const pwm = gpios.map((g) => (g === undefined ? undefined : pwmLevels.get(g))).find(Boolean)
+      buzzerAudio.set(c.id, pwm?.freq ?? DEFAULT_BUZZER_HZ, muted ? 0 : level)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [components, connectivity, gpioLevels, pwmLevels, muted])
+
+  // 부저를 지웠거나 회로를 갈아끼웠을 때 소리가 남아 계속 울리면 안 된다.
+  useEffect(() => () => buzzerAudio.stopAll(), [])
+
   /** 포인터가 가리키는 방향을 노브 값(0~1)으로 바꾼다. 노브 "위쪽"이 가운데(50%)가
    *  아니라, 왼쪽 끝(-135도)이 0%이고 오른쪽 끝(+135도)이 100%다 — 실물 손잡이와 같다.
    *  부품이 회전해 있으면 그만큼 빼야 화면에 보이는 대로 돈다. */
@@ -665,6 +691,8 @@ function CircuitCanvas(
           wireColor={wireColor}
           setWireColor={setWireColor}
           onClearAll={clearAll}
+          muted={muted}
+          onToggleMute={() => setMuted((m) => !m)}
           selectedLabel={selectedLabel}
           onDeleteSelected={deleteSelected}
         />
@@ -911,6 +939,8 @@ function Palette({
   wireColor,
   setWireColor,
   onClearAll,
+  muted,
+  onToggleMute,
   selectedLabel,
   onDeleteSelected,
 }: {
@@ -920,6 +950,9 @@ function Palette({
   wireColor: string
   setWireColor: (color: string) => void
   onClearAll: () => void
+  /** 부저 음소거 상태. 소리는 수업 중에 꺼야 할 때가 있다. */
+  muted: boolean
+  onToggleMute: () => void
   /** 지금 선택된 부품/브레드보드의 한글 이름. 선택된 게 없으면 null — 이때는
    *  "선택 삭제" 버튼 자체를 안 보여준다(뭘 지울지 없으니). */
   selectedLabel: string | null
@@ -1006,6 +1039,22 @@ function Palette({
           ))}
         </div>
       </div>
+
+      {/* 부저 소리 켜기/끄기. 실행 중에도 눌러야 하니 locked 와 무관하게 항상 활성. */}
+      <button
+        type="button"
+        title={muted ? '부저 소리 켜기' : '부저 소리 끄기'}
+        onClick={onToggleMute}
+        className={[
+          'flex items-center justify-center gap-1 rounded-lg border py-1.5 transition-colors',
+          muted
+            ? 'border-cream-deep bg-white text-ink-500 hover:border-cheese-300'
+            : 'border-cheese-300 bg-cheese-50 text-ink-900',
+        ].join(' ')}
+      >
+        <span className="text-sm leading-none">{muted ? '🔇' : '🔊'}</span>
+        <span className="text-[10px] font-bold leading-none">{muted ? '소리 꺼짐' : '소리 켜짐'}</span>
+      </button>
 
       {/* 삭제는 맨 아래로 몰아둔다(mt-auto) — 추가 버튼 사이에 끼어 있으면 잘못 누르기 쉽다. */}
       <div className="mt-auto flex flex-col gap-1 pt-1">

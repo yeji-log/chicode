@@ -134,6 +134,10 @@ export function usePico(): UsePico {
   /** 무한 루프는 안에서 멈출 방법이 없다. 워커째로 끊고 새로 띄운다(Python/C 랩과 동일). */
   const stop = useCallback(() => {
     workerRef.current?.terminate()
+    // 워커를 끊으면 코드는 멈추지만 마지막 GPIO/PWM 값은 그대로 남아 있었다 — LED 가
+    // 켜진 채로 굳고, PWM 부저는 소리가 계속 울린다. 보드를 끈 것과 같으니 여기서 비운다.
+    setGpio(new Map())
+    setPwm(new Map())
     append('sys', '실행을 중지했습니다.')
     setStatus('booting')
     spawnWorker()
