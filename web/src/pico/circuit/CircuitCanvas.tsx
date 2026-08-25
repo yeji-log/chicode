@@ -24,7 +24,6 @@ import {
   COMPONENT_LIST,
   COMPONENT_PINS,
   COMPONENT_PIVOT,
-  type ComponentCategory,
   type ComponentType,
   DEFAULT_WIRE_COLOR,
   type PinRef,
@@ -132,7 +131,6 @@ function CircuitCanvas(
   const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
   // withDefaultBoard가 항상 채워주므로 board는 실제로 항상 있다 — 타입만 optional.
   const boardPos = board ?? DEFAULT_BOARD
-  const [tab, setTab] = useState<ComponentCategory | 'breadboard'>('output')
   const [draft, setDraft] = useState<{ from: PinRef; to: Point } | null>(null)
   const [dragging, setDragging] = useState<DragTarget | null>(null)
   // 버튼(누르는 동안)과 스위치(클릭해서 토글) 둘 다 "지금 켜진 입력 부품 id" 로 통일해서 관리한다.
@@ -568,195 +566,203 @@ function CircuitCanvas(
 
   return (
     <div className="flex flex-col gap-2">
-      <Palette
-        tab={tab}
-        setTab={setTab}
-        addComponent={addComponent}
-        addBreadboard={addBreadboard}
-        locked={locked}
-        wireColor={wireColor}
-        setWireColor={setWireColor}
-        onClearAll={clearAll}
-        selectedLabel={selectedLabel}
-        onDeleteSelected={deleteSelected}
-      />
+      <div className="flex items-stretch gap-2">
+        <Palette
+          addComponent={addComponent}
+          addBreadboard={addBreadboard}
+          locked={locked}
+          wireColor={wireColor}
+          setWireColor={setWireColor}
+          onClearAll={clearAll}
+          selectedLabel={selectedLabel}
+          onDeleteSelected={deleteSelected}
+        />
 
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
-        className="h-[520px] w-full touch-none rounded-xl border border-cream-deep bg-[#eef2ea] select-none"
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-      >
-        <defs>
-          <filter id="chico-shadow" x="-40%" y="-40%" width="180%" height="180%">
-            <feDropShadow dx="0" dy="2" stdDeviation="1.6" floodColor="#1c1917" floodOpacity="0.28" />
-          </filter>
-          <linearGradient id="chico-board-body" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#2c7a54" />
-            <stop offset="55%" stopColor="#1f6b48" />
-            <stop offset="100%" stopColor="#175a3c" />
-          </linearGradient>
-          <linearGradient id="chico-bb-body" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#fbfaf5" />
-            <stop offset="100%" stopColor="#ece7d8" />
-          </linearGradient>
-          {/* 팅커캐드 스타일 점 그리드. patternTransform을 콘텐츠 그룹과 똑같은
-              translate/scale로 맞춰서, 줌/팬 중에도 점이 부품과 같이 움직이는 것처럼
-              보이게 한다(실제로는 배경 rect 자체는 화면에 고정돼 있고 패턴만 움직인다). */}
-          <pattern
-            id="chico-grid"
-            width={GRID}
-            height={GRID}
-            patternUnits="userSpaceOnUse"
-            patternTransform={`translate(${view.x} ${view.y}) scale(${view.scale})`}
-          >
-            <circle cx={1} cy={1} r={1} fill="#c7d1c2" />
-          </pattern>
-        </defs>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
+          className="h-[520px] min-w-0 flex-1 touch-none rounded-xl border border-cream-deep bg-[#eef2ea] select-none"
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerUp}
+        >
+          <defs>
+            <filter id="chico-shadow" x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="2" stdDeviation="1.6" floodColor="#1c1917" floodOpacity="0.28" />
+            </filter>
+            <linearGradient id="chico-board-body" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#2c7a54" />
+              <stop offset="55%" stopColor="#1f6b48" />
+              <stop offset="100%" stopColor="#175a3c" />
+            </linearGradient>
+            <linearGradient id="chico-bb-body" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#fbfaf5" />
+              <stop offset="100%" stopColor="#ece7d8" />
+            </linearGradient>
+            {/* 팅커캐드 스타일 점 그리드. patternTransform을 콘텐츠 그룹과 똑같은
+                translate/scale로 맞춰서, 줌/팬 중에도 점이 부품과 같이 움직이는 것처럼
+                보이게 한다(실제로는 배경 rect 자체는 화면에 고정돼 있고 패턴만 움직인다). */}
+            <pattern
+              id="chico-grid"
+              width={GRID}
+              height={GRID}
+              patternUnits="userSpaceOnUse"
+              patternTransform={`translate(${view.x} ${view.y}) scale(${view.scale})`}
+            >
+              <circle cx={1} cy={1} r={1} fill="#c7d1c2" />
+            </pattern>
+          </defs>
 
-        {/* 빈 캔버스를 누르면 팬(화면 이동) — 부품/보드/전선이 위에 겹쳐 그려지므로
-            그 위를 눌렀을 땐 이 배경이 아니라 해당 부품이 이벤트를 받는다. */}
-        <rect x={0} y={0} width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#chico-grid)" onPointerDown={onBackgroundPointerDown} />
+          {/* 빈 캔버스를 누르면 팬(화면 이동) — 부품/보드/전선이 위에 겹쳐 그려지므로
+              그 위를 눌렀을 땐 이 배경이 아니라 해당 부품이 이벤트를 받는다. */}
+          <rect x={0} y={0} width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#chico-grid)" onPointerDown={onBackgroundPointerDown} />
 
-        <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
-          {breadboards.map((b) => {
-            const layout = breadboardLayouts.get(b.id)
-            if (!layout) return null
-            return (
-              <BreadboardGlyph
-                key={b.id}
-                layout={layout}
-                rotation={b.rotation ?? 0}
-                locked={locked}
-                selected={selected?.kind === 'breadboard' && selected.id === b.id}
-                onBodyPointerDown={(event) => {
-                  if (locked) return
-                  setSelected({ kind: 'breadboard', id: b.id })
-                  const p = toModelPoint(event.clientX, event.clientY)
-                  setDragging({ id: b.id, kind: 'breadboard', dx: p.x - b.x, dy: p.y - b.y })
-                }}
-                onDotPointerDown={(ref) => startWire(ref, pinPoint(ref))}
-                onDotPointerUp={(ref) => finishWire(ref)}
-              />
-            )
-          })}
+          <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
+            {breadboards.map((b) => {
+              const layout = breadboardLayouts.get(b.id)
+              if (!layout) return null
+              return (
+                <BreadboardGlyph
+                  key={b.id}
+                  layout={layout}
+                  rotation={b.rotation ?? 0}
+                  locked={locked}
+                  selected={selected?.kind === 'breadboard' && selected.id === b.id}
+                  onBodyPointerDown={(event) => {
+                    if (locked) return
+                    setSelected({ kind: 'breadboard', id: b.id })
+                    const p = toModelPoint(event.clientX, event.clientY)
+                    setDragging({ id: b.id, kind: 'breadboard', dx: p.x - b.x, dy: p.y - b.y })
+                  }}
+                  onDotPointerDown={(ref) => startWire(ref, pinPoint(ref))}
+                  onDotPointerUp={(ref) => finishWire(ref)}
+                />
+              )
+            })}
 
-          <PicoBoard
-            board={boardPos}
-            locked={locked}
-            selected={selected?.kind === 'board'}
-            onBodyPointerDown={(event) => {
-              if (locked) return
-              setSelected({ kind: 'board', id: BOARD_ID })
-              const p = toModelPoint(event.clientX, event.clientY)
-              setDragging({ id: BOARD_ID, kind: 'board', dx: p.x - boardPos.x, dy: p.y - boardPos.y })
-            }}
-            onPinPointerDown={(pin) => {
-              startWire({ kind: 'board', pinId: pin.id }, pinPoint({ kind: 'board', pinId: pin.id }))
-            }}
-            onPinPointerUp={(pin) => finishWire({ kind: 'board', pinId: pin.id })}
-          />
-
-          {wires.map((w) => {
-            const a = pinPoint(w.from)
-            const b = pinPoint(w.to)
-            return (
-              <path
-                key={w.id}
-                d={wirePath(a, b)}
-                stroke={w.color ?? DEFAULT_WIRE_COLOR}
-                strokeWidth={3.5}
-                fill="none"
-                strokeLinecap="round"
-                className={locked ? '' : 'cursor-pointer hover:opacity-70'}
-                onClick={() => removeWire(w.id)}
-                onContextMenu={(e) => recolorWire(w.id, e)}
-              />
-            )
-          })}
-          {/* 실제 선(3.5px)은 클릭하기 얇아서, 안 보이는 굵은 선을 하나 더 깔아 클릭 영역을 넓힌다. */}
-          {!locked &&
-            wires.map((w) => (
-              <path
-                key={`${w.id}-hit`}
-                d={wirePath(pinPoint(w.from), pinPoint(w.to))}
-                stroke="transparent"
-                strokeWidth={14}
-                fill="none"
-                className="cursor-pointer"
-                onClick={() => removeWire(w.id)}
-                onContextMenu={(e) => recolorWire(w.id, e)}
-              />
-            ))}
-
-          {draft && (
-            <path
-              d={wirePath(pinPoint(draft.from), draft.to)}
-              stroke="#94a3b8"
-              strokeWidth={2.5}
-              strokeDasharray="4 3"
-              fill="none"
-            />
-          )}
-
-          {components.map((c) => (
-            <ComponentGlyph
-              key={c.id}
-              component={c}
-              gpioLevels={gpioLevels}
-              gpioForPin={(pin) => gpioForPin(c.id, pin)}
-              active={activeInputs.has(c.id)}
+            <PicoBoard
+              board={boardPos}
               locked={locked}
-              selected={selected?.kind === 'component' && selected.id === c.id}
+              selected={selected?.kind === 'board'}
               onBodyPointerDown={(event) => {
                 if (locked) return
-                setSelected({ kind: 'component', id: c.id })
+                setSelected({ kind: 'board', id: BOARD_ID })
                 const p = toModelPoint(event.clientX, event.clientY)
-                setDragging({ id: c.id, kind: 'component', dx: p.x - c.x, dy: p.y - c.y })
+                setDragging({ id: BOARD_ID, kind: 'board', dx: p.x - boardPos.x, dy: p.y - boardPos.y })
               }}
-              onPinPointerDown={(pin, event) => {
-                event.stopPropagation()
-                startWire({ kind: 'component', componentId: c.id, pin }, pinPoint({ kind: 'component', componentId: c.id, pin }))
+              onPinPointerDown={(pin) => {
+                startWire({ kind: 'board', pinId: pin.id }, pinPoint({ kind: 'board', pinId: pin.id }))
               }}
-              onPinPointerUp={(pin, event) => {
-                event.stopPropagation()
-                finishWire({ kind: 'component', componentId: c.id, pin })
-              }}
-              onInputActiveChange={(active) => setInputActive(c.id, active)}
+              onPinPointerUp={(pin) => finishWire({ kind: 'board', pinId: pin.id })}
             />
-          ))}
-        </g>
 
-        {/* 줌 컨트롤 — transform 그룹 밖에 그려서 확대/축소와 무관하게 항상 같은
-            화면 위치·크기를 유지한다. 휠이 없는 아이패드 등 터치 기기에선 이 버튼이
-            줌의 유일한 수단이라 꼭 있어야 한다. */}
-        <g transform={`translate(${VIEW_WIDTH - 112} ${VIEW_HEIGHT - 40})`}>
-          <rect x={0} y={0} width={104} height={28} rx={14} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
-          {[
-            { dx: 14, label: '−', onClick: zoomOut, aria: '축소' },
-            { dx: 52, label: '⤢', onClick: resetView, aria: '전체 보기(100%)' },
-            { dx: 90, label: '+', onClick: zoomIn, aria: '확대' },
-          ].map((btn) => (
-            <text
-              key={btn.aria}
-              x={btn.dx}
-              y={19}
-              fontSize={btn.label === '⤢' ? 11 : 15}
-              fontWeight="bold"
-              textAnchor="middle"
-              fill="#57534e"
-              className="cursor-pointer select-none"
-              aria-label={btn.aria}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={btn.onClick}
-            >
-              {btn.label}
-            </text>
-          ))}
-        </g>
-      </svg>
+            {wires.map((w) => {
+              const a = pinPoint(w.from)
+              const b = pinPoint(w.to)
+              return (
+                <path
+                  key={w.id}
+                  d={wirePath(a, b)}
+                  stroke={w.color ?? DEFAULT_WIRE_COLOR}
+                  strokeWidth={3.5}
+                  fill="none"
+                  strokeLinecap="round"
+                  className={locked ? '' : 'cursor-pointer hover:opacity-70'}
+                  onClick={() => removeWire(w.id)}
+                  onContextMenu={(e) => recolorWire(w.id, e)}
+                />
+              )
+            })}
+            {/* 실제 선(3.5px)은 클릭하기 얇아서, 안 보이는 굵은 선을 하나 더 깔아 클릭 영역을 넓힌다. */}
+            {!locked &&
+              wires.map((w) => (
+                <path
+                  key={`${w.id}-hit`}
+                  d={wirePath(pinPoint(w.from), pinPoint(w.to))}
+                  stroke="transparent"
+                  strokeWidth={14}
+                  fill="none"
+                  className="cursor-pointer"
+                  onClick={() => removeWire(w.id)}
+                  onContextMenu={(e) => recolorWire(w.id, e)}
+                />
+              ))}
+
+            {draft && (
+              <path
+                d={wirePath(pinPoint(draft.from), draft.to)}
+                stroke="#94a3b8"
+                strokeWidth={2.5}
+                strokeDasharray="4 3"
+                fill="none"
+              />
+            )}
+
+            {components.map((c) => (
+              <ComponentGlyph
+                key={c.id}
+                component={c}
+                gpioLevels={gpioLevels}
+                gpioForPin={(pin) => gpioForPin(c.id, pin)}
+                active={activeInputs.has(c.id)}
+                locked={locked}
+                selected={selected?.kind === 'component' && selected.id === c.id}
+                onBodyPointerDown={(event) => {
+                  if (locked) return
+                  setSelected({ kind: 'component', id: c.id })
+                  const p = toModelPoint(event.clientX, event.clientY)
+                  setDragging({ id: c.id, kind: 'component', dx: p.x - c.x, dy: p.y - c.y })
+                }}
+                onPinPointerDown={(pin, event) => {
+                  event.stopPropagation()
+                  startWire({ kind: 'component', componentId: c.id, pin }, pinPoint({ kind: 'component', componentId: c.id, pin }))
+                }}
+                onPinPointerUp={(pin, event) => {
+                  event.stopPropagation()
+                  finishWire({ kind: 'component', componentId: c.id, pin })
+                }}
+                onInputActiveChange={(active) => setInputActive(c.id, active)}
+              />
+            ))}
+          </g>
+
+          {/* 줌 컨트롤 — transform 그룹 밖에 그려서 확대/축소와 무관하게 항상 같은
+              화면 위치·크기를 유지한다. 휠이 없는 아이패드 등 터치 기기에선 이 버튼이
+              줌의 유일한 수단이라 꼭 있어야 한다. */}
+          <g transform={`translate(${VIEW_WIDTH - 112} ${VIEW_HEIGHT - 40})`}>
+            <rect x={0} y={0} width={104} height={28} rx={14} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
+            {[
+              { dx: 14, label: '−', onClick: zoomOut, aria: '축소' },
+              { dx: 52, label: '⤢', onClick: resetView, aria: '전체 보기(100%)' },
+              { dx: 90, label: '+', onClick: zoomIn, aria: '확대' },
+            ].map((btn) => (
+              <text
+                key={btn.aria}
+                x={btn.dx}
+                y={19}
+                fontSize={btn.label === '⤢' ? 11 : 15}
+                fontWeight="bold"
+                textAnchor="middle"
+                fill="#57534e"
+                className="cursor-pointer select-none"
+                aria-label={btn.aria}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={btn.onClick}
+              >
+                {btn.label}
+              </text>
+            ))}
+          </g>
+        </svg>
+      </div>
+
+      {/* 조작법 안내 — 예전엔 팔레트 안에 있었는데, 팔레트가 세로 사이드바가 되면서
+          긴 문장이 들어갈 자리가 없어졌다. 캔버스 아래 한 줄로 뺀다. */}
+      <p className="px-1 text-xs leading-relaxed text-ink-500">
+        {locked
+          ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
+          : '부품/브레드보드/Pico 보드는 클릭해서 선택 후 R(회전)로 돌리고 끌어서 옮깁니다(보드는 삭제 불가). 삭제는 Delete 키나 휴지통 버튼. 핀(원)을 끌어 전선을 잇고, 전선은 클릭(삭제)·오른쪽 클릭(색 바꾸기)합니다.'}
+      </p>
 
       {confirmingClearAll && (
         <Modal title="회로 전체 삭제" onClose={() => setConfirmingClearAll(false)}>
@@ -785,9 +791,19 @@ function CircuitCanvas(
 
 export default forwardRef(CircuitCanvas)
 
+/** 아이콘형 세로 사이드바 팔레트 — 캔버스 왼쪽에 붙는다.
+ *
+ *  예전엔 캔버스 위에 가로 막대(탭 3개 + "LED 추가" 같은 글자 버튼 + 세 줄짜리
+ *  안내문)로 있었다. 캔버스 높이(520px)는 고정이라 그 막대만큼 회로 섹션 전체가
+ *  길어졌고, 무엇보다 탭 때문에 "지금 안 보이는 부품"이 생겨서 뭐가 있는지 한눈에
+ *  안 들어왔다. 팅커캐드처럼 아이콘 타일을 세로로 세우면 부품 7종이 전부 항상
+ *  보이고, 대신 캔버스는 가로를 104px 내준다 — 이 화면에서 남는 건 가로 쪽이라
+ *  맞바꿀 만하다.
+ *
+ *  타일 폭이 좁아 이름은 짧은 것(ComponentMeta.short)을 쓰고, 원래 이름
+ *  ("버튼(누르는 동안)")은 title 툴팁에 남긴다 — 접근성 이름(버튼의 accessible
+ *  name)도 이 title을 쓰므로 스크린리더에도 전체 이름이 그대로 읽힌다. */
 function Palette({
-  tab,
-  setTab,
   addComponent,
   addBreadboard,
   locked,
@@ -797,8 +813,6 @@ function Palette({
   selectedLabel,
   onDeleteSelected,
 }: {
-  tab: ComponentCategory | 'breadboard'
-  setTab: (t: ComponentCategory | 'breadboard') => void
   addComponent: (type: ComponentType) => void
   addBreadboard: (size: BreadboardSize) => void
   locked: boolean
@@ -810,67 +824,70 @@ function Palette({
   selectedLabel: string | null
   onDeleteSelected: () => void
 }) {
-  const TABS: { key: ComponentCategory | 'breadboard'; label: string }[] = [
-    { key: 'output', label: '출력 장치' },
-    { key: 'input', label: '입력 장치' },
-    { key: 'breadboard', label: '브레드보드' },
+  const groups: { key: string; label: string; tiles: PaletteTile[] }[] = [
+    {
+      key: 'output',
+      label: '출력',
+      tiles: COMPONENT_LIST.filter((c) => c.category === 'output').map((c) => ({
+        key: c.type,
+        emoji: c.emoji,
+        short: c.short,
+        title: `${c.label} 추가`,
+        onAdd: () => addComponent(c.type),
+      })),
+    },
+    {
+      key: 'input',
+      label: '입력',
+      tiles: COMPONENT_LIST.filter((c) => c.category === 'input').map((c) => ({
+        key: c.type,
+        emoji: c.emoji,
+        short: c.short,
+        title: `${c.label} 추가`,
+        onAdd: () => addComponent(c.type),
+      })),
+    },
+    {
+      key: 'breadboard',
+      label: '브레드보드',
+      tiles: BREADBOARD_SIZES.map((b) => ({
+        key: b.size,
+        emoji: '🍞',
+        short: b.short,
+        title: `브레드보드 ${b.label} 추가`,
+        onAdd: () => addBreadboard(b.size),
+      })),
+    },
   ]
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2 border-b border-cream-deep">
-        <div className="flex gap-1">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={[
-                'rounded-t-lg px-3 py-1.5 text-xs font-bold transition-colors',
-                tab === t.key
-                  ? 'border border-b-0 border-cream-deep bg-white text-ink-900'
-                  : 'text-ink-500 hover:text-ink-700',
-              ].join(' ')}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <button
-          disabled={locked}
-          onClick={onClearAll}
-          className="mb-1 rounded-lg border border-cream-deep px-2 py-1 text-xs font-semibold text-ink-500 transition-colors hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          🗑️ 전체 삭제
-        </button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {tab !== 'breadboard'
-          ? COMPONENT_LIST.filter((c) => c.category === tab).map((c) => (
+    <aside className="flex w-[104px] shrink-0 flex-col gap-2 overflow-y-auto rounded-xl border border-cream-deep bg-cream p-1.5">
+      {groups.map((g) => (
+        <div key={g.key} className="flex flex-col gap-1">
+          <PaletteHeading>{g.label}</PaletteHeading>
+          <div className="grid grid-cols-2 gap-1">
+            {g.tiles.map((t) => (
               <button
-                key={c.type}
+                key={t.key}
+                type="button"
                 disabled={locked}
-                onClick={() => addComponent(c.type)}
-                className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50 disabled:cursor-not-allowed disabled:opacity-40"
+                title={t.title}
+                onClick={t.onAdd}
+                className="flex flex-col items-center gap-0.5 rounded-lg border border-cream-deep bg-white py-1.5 transition-colors hover:border-cheese-300 hover:bg-cheese-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-cream-deep disabled:hover:bg-white"
               >
-                {c.emoji} {c.label} 추가
-              </button>
-            ))
-          : BREADBOARD_SIZES.map((b) => (
-              <button
-                key={b.size}
-                disabled={locked}
-                onClick={() => addBreadboard(b.size)}
-                className="rounded-lg border border-cream-deep bg-white px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cheese-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                🍞 {b.label} 추가
+                <span className="text-lg leading-none">{t.emoji}</span>
+                <span className="text-[10px] font-bold leading-none text-ink-700">{t.short}</span>
               </button>
             ))}
+          </div>
+        </div>
+      ))}
 
-        {/* 전선 색 — 지금부터 새로 잇는 전선에 쓰인다. 이미 그은 전선은 오른쪽
-            클릭으로 이 색을 입힌다(recolorWire). */}
-        <div className="flex items-center gap-1 rounded-lg border border-cream-deep bg-white px-2 py-1">
-          <span className="text-xs font-semibold text-ink-500">전선 색</span>
+      {/* 전선 색 — 지금부터 새로 잇는 전선에 쓰인다. 이미 그은 전선은 오른쪽
+          클릭으로 이 색을 입힌다(recolorWire). */}
+      <div className="flex flex-col gap-1">
+        <PaletteHeading>전선 색</PaletteHeading>
+        <div className="flex flex-wrap justify-center gap-1 rounded-lg border border-cream-deep bg-white px-1 py-1.5">
           {WIRE_COLORS.map((c) => (
             <button
               key={c.value}
@@ -887,27 +904,50 @@ function Palette({
             />
           ))}
         </div>
+      </div>
 
+      {/* 삭제는 맨 아래로 몰아둔다(mt-auto) — 추가 버튼 사이에 끼어 있으면 잘못 누르기 쉽다. */}
+      <div className="mt-auto flex flex-col gap-1 pt-1">
         {/* 부품/브레드보드를 클릭해 선택하면 나타난다 — 휴지통 버튼 하나로 지운다
             (부품마다 작은 삭제 글자를 따로 두던 것 대신, 사용자 요청으로 바꿈). */}
         {selectedLabel && (
           <button
+            type="button"
             disabled={locked}
+            title={`${selectedLabel} 삭제`}
             onClick={onDeleteSelected}
-            className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-red-50 py-1.5 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            🗑️ {selectedLabel} 삭제
+            <span className="text-sm leading-none">🗑️</span>
+            <span className="text-[10px] font-bold leading-none text-red-700">선택 삭제</span>
           </button>
         )}
-
-        <span className="text-xs text-ink-500">
-          {locked
-            ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
-            : '부품/브레드보드/Pico 보드는 클릭해서 선택 후 R(회전)로 돌리고 끌어서 옮깁니다(보드는 삭제 불가). 삭제는 Delete 키나 휴지통 버튼. 핀(원)을 끌어 전선을 잇고, 전선은 클릭(삭제)·오른쪽 클릭(색 바꾸기)합니다.'}
-        </span>
+        <button
+          type="button"
+          disabled={locked}
+          title="회로 전체 삭제"
+          onClick={onClearAll}
+          className="flex items-center justify-center gap-1 rounded-lg border border-cream-deep bg-white py-1.5 text-ink-500 transition-colors hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <span className="text-sm leading-none">🧹</span>
+          <span className="text-[10px] font-bold leading-none">전체 삭제</span>
+        </button>
       </div>
-    </div>
+    </aside>
   )
+}
+
+interface PaletteTile {
+  key: string
+  emoji: string
+  short: string
+  /** 마우스를 올렸을 때 뜨는 전체 이름 — 타일엔 짧은 이름만 들어간다. */
+  title: string
+  onAdd: () => void
+}
+
+function PaletteHeading({ children }: { children: React.ReactNode }) {
+  return <p className="px-0.5 text-[10px] font-bold tracking-wide text-ink-500">{children}</p>
 }
 
 function PinDot({

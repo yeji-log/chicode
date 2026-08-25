@@ -39,15 +39,19 @@ export interface ComponentMeta {
   type: ComponentType
   category: ComponentCategory
   label: string
+  /** 아이콘 사이드바 타일에 아이콘 밑에 붙는 짧은 이름 — 팔레트 폭이 좁아
+   *  label("버튼(누르는 동안)")을 그대로 쓰면 줄이 접힌다. 괄호 안 설명은
+   *  타일의 title(툴팁)에 남는다. */
+  short: string
   emoji: string
 }
 
 export const COMPONENT_LIST: ComponentMeta[] = [
-  { type: 'led', category: 'output', label: 'LED', emoji: '💡' },
-  { type: 'rgb-led', category: 'output', label: 'RGB LED', emoji: '🌈' },
-  { type: 'buzzer', category: 'output', label: '부저', emoji: '🔔' },
-  { type: 'button', category: 'input', label: '버튼(누르는 동안)', emoji: '🔘' },
-  { type: 'switch', category: 'input', label: '스위치(클릭해서 토글)', emoji: '🔀' },
+  { type: 'led', category: 'output', label: 'LED', short: 'LED', emoji: '💡' },
+  { type: 'rgb-led', category: 'output', label: 'RGB LED', short: 'RGB', emoji: '🌈' },
+  { type: 'buzzer', category: 'output', label: '부저', short: '부저', emoji: '🔔' },
+  { type: 'button', category: 'input', label: '버튼(누르는 동안)', short: '버튼', emoji: '🔘' },
+  { type: 'switch', category: 'input', label: '스위치(클릭해서 토글)', short: '스위치', emoji: '🔀' },
 ]
 
 export interface PlacedComponent {
@@ -62,9 +66,9 @@ export interface PlacedComponent {
 
 export type BreadboardSize = 'mini' | 'medium'
 
-export const BREADBOARD_SIZES: { size: BreadboardSize; label: string; columns: number }[] = [
-  { size: 'mini', label: '미니 (10칸)', columns: 10 },
-  { size: 'medium', label: '중간 (20칸)', columns: 20 },
+export const BREADBOARD_SIZES: { size: BreadboardSize; label: string; short: string; columns: number }[] = [
+  { size: 'mini', label: '미니 (10칸)', short: '미니', columns: 10 },
+  { size: 'medium', label: '중간 (20칸)', short: '중간', columns: 20 },
 ]
 
 export interface PlacedBreadboard {
