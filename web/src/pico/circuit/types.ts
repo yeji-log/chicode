@@ -60,6 +60,7 @@ export type ComponentType =
   | 'flame'
   | 'temp-analog'
   | 'ir-obstacle'
+  | 'joystick'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -198,6 +199,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '아날로그 온도센서 TMP36(ADC · GP26~28)',
     short: '온도',
     emoji: '🌡',
+  },
+  {
+    type: 'joystick',
+    category: 'input',
+    label: '조이스틱(ADC 2개 + 누름 버튼)',
+    short: '조이스틱',
+    emoji: '🕹️',
   },
   {
     type: 'ir-obstacle',
@@ -473,6 +481,15 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'out', dx: 0, dy: 46 },
     { pin: 'gnd', dx: 14, dy: 46 },
   ],
+  // 실물 조이스틱 모듈과 같은 5핀. VRx/VRy 는 ADC 핀 두 개를 각각 써야 한다 —
+  // Pico 에 ADC 가 셋뿐이라는 걸 몸으로 배우는 부품이다.
+  joystick: [
+    { pin: 'gnd', dx: -32, dy: 52 },
+    { pin: 'vcc', dx: -16, dy: 52 },
+    { pin: 'vrx', dx: 0, dy: 52 },
+    { pin: 'vry', dx: 16, dy: 52 },
+    { pin: 'sw', dx: 32, dy: 52 },
+  ],
   // 조도센서 모듈(CDS + 저항이 보드에 같이 붙은 형태)과 같은 3핀. 실물 CDS 알맹이만
   // 쓰면 분압 저항을 따로 달아야 하는데, 이 시뮬레이터엔 저항 부품 자체가 없다 —
   // 모듈 형태로 두는 게 학생이 실제로 사는 부품과도 맞고 거짓말도 아니다.
@@ -524,7 +541,11 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   flame: { x: 0, y: 16 },
   'temp-analog': { x: 0, y: 16 },
   'ir-obstacle': { x: 0, y: 16 },
+  joystick: { x: 0, y: 22 },
 }
+
+/** 조이스틱 스틱이 움직이는 반경(부품 기준 상대 좌표). 가운데가 50%, 끝이 0%/100%. */
+export const JOYSTICK_RADIUS = 15
 
 /**
  * 슬라이더 하나로 ADC 값을 만드는 센서들. 생김새(보드 색·아이콘)와 눈금만 다르고
@@ -636,7 +657,14 @@ export function analogKey(componentId: string, channel: AnalogChannel = 'value')
  * 디지털 IN 이고, 켜져 있는 동안 연결된 GPIO 가 1 로 읽힌다. 다른 건 생김새와 무슨
  * 상황을 흉내 내는지(사람이 지나감 / 기울어짐 / 자석이 붙음)뿐이다.
  */
-export const TOGGLE_INPUT_TYPES: ComponentType[] = ['switch', 'pir', 'tilt', 'reed', 'ir-obstacle']
+export const TOGGLE_INPUT_TYPES: ComponentType[] = [
+  'switch',
+  'pir',
+  'tilt',
+  'reed',
+  'ir-obstacle',
+  'joystick',
+]
 
 /** 눌린 동안에만 켜지는 입력. 지금은 버튼뿐이지만 목록으로 두면 판단이 한 군데에 모인다. */
 export const MOMENTARY_INPUT_TYPES: ComponentType[] = ['button']

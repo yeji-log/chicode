@@ -48,6 +48,7 @@ const GP16 = 'R21'
 const GP17 = 'R22'
 // GP26 은 오른쪽 열이다 — 아래에서 위로 세는 자리라 id 가 R31 이다(board.ts 참고).
 const GP26 = 'R31'
+const GP27 = 'R32'
 
 function ledOnly(): CircuitSnapshot {
   return {
@@ -298,6 +299,19 @@ function tempAnalog(): CircuitSnapshot {
     wires: [
       { id: 'w1', from: { kind: 'component', componentId: 'temp1', pin: 'out' }, to: { kind: 'board', pinId: GP26 }, color: '#dc2626' },
       { id: 'w2', from: { kind: 'component', componentId: 'temp1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
+    ],
+  }
+}
+
+function joystick(): CircuitSnapshot {
+  return {
+    components: [{ id: 'joy1', type: 'joystick', x: PART_X, y: 130 }],
+    breadboards: [],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'joy1', pin: 'vrx' }, to: { kind: 'board', pinId: GP26 }, color: '#dc2626' },
+      { id: 'w2', from: { kind: 'component', componentId: 'joy1', pin: 'vry' }, to: { kind: 'board', pinId: GP27 }, color: '#eab308' },
+      { id: 'w3', from: { kind: 'component', componentId: 'joy1', pin: 'sw' }, to: { kind: 'board', pinId: GP15 }, color: '#16a34a' },
+      { id: 'w4', from: { kind: 'component', componentId: 'joy1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
     ],
   }
 }
@@ -699,6 +713,40 @@ while True:
 
     print(raw, '->', round(volts, 2), 'V ->', round(celsius, 1), '도')
     time.sleep(0.5)
+`,
+  },
+  {
+    name: '19. 조이스틱으로 방향 읽기',
+    circuit: joystick(),
+    code: `from machine import Pin, ADC
+import time
+
+# 축 하나에 ADC 핀 하나씩. Pico 의 ADC 는 GP26, GP27, GP28 세 개뿐이다
+x_axis = ADC(Pin(26))
+y_axis = ADC(Pin(27))
+button = Pin(15, Pin.IN)
+
+while True:
+    x = x_axis.read_u16() * 100 // 65535   # 0(왼쪽) ~ 100(오른쪽)
+    y = y_axis.read_u16() * 100 // 65535   # 0(아래)  ~ 100(위)
+
+    방향 = ''
+    if y > 70:
+        방향 = '위'
+    elif y < 30:
+        방향 = '아래'
+    elif x > 70:
+        방향 = '오른쪽'
+    elif x < 30:
+        방향 = '왼쪽'
+    else:
+        방향 = '가운데'
+
+    if button.value():
+        방향 = 방향 + ' + 누름'
+
+    print(x, y, 방향)
+    time.sleep(0.3)
 `,
   },
 ]

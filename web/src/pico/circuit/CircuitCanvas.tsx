@@ -42,6 +42,7 @@ import {
   ledColorOf,
   mirrorX,
   ANALOG_SENSORS,
+  JOYSTICK_RADIUS,
   LCD_COLUMNS,
   LCD_I2C_ADDR,
   LCD_LINES,
@@ -222,7 +223,15 @@ function CircuitCanvas(
   const [analogValues, setAnalogValues] = useState<Map<string, number>>(new Map())
   // 아날로그 입력(가변저항 노브 / 조도센서 슬라이더)을 잡고 있는 부품 id. 부품
   // 드래그(dragging)와 별개로 둬야 조작할 때 부품이 같이 끌려오지 않는다.
-  const [analogDrag, setAnalogDrag] = useState<{ id: string; channel: AnalogChannel } | null>(null)
+  /** 아날로그 조작부를 잡고 있는 부품. ref 와 state 를 같이 두는 이유는 rewiringRef 와
+   *  같다 — pointerdown 과 pointermove 사이에 리렌더가 없으면 state 는 옛 값(null)을
+   *  보고 움직임을 통째로 흘려버린다. */
+  const analogDragRef = useRef<{ id: string; channel: AnalogChannel } | null>(null)
+  const [, setAnalogDragState] = useState<{ id: string; channel: AnalogChannel } | null>(null)
+  const setAnalogDrag = (next: { id: string; channel: AnalogChannel } | null) => {
+    analogDragRef.current = next
+    setAnalogDragState(next)
+  }
   /** 다시 잇는 중인 전선. ref 와 state 를 같이 두는 이유: finishWire 는 포인터 이벤트
    *  핸들러 안에서 "지금" 값을 읽어야 하는데, state 만 쓰면 pointerdown 과 pointerup
    *  사이에 리렌더가 없었을 때 옛 값(null)을 보고 전선을 옮기는 대신 새로 그어버린다
@@ -364,7 +373,7 @@ function CircuitCanvas(
     for (const c of components) {
       if (!isDigitalInput(c.type)) continue
       if (!activeInputs.has(c.id)) continue
-      const gpio = gpioForPin(c.id, 'a') ?? gpioForPin(c.id, 'b')
+      const gpio = gpioForPin(c.id, 'a') ?? gpioForPin(c.id, 'b') ?? gpioForPin(c.id, 'sw')
       if (gpio !== undefined) onButtonChange(gpio, true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -396,6 +405,14 @@ function CircuitCanvas(
           dhtTemperature(analogValues.get(analogKey(c.id, 'temp')) ?? DHT_DEFAULT_TEMP_RATIO),
           dhtHumidity(analogValues.get(analogKey(c.id, 'hum')) ?? DHT_DEFAULT_HUMIDITY_RATIO),
         )
+        continue
+      }
+      if (c.type === 'joystick') {
+        // 축 두 개가 각각 다른 ADC 핀으로 나간다. 가운데가 절반(32768)이다.
+        const x = gpioForPin(c.id, 'vrx')
+        const y = gpioForPin(c.id, 'vry')
+        if (x !== undefined) onAnalogChange(x, Math.round((analogValues.get(analogKey(c.id)) ?? 0.5) * ADC_MAX))
+        if (y !== undefined) onAnalogChange(y, Math.round((analogValues.get(analogKey(c.id, 'range')) ?? 0.5) * ADC_MAX))
         continue
       }
       const sensor = ANALOG_SENSORS[c.type]
@@ -597,12 +614,8 @@ function CircuitCanvas(
     }
     // 노브 돌리기는 locked(실행 중) 여도 된다 — 잠금의 목적은 배선 편집 금지지
     // 상호작용 금지가 아니다(버튼/스위치와 같은 이유).
-    if (analogDrag) {
-      const c = components.find((comp) => comp.id === analogDrag.id)
-      if (c) {
-        const value = analogValueAt(c, toModelPoint(event.clientX, event.clientY))
-        setAnalogValues((prev) => new Map(prev).set(analogKey(c.id, analogDrag.channel), value))
-      }
+    if (analogDragRef.current) {
+      applyAnalogAt(analogDragRef.current, toModelPoint(event.clientX, event.clientY))
       return
     }
 
@@ -873,7 +886,9 @@ function CircuitCanvas(
       else next.delete(componentId)
       return next
     })
-    const gpio = gpioForPin(componentId, 'a') ?? gpioForPin(componentId, 'b')
+    // 버튼·스위치는 a/b, 조이스틱은 sw 로 나간다.
+    const gpio =
+      gpioForPin(componentId, 'a') ?? gpioForPin(componentId, 'b') ?? gpioForPin(componentId, 'sw')
     if (gpio !== undefined) onButtonChange(gpio, active)
   }
 
@@ -950,6 +965,33 @@ function CircuitCanvas(
     let q = rotateAround({ x: p.x - component.x, y: p.y - component.y }, pivot, -(component.rotation ?? 0))
     if (component.flipped) q = mirrorX(q, pivot.x)
     return { x: q.x / COMPONENT_SCALE, y: q.y / COMPONENT_SCALE }
+  }
+
+  /** 조작부를 잡은 채 포인터가 간 자리를 값으로 반영한다. pointerdown 과 pointermove
+   *  가 같은 함수를 써야 "누르자마자 그 자리로 튀는" 동작이 어긋나지 않는다. */
+  const applyAnalogAt = (target: { id: string; channel: AnalogChannel }, p: Point) => {
+    const c = components.find((comp) => comp.id === target.id)
+    if (!c) return
+    if (c.type === 'joystick') {
+      // 스틱은 가로·세로를 한 번에 잡는다 — 슬라이더(가로만)·노브(각도만)와 다르다.
+      const { x, y } = joystickValueAt(c, p)
+      setAnalogValues((prev) => new Map(prev).set(analogKey(c.id), x).set(analogKey(c.id, 'range'), y))
+      return
+    }
+    setAnalogValues((prev) => new Map(prev).set(analogKey(c.id, target.channel), analogValueAt(c, p)))
+  }
+
+  /** 조이스틱 스틱 — 가운데를 0.5 로 두고 가로·세로를 각각 0~1 로 잡는다.
+   *  화면 좌표는 y 가 아래로 갈수록 크므로, 위로 밀면 값이 커지도록 뒤집는다
+   *  (실물 조이스틱도 위로 밀면 VRy 가 한쪽 끝으로 간다). */
+  const joystickValueAt = (component: PlacedComponent, p: Point): { x: number; y: number } => {
+    const local = toComponentLocal(component, p)
+    const pivot = COMPONENT_PIVOT[component.type]
+    const clamp = (v: number) => Math.max(0, Math.min(1, v))
+    return {
+      x: clamp((local.x + JOYSTICK_RADIUS) / (JOYSTICK_RADIUS * 2)),
+      y: clamp((pivot.y - local.y + JOYSTICK_RADIUS) / (JOYSTICK_RADIUS * 2)),
+    }
   }
 
   /** 조도센서·온습도·초음파 슬라이더 — 로컬 좌표의 가로 위치만 본다. */
@@ -1158,11 +1200,16 @@ function CircuitCanvas(
                     ? ULTRASONIC_DEFAULT_RATIO
                     : c.type === 'pir'
                       ? PIR_DEFAULT_DISTANCE_RATIO
-                      : 0)
+                      : c.type === 'joystick'
+                        ? 0.5
+                        : 0)
                 }
                 tempValue={analogValues.get(analogKey(c.id, 'temp')) ?? DHT_DEFAULT_TEMP_RATIO}
                 humidityValue={analogValues.get(analogKey(c.id, 'hum')) ?? DHT_DEFAULT_HUMIDITY_RATIO}
-                rangeValue={analogValues.get(analogKey(c.id, 'range')) ?? PIR_DEFAULT_RANGE_RATIO}
+                rangeValue={
+                  analogValues.get(analogKey(c.id, 'range')) ??
+                  (c.type === 'joystick' ? 0.5 : PIR_DEFAULT_RANGE_RATIO)
+                }
                 locked={locked}
                 selected={selected?.kind === 'component' && selected.id === c.id}
                 onBodyPointerDown={(event) => {
@@ -1185,12 +1232,7 @@ function CircuitCanvas(
                   event.stopPropagation()
                   setSelected({ kind: 'component', id: c.id })
                   setAnalogDrag({ id: c.id, channel })
-                  setAnalogValues((prev) =>
-                    new Map(prev).set(
-                      analogKey(c.id, channel),
-                      analogValueAt(c, toModelPoint(event.clientX, event.clientY)),
-                    ),
-                  )
+                  applyAnalogAt({ id: c.id, channel }, toModelPoint(event.clientX, event.clientY))
                 }}
               />
             ))}
@@ -2063,6 +2105,7 @@ function ComponentGlyph({
         component.type === 'ultrasonic' ||
         component.type === 'lcd' ||
         component.type === 'ir-obstacle' ||
+        component.type === 'joystick' ||
         ANALOG_SENSORS[component.type]) && <Legs />}
 
       {component.type === 'potentiometer' && (
@@ -2352,6 +2395,63 @@ function ComponentGlyph({
             className="cursor-pointer"
             onPointerDown={onKnobPointerDown}
           />
+        </g>
+      )}
+
+      {component.type === 'joystick' && (
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          <rect
+            x={-26}
+            y={2}
+            width={52}
+            height={40}
+            rx={3}
+            fill="#1e293b"
+            stroke="#0f172a"
+            strokeWidth={1.5}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
+          {/* 스틱이 움직이는 범위 */}
+          <circle cx={0} cy={22} r={JOYSTICK_RADIUS + 4} fill="#0f172a" stroke="#334155" strokeWidth={1.2} className="pointer-events-none" />
+          {/* 스틱 머리. 끌면 가로·세로가 한 번에 정해지고, 누르면 sw 핀이 켜진다. */}
+          <circle
+            cx={(analogValue - 0.5) * JOYSTICK_RADIUS * 2}
+            cy={22 - (rangeValue - 0.5) * JOYSTICK_RADIUS * 2}
+            r={9}
+            fill={active ? '#fbbf24' : '#e2e8f0'}
+            stroke="#0f172a"
+            strokeWidth={1.5}
+            className="cursor-pointer"
+            onPointerDown={onKnobPointerDown}
+          />
+          {/* 누름(sw)은 따로 받는다 — 스틱 머리에 같이 걸면 방향을 조절할 때마다
+              버튼이 눌린 것으로 처리된다. */}
+          <rect
+            x={-24}
+            y={4}
+            width={16}
+            height={11}
+            rx={2}
+            fill={active ? '#fbbf24' : '#334155'}
+            stroke="#0f172a"
+            strokeWidth={1.2}
+            className="cursor-pointer"
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              onInputActiveChange(!active)
+            }}
+          />
+          <Unflip>
+            <text x={-16} y={12.5} fontSize={7} fontWeight="bold" textAnchor="middle" fill={active ? '#78350f' : '#94a3b8'} className="pointer-events-none select-none">
+              SW
+            </text>
+          </Unflip>
+          <Unflip>
+            <text x={0} y={-6} fontSize={8.5} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              X {Math.round(analogValue * 100)} · Y {Math.round(rangeValue * 100)}
+            </text>
+          </Unflip>
         </g>
       )}
 
