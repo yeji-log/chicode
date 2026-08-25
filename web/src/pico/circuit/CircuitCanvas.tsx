@@ -39,6 +39,7 @@ import {
   LDR_TRACK_HALF_WIDTH,
   LED_COLORS,
   ledColorOf,
+  mirrorX,
   type PinRef,
   type PlacedBoard,
   type PlacedBreadboard,
@@ -726,6 +727,17 @@ function CircuitCanvas(
     }))
   }
 
+  /** 선택한 부품을 좌우로 뒤집는다. 브레드보드·보드는 대상이 아니다 — 대칭이라
+   *  뒤집어도 달라지는 게 없고, 핀 라벨만 거울로 보이게 된다. */
+  const flipSelected = () => {
+    if (locked || selected?.kind !== 'component') return
+    pushHistory()
+    setState((s) => ({
+      ...s,
+      components: s.components.map((c) => (c.id === selected.id ? { ...c, flipped: !c.flipped } : c)),
+    }))
+  }
+
   const rotateSelected = () => {
     if (!selected) return
     if (selected.kind === 'component') rotateComponent(selected.id)
@@ -754,8 +766,12 @@ function CircuitCanvas(
       }
 
       if (!selected) return
-      if (event.key === 'r' || event.key === 'R') {
+      // 한글 입력 상태에서 r 을 누르면 'ㄱ', m 은 'ㅡ' 가 들어온다. 학생 컴퓨터는
+      // 한영 상태가 제각각이라 둘 다 받아준다(실제로 자주 밟는다).
+      if (event.key === 'r' || event.key === 'R' || event.key === 'ㄱ') {
         rotateSelected()
+      } else if (event.key === 'm' || event.key === 'M' || event.key === 'ㅡ') {
+        flipSelected()
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault()
         deleteSelected()
@@ -807,7 +823,11 @@ function CircuitCanvas(
     // 거는 rotate()와 같은 중심·각도라야 전선이 실제로 보이는 핀 자리에 붙는다.
     // 회전 중심은 부품 로컬 원점(0,0)이 아니라 몸통 한가운데(COMPONENT_PIVOT) —
     // 안 그러면 몸통이 원점을 축으로 궤도를 그리며 돈다.
-    const rotated = rotateAround({ x: spec.dx, y: spec.dy }, COMPONENT_PIVOT[comp.type], comp.rotation ?? 0)
+    const pivot = COMPONENT_PIVOT[comp.type]
+    // 반전이 먼저, 회전이 나중 — ComponentGlyph 의 transform 순서와 같아야 전선이
+    // 화면에 보이는 핀 자리에 붙는다.
+    const local = comp.flipped ? mirrorX({ x: spec.dx, y: spec.dy }, pivot.x) : { x: spec.dx, y: spec.dy }
+    const rotated = rotateAround(local, pivot, comp.rotation ?? 0)
     return { x: comp.x + rotated.x, y: comp.y + rotated.y }
   }
 
@@ -1168,7 +1188,7 @@ function CircuitCanvas(
       <p className="px-1 text-xs leading-relaxed text-ink-500">
         {locked
           ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
-          : '부품/브레드보드/Pico 보드는 클릭해서 선택 후 R(회전)로 돌리고 끌어서 옮깁니다(보드는 삭제 불가). 핀(원)을 끌면 전선이 이어지고, 전선을 클릭하면 양 끝에 손잡이가 나와 다른 핀으로 옮길 수 있습니다(오른쪽 클릭은 색 바꾸기). 삭제는 Delete 키나 휴지통 버튼, 되돌리기는 ⌘/Ctrl+Z 입니다.'}
+          : '부품/브레드보드/Pico 보드는 클릭해서 선택한 뒤 끌어서 옮기고, R(또는 ㄱ)로 돌리고 M(또는 ㅡ)으로 좌우 반전합니다(보드는 삭제 불가). 핀(원)을 끌면 전선이 이어지고, 전선을 클릭하면 양 끝에 손잡이가 나와 다른 핀으로 옮길 수 있습니다(오른쪽 클릭은 색 바꾸기). 삭제는 Delete 키나 휴지통 버튼, 되돌리기는 ⌘/Ctrl+Z 입니다.'}
       </p>
 
       {confirmingClearAll && (
@@ -1841,6 +1861,11 @@ function ComponentGlyph({
   // LED 는 두 다리 중 어느 쪽에 신호가 와도 켜진 것으로 본다(극성까지 따지진 않는다).
   const ledLit = Math.max(levelOf('anode'), levelOf('cathode'))
   const ledColor = ledColorOf(component.color)
+
+  /** 부품을 반전하면 안쪽 글자까지 거울로 뒤집혀 읽을 수 없게 된다. 값 표시만 되돌린다.
+   *  부품들의 값 글자가 전부 x=0(textAnchor middle)이라 scale(-1 1) 한 번이면 맞는다. */
+  const Unflip = ({ children }: { children: React.ReactNode }) =>
+    component.flipped ? <g transform="scale(-1 1)">{children}</g> : <>{children}</>
   // RGB 는 채널마다 세기가 다를 수 있다 — PWM 을 쓰면 실제로 색이 섞인다.
   const rgbChannel = (pin: string) => Math.round(90 + 165 * levelOf(pin))
   const buzzerFreq = freqOf('positive') ?? freqOf('negative')
@@ -1881,7 +1906,14 @@ function ComponentGlyph({
           (기본값 rotate(각도)는 로컬 원점(0,0) 기준이라 몸통과 안 맞는다).
           pinPoint()가 rotateAround로 계산하는 것과 같은 중심·방향(시계 방향)
           이라야 전선이 실제 보이는 핀 위치에 붙는다. */}
-      <g transform={`rotate(${component.rotation ?? 0} ${pivot.x} ${pivot.y})`}>
+      <g
+        transform={[
+          `rotate(${component.rotation ?? 0} ${pivot.x} ${pivot.y})`,
+          component.flipped ? `translate(${2 * pivot.x} 0) scale(-1 1)` : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
       {(component.type === 'led' ||
         component.type === 'rgb-led' ||
         component.type === 'buzzer' ||
@@ -1931,9 +1963,11 @@ function ComponentGlyph({
           <g transform={`rotate(${analogValue * KNOB_SWEEP_DEG - KNOB_SWEEP_DEG / 2} 0 14)`}>
             <line x1={0} y1={14} x2={0} y2={3} stroke="#dc2626" strokeWidth={2.5} strokeLinecap="round" />
           </g>
-          <text x={0} y={-9} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
-            {Math.round(analogValue * 100)}%
-          </text>
+          <Unflip>
+            <text x={0} y={-9} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              {Math.round(analogValue * 100)}%
+            </text>
+          </Unflip>
         </g>
       )}
 
@@ -2009,9 +2043,11 @@ function ComponentGlyph({
           {/* PWM 으로 울릴 땐 몇 Hz 인지 같이 보여준다 — 음계 실습에서 "지금 무슨 음을
               내고 있는가"가 눈으로 보여야 한다. */}
           {buzzerFreq !== undefined && (
-            <text x={0} y={-6} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#b91c1c" className="select-none">
-              {buzzerFreq}Hz
-            </text>
+            <Unflip>
+              <text x={0} y={-6} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#b91c1c" className="select-none">
+                {buzzerFreq}Hz
+              </text>
+            </Unflip>
           )}
         </g>
       )}
@@ -2065,9 +2101,11 @@ function ComponentGlyph({
             className="cursor-pointer"
             onPointerDown={onKnobPointerDown}
           />
-          <text x={0} y={-18} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
-            {Math.round(analogValue * 100)}%
-          </text>
+          <Unflip>
+            <text x={0} y={-18} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              {Math.round(analogValue * 100)}%
+            </text>
+          </Unflip>
         </g>
       )}
 
@@ -2131,9 +2169,11 @@ function ComponentGlyph({
             )),
           )}
 
-          <text x={0} y={-24} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
-            {dhtTemperature(tempValue)}°C · {dhtHumidity(humidityValue)}%
-          </text>
+          <Unflip>
+            <text x={0} y={-24} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              {dhtTemperature(tempValue)}°C · {dhtHumidity(humidityValue)}%
+            </text>
+          </Unflip>
 
           {/* 위가 온도(빨강), 아래가 습도(파랑). 조작부가 둘이라 채널을 같이 넘긴다. */}
           {[
@@ -2183,9 +2223,11 @@ function ComponentGlyph({
           </g>
           <circle cx={0} cy={-1} r={4} fill="#e5e7eb" stroke="#64748b" strokeWidth={1.2} />
           {servoAngle !== null && (
-            <text x={0} y={24} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#eff6ff" className="select-none">
-              {servoAngle}°
-            </text>
+            <Unflip>
+              <text x={0} y={24} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#eff6ff" className="select-none">
+                {servoAngle}°
+              </text>
+            </Unflip>
           )}
         </g>
       )}
@@ -2327,9 +2369,11 @@ function ComponentGlyph({
             strokeWidth={2.5}
             strokeLinecap="round"
           />
-          <text x={0} y={-3} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
-            {isOn('a') || isOn('b') ? '딸깍' : ''}
-          </text>
+          <Unflip>
+            <text x={0} y={-3} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              {isOn('a') || isOn('b') ? '딸깍' : ''}
+            </text>
+          </Unflip>
         </g>
       )}
 

@@ -158,6 +158,9 @@ export interface PlacedComponent {
   /** 0/90/180/270도. 없으면 0(회전 없음)으로 취급 — 이 필드가 생기기 전 저장된
    *  회로(localStorage, EXAMPLES)도 그대로 읽혀야 하니 optional로 둔다. */
   rotation?: 0 | 90 | 180 | 270
+  /** 좌우 반전. 다리 순서를 바꾸고 싶을 때 쓴다(예: LED 를 반대로 꽂기).
+   *  회전보다 먼저 적용된다 — pinPoint 와 ComponentGlyph 가 같은 순서를 지켜야 한다. */
+  flipped?: boolean
 }
 
 export type BreadboardSize = 'mini' | 'medium'
@@ -235,6 +238,12 @@ export function rotateOffset(dx: number, dy: number, rotation: number): Point {
   const cos = Math.cos(rad)
   const sin = Math.sin(rad)
   return { x: dx * cos - dy * sin, y: dx * sin + dy * cos }
+}
+
+/** point를 pivot의 세로축(x = pivot.x) 기준으로 좌우 반전한다. 회전보다 먼저 건다 —
+ *  SVG 쪽 transform 목록도 `rotate(...) scale(-1 1)` 순서라 안쪽(=먼저)이 반전이다. */
+export function mirrorX(point: Point, pivotX: number): Point {
+  return { x: 2 * pivotX - point.x, y: point.y }
 }
 
 /** point를 pivot 기준으로 돌린다(rotateOffset은 항상 원점(0,0) 기준이라, 부품
