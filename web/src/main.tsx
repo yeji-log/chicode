@@ -12,6 +12,7 @@ import { installMapUpsertPolyfill } from './lib/mapUpsertPolyfill'
 installMapUpsertPolyfill()
 import Home from './pages/Home'
 import News from './pages/News'
+import DevSlideSizeTest from './pages/__DevSlideSizeTest'
 import Materials from './pages/Materials'
 import SubjectMaterials, { MaterialsList, SubjectOt } from './pages/SubjectMaterials'
 import Practice from './pages/Practice'
@@ -41,6 +42,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/" element={<App />}>
             <Route index element={<Home />} />
             <Route path="news" element={<News />} />
+            <Route path="__dev-slide-size" element={<DevSlideSizeTest />} />
             <Route path="materials" element={<Materials />} />
             {/* 과목별 핀 게이트가 <Outlet/> 을 연다(lab의 LabGate 와 같은 패턴) —
                 자료/수업목차 탭을 오가도 핀을 다시 묻지 않는다. LabRoadmap/

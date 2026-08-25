@@ -38,7 +38,11 @@ export default function Modal({
     >
       <div
         className={
-          'flex h-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ' +
+          // h-full 을 주면 안 된다 — 내용이 두 줄뿐인 확인창도 화면의 85% 높이로
+          // 늘어난다(실측: 1354px 화면에서 1151px 짜리 모달이 떴다). 높이는 내용에
+          // 맞추고 max-h 로만 막는다. 긴 폼은 아래 본문이 flex-1 overflow-auto 라
+          // 그 안에서 스크롤된다.
+          'flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ' +
           (wide ? 'max-h-[90vh] w-full max-w-3xl' : 'max-h-[85vh] w-full max-w-lg')
         }
         onClick={(event) => event.stopPropagation()}
