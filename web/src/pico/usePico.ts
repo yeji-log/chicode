@@ -25,6 +25,8 @@ export interface UsePico {
   setButton: (pin: number, pressed: boolean) => void
   /** 가변저항 노브·조도센서 슬라이더를 움직일 때 호출한다(0~65535). setButton 과 같은 경로. */
   setAnalog: (pin: number, value: number) => void
+  /** 온습도 센서 슬라이더를 움직일 때 호출한다(온도 ℃, 습도 %). */
+  setDht: (pin: number, temperature: number, humidity: number) => void
 }
 
 /**
@@ -158,5 +160,23 @@ export function usePico(): UsePico {
     workerRef.current?.postMessage(request)
   }, [])
 
-  return { status, output, elapsedMs, bootError, gpio, pwm, run, stop, clearOutput, setButton, setAnalog }
+  const setDht = useCallback((pin: number, temperature: number, humidity: number) => {
+    const request: WorkerRequest = { type: 'dht', pin, temperature, humidity }
+    workerRef.current?.postMessage(request)
+  }, [])
+
+  return {
+    status,
+    output,
+    elapsedMs,
+    bootError,
+    gpio,
+    pwm,
+    run,
+    stop,
+    clearOutput,
+    setButton,
+    setAnalog,
+    setDht,
+  }
 }

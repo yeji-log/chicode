@@ -29,6 +29,12 @@ import {
   type ComponentType,
   DEFAULT_WIRE_COLOR,
   isDigitalInput,
+  type AnalogChannel,
+  analogKey,
+  DHT_DEFAULT_HUMIDITY_RATIO,
+  DHT_DEFAULT_TEMP_RATIO,
+  dhtHumidity,
+  dhtTemperature,
   KNOB_SWEEP_DEG,
   LDR_TRACK_HALF_WIDTH,
   type PinRef,
@@ -129,6 +135,8 @@ export interface CircuitCanvasProps {
   onButtonChange: (gpio: number, pressed: boolean) => void
   /** 가변저항 노브를 돌릴 때, 연결된 GPIO 번호로 0~65535 값을 알려준다. */
   onAnalogChange: (gpio: number, value: number) => void
+  /** 온습도 센서 슬라이더를 움직일 때, 연결된 GPIO 번호로 온도(℃)·습도(%)를 알려준다. */
+  onDhtChange: (gpio: number, temperature: number, humidity: number) => void
   /**
    * true 면 배선/부품 편집을 전부 막는다(코드 실행 중). 버튼·스위치를 눌러보는 것만은
    * 계속 된다 — "실행 중인 회로가 실제로 반응하는 걸 보는" 게 이 잠금의 목적이지,
@@ -166,7 +174,7 @@ type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' | 'wir
 type Rewiring = { wireId: string; end: 'from' | 'to' } | null
 
 function CircuitCanvas(
-  { gpioLevels, pwmLevels, onButtonChange, onAnalogChange, locked = false }: CircuitCanvasProps,
+  { gpioLevels, pwmLevels, onButtonChange, onAnalogChange, onDhtChange, locked = false }: CircuitCanvasProps,
   ref: React.Ref<CircuitCanvasHandle>,
 ) {
   const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
@@ -176,13 +184,14 @@ function CircuitCanvas(
   const [dragging, setDragging] = useState<DragTarget | null>(null)
   // 버튼(누르는 동안)과 스위치(클릭해서 토글) 둘 다 "지금 켜진 입력 부품 id" 로 통일해서 관리한다.
   const [activeInputs, setActiveInputs] = useState<Set<string>>(new Set())
-  // 가변저항 노브 위치(부품 id → 0~1). 회로 자체(components/wires)와 달리 저장하지
-  // 않는다 — "지금 노브를 어디까지 돌려놨는가"는 버튼을 누르고 있는 것과 같은 순간적인
-  // 물리 상태지 회로의 일부가 아니다.
+  // 아날로그 조작부의 위치(analogKey(부품 id, 채널) → 0~1). 회로 자체(components/
+  // wires)와 달리 저장하지 않는다 — "지금 노브를 어디까지 돌려놨는가"는 버튼을 누르고
+  // 있는 것과 같은 순간적인 물리 상태지 회로의 일부가 아니다.
+  // 온습도처럼 조작부가 둘인 부품이 있어서 부품 id 하나로는 부족하다(analogKey 참고).
   const [analogValues, setAnalogValues] = useState<Map<string, number>>(new Map())
   // 아날로그 입력(가변저항 노브 / 조도센서 슬라이더)을 잡고 있는 부품 id. 부품
   // 드래그(dragging)와 별개로 둬야 조작할 때 부품이 같이 끌려오지 않는다.
-  const [analogDrag, setAnalogDrag] = useState<string | null>(null)
+  const [analogDrag, setAnalogDrag] = useState<{ id: string; channel: AnalogChannel } | null>(null)
   /** 다시 잇는 중인 전선. ref 와 state 를 같이 두는 이유: finishWire 는 포인터 이벤트
    *  핸들러 안에서 "지금" 값을 읽어야 하는데, state 만 쓰면 pointerdown 과 pointerup
    *  사이에 리렌더가 없었을 때 옛 값(null)을 보고 전선을 옮기는 대신 새로 그어버린다
@@ -348,10 +357,20 @@ function CircuitCanvas(
    *  (버튼의 위 useEffect 와 같은 이유). 안 이어졌으면 알릴 곳이 없으니 건너뛴다. */
   useEffect(() => {
     for (const c of components) {
+      if (c.type === 'dht') {
+        const gpio = gpioForPin(c.id, 'out')
+        if (gpio === undefined) continue
+        onDhtChange(
+          gpio,
+          dhtTemperature(analogValues.get(analogKey(c.id, 'temp')) ?? DHT_DEFAULT_TEMP_RATIO),
+          dhtHumidity(analogValues.get(analogKey(c.id, 'hum')) ?? DHT_DEFAULT_HUMIDITY_RATIO),
+        )
+        continue
+      }
       if (c.type !== 'potentiometer' && c.type !== 'ldr') continue
       const gpio = gpioForPin(c.id, 'out')
       if (gpio === undefined) continue
-      onAnalogChange(gpio, Math.round((analogValues.get(c.id) ?? 0) * ADC_MAX))
+      onAnalogChange(gpio, Math.round((analogValues.get(analogKey(c.id)) ?? 0) * ADC_MAX))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analogValues, connectivity, components])
@@ -493,8 +512,11 @@ function CircuitCanvas(
     // 노브 돌리기는 locked(실행 중) 여도 된다 — 잠금의 목적은 배선 편집 금지지
     // 상호작용 금지가 아니다(버튼/스위치와 같은 이유).
     if (analogDrag) {
-      const c = components.find((comp) => comp.id === analogDrag)
-      if (c) setAnalogValues((prev) => new Map(prev).set(c.id, analogValueAt(c, toModelPoint(event.clientX, event.clientY))))
+      const c = components.find((comp) => comp.id === analogDrag.id)
+      if (c) {
+        const value = analogValueAt(c, toModelPoint(event.clientX, event.clientY))
+        setAnalogValues((prev) => new Map(prev).set(analogKey(c.id, analogDrag.channel), value))
+      }
       return
     }
 
@@ -795,7 +817,9 @@ function CircuitCanvas(
   /** 포인터 위치를 아날로그 입력값(0~1)으로 바꾼다. 가변저항은 노브 각도로,
    *  조도센서는 슬라이더의 가로 위치로 정해진다. */
   const analogValueAt = (component: PlacedComponent, p: Point): number =>
-    component.type === 'ldr' ? sliderValueAt(component, p) : knobValueAt(component, p)
+    component.type === 'ldr' || component.type === 'dht'
+      ? sliderValueAt(component, p)
+      : knobValueAt(component, p)
 
   /** 조도센서 슬라이더 — 부품이 회전해 있으면 포인터를 반대로 돌려서 부품 기준 좌표로
    *  바꾼 뒤 가로 위치만 본다. */
@@ -993,7 +1017,9 @@ function CircuitCanvas(
                 pwmLevels={pwmLevels}
                 gpioForPin={(pin) => gpioForPin(c.id, pin)}
                 active={activeInputs.has(c.id)}
-                analogValue={analogValues.get(c.id) ?? 0}
+                analogValue={analogValues.get(analogKey(c.id)) ?? 0}
+                tempValue={analogValues.get(analogKey(c.id, 'temp')) ?? DHT_DEFAULT_TEMP_RATIO}
+                humidityValue={analogValues.get(analogKey(c.id, 'hum')) ?? DHT_DEFAULT_HUMIDITY_RATIO}
                 locked={locked}
                 selected={selected?.kind === 'component' && selected.id === c.id}
                 onBodyPointerDown={(event) => {
@@ -1012,12 +1038,15 @@ function CircuitCanvas(
                   finishWire({ kind: 'component', componentId: c.id, pin })
                 }}
                 onInputActiveChange={(active) => setInputActive(c.id, active)}
-                onKnobPointerDown={(event) => {
+                onKnobPointerDown={(event, channel = 'value') => {
                   event.stopPropagation()
                   setSelected({ kind: 'component', id: c.id })
-                  setAnalogDrag(c.id)
+                  setAnalogDrag({ id: c.id, channel })
                   setAnalogValues((prev) =>
-                    new Map(prev).set(c.id, analogValueAt(c, toModelPoint(event.clientX, event.clientY))),
+                    new Map(prev).set(
+                      analogKey(c.id, channel),
+                      analogValueAt(c, toModelPoint(event.clientX, event.clientY)),
+                    ),
                   )
                 }}
               />
@@ -1712,6 +1741,8 @@ function ComponentGlyph({
   gpioForPin,
   active,
   analogValue,
+  tempValue,
+  humidityValue,
   locked,
   selected,
   onBodyPointerDown,
@@ -1725,15 +1756,18 @@ function ComponentGlyph({
   pwmLevels: Map<number, { freq: number; duty: number }>
   gpioForPin: (pin: string) => number | undefined
   active: boolean
-  /** 가변저항 노브 위치(0~1). 다른 부품에선 안 쓴다. */
+  /** 가변저항 노브·조도센서 슬라이더 위치(0~1). 다른 부품에선 안 쓴다. */
   analogValue: number
+  /** 온습도 센서의 두 슬라이더 위치(0~1). */
+  tempValue: number
+  humidityValue: number
   locked: boolean
   selected: boolean
   onBodyPointerDown: (e: React.PointerEvent<SVGGElement>) => void
   onPinPointerDown: (pin: string, e: React.PointerEvent) => void
   onPinPointerUp: (pin: string, e: React.PointerEvent) => void
   onInputActiveChange: (active: boolean) => void
-  onKnobPointerDown: (e: React.PointerEvent) => void
+  onKnobPointerDown: (e: React.PointerEvent, channel?: AnalogChannel) => void
 }) {
   const pins = COMPONENT_PINS[component.type]
   const pivot = COMPONENT_PIVOT[component.type]
@@ -1806,7 +1840,8 @@ function ComponentGlyph({
         component.type === 'vibration' ||
         component.type === 'pir' ||
         component.type === 'tilt' ||
-        component.type === 'reed') && <Legs />}
+        component.type === 'reed' ||
+        component.type === 'dht') && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -1979,6 +2014,71 @@ function ComponentGlyph({
           <text x={0} y={-18} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
             {Math.round(analogValue * 100)}%
           </text>
+        </g>
+      )}
+
+      {component.type === 'dht' && (
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          {/* 파란 DHT11 케이스. 몸통은 끄는 자리, 위 두 슬라이더가 누르는 자리다. */}
+          <rect
+            x={-22}
+            y={4}
+            width={44}
+            height={34}
+            rx={3}
+            fill="#1d4ed8"
+            stroke="#1e3a8a"
+            strokeWidth={1.5}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
+          {/* 실물 케이스의 격자 구멍 */}
+          {[0, 1, 2].map((row) =>
+            [0, 1, 2, 3].map((col) => (
+              <circle
+                key={`${row}-${col}`}
+                cx={-13 + col * 8.5}
+                cy={12 + row * 8}
+                r={2.2}
+                fill="#1e3a8a"
+                className="pointer-events-none"
+              />
+            )),
+          )}
+
+          <text x={0} y={-24} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+            {dhtTemperature(tempValue)}°C · {dhtHumidity(humidityValue)}%
+          </text>
+
+          {/* 위가 온도(빨강), 아래가 습도(파랑). 조작부가 둘이라 채널을 같이 넘긴다. */}
+          {[
+            { channel: 'temp' as const, y: -14, value: tempValue, fill: '#ef4444', stroke: '#7f1d1d' },
+            { channel: 'hum' as const, y: -3, value: humidityValue, fill: '#38bdf8', stroke: '#075985' },
+          ].map((slider) => (
+            <g key={slider.channel}>
+              <line
+                x1={-LDR_TRACK_HALF_WIDTH}
+                y1={slider.y}
+                x2={LDR_TRACK_HALF_WIDTH}
+                y2={slider.y}
+                stroke="#a8a29e"
+                strokeWidth={3}
+                strokeLinecap="round"
+                className="cursor-pointer"
+                onPointerDown={(e) => onKnobPointerDown(e, slider.channel)}
+              />
+              <circle
+                cx={-LDR_TRACK_HALF_WIDTH + slider.value * LDR_TRACK_HALF_WIDTH * 2}
+                cy={slider.y}
+                r={5.5}
+                fill={slider.fill}
+                stroke={slider.stroke}
+                strokeWidth={1.5}
+                className="cursor-pointer"
+                onPointerDown={(e) => onKnobPointerDown(e, slider.channel)}
+              />
+            </g>
+          ))}
         </g>
       )}
 

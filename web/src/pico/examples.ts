@@ -169,6 +169,17 @@ function tiltAndBuzzer(): CircuitSnapshot {
   }
 }
 
+function dhtOnly(): CircuitSnapshot {
+  return {
+    components: [{ id: 'dht1', type: 'dht', x: PART_X, y: 130 }],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'dht1', pin: 'out' }, to: { kind: 'board', pinId: GP14 } },
+      { id: 'w2', from: { kind: 'component', componentId: 'dht1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
 export const EXAMPLES: Example[] = [
   {
     name: '1. LED 켜고 끄기',
@@ -393,6 +404,30 @@ while True:
         motor.off()
         print('똑바로')
     time.sleep(0.2)
+`,
+  },
+  {
+    name: '12. 온습도 재기 (DHT11)',
+    circuit: dhtOnly(),
+    code: `import dht
+from machine import Pin
+import time
+
+sensor = dht.DHT11(Pin(14))   # 센서의 빨간·파란 슬라이더를 움직여 보세요
+
+while True:
+    sensor.measure()                # 센서에게 "지금 재줘" 라고 시킨다
+    t = sensor.temperature()        # 섭씨 온도
+    h = sensor.humidity()           # 습도 %
+
+    print(t, '도 /', h, '%')
+
+    if t >= 28:
+        print('  더워요!')
+    elif t <= 10:
+        print('  추워요!')
+
+    time.sleep(1)
 `,
   },
 ]

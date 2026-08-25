@@ -28,6 +28,8 @@ export type WorkerRequest =
   | { type: 'button'; pin: number; pressed: boolean }
   /** 가변저항·조도센서 같은 아날로그 입력의 현재 값(0~65535). 버튼과 같은 경로다. */
   | { type: 'analog'; pin: number; value: number }
+  /** 온습도 센서가 그 핀에서 읽어갈 값. 온도는 ℃, 습도는 %. */
+  | { type: 'dht'; pin: number; temperature: number; humidity: number }
 
 export type WorkerResponse =
   | { type: 'ready' }
@@ -52,6 +54,10 @@ const gpioIn = new Map<number, boolean>()
  *  실행마다 비우지 않는다 — 노브를 돌려둔 상태는 실행과 무관한 "물리적" 상태다
  *  (버튼을 누르고 있는 것과 같다). */
 const adcIn = new Map<number, number>()
+
+/** 온습도 센서(DHT11/22)가 핀마다 들고 있는 값. UI 의 슬라이더가 밀어 넣는다.
+ *  아날로그 입력(adcIn)과 같은 구조지만 값이 두 개(온도/습도)라 따로 둔다. */
+const dhtIn = new Map<number, { temperature: number; humidity: number }>()
 
 /** 출력으로 쓴 핀의 마지막 값. 진짜 Pico 는 Pin.OUT 핀도 value() 로 읽으면 방금 쓴
  *  값이 나오는데, 여기엔 이 기록이 없어서 gpioIn(버튼 상태)을 대신 읽고 있었다.
@@ -101,6 +107,12 @@ async function boot(): Promise<MicroPythonInterface> {
       gpioOut.delete(pin)
       post({ type: 'pwm', pin, freq, duty })
     },
+    /** 온습도 센서 값. 아무것도 안 물려 있으면 실물이 그렇듯 읽기가 실패한다
+     *  (measure() 가 OSError 를 낸다 — 아래 dht 모듈 참고). */
+    dht_read(pin: number) {
+      const v = dhtIn.get(pin)
+      return v ? [v.temperature, v.humidity] : null
+    },
     /** ADC 로 읽는 값(0~65535). 아무것도 안 물려 있으면 0 — 실제 보드에서 뜬 핀은
      *  값이 떠다니지만, 그걸 흉내 내면 "왜 자꾸 숫자가 바뀌냐"는 질문만 늘어난다. */
     adc_read(pin: number) {
@@ -133,6 +145,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
   if (message.type === 'analog') {
     adcIn.set(message.pin, Math.max(0, Math.min(65535, Math.round(message.value))))
+    return
+  }
+
+  if (message.type === 'dht') {
+    dhtIn.set(message.pin, { temperature: message.temperature, humidity: message.humidity })
     return
   }
 
@@ -321,6 +338,52 @@ def _chico_build_machine():
 
 sys.modules["machine"] = _chico_build_machine()
 del _chico_build_machine
+
+
+def _chico_build_dht():
+    """import dht 로 쓰는 온습도 모듈. 실물 DHT11/22 는 한 가닥 선으로 마이크로초
+    단위 펄스를 주고받는 까다로운 프로토콜을 쓰는데, MicroPython 에서는 그걸 dht
+    모듈이 감춰준다 — 학생이 쓰는 API 는 measure()/temperature()/humidity() 뿐이다.
+    그래서 여기서도 프로토콜을 흉내 낼 필요 없이 그 세 개만 있으면 된다."""
+
+    class _Module:
+        pass
+
+    class DHTBase:
+        def __init__(self, pin):
+            self.id = pin.id if hasattr(pin, "id") else pin
+            self._t = 0
+            self._h = 0
+
+        def measure(self):
+            # 실물도 센서가 안 붙어 있으면 여기서 OSError 를 낸다. 안 붙었는데 0도
+            # 0% 를 돌려주면 "센서가 고장인지 안 꽂았는지" 를 구분할 수 없다.
+            v = _chico_hw.dht_read(self.id)
+            if v is None:
+                raise OSError("온습도 센서가 연결되어 있지 않아요 (핀 GP%d)" % self.id)
+            self._t = v[0]
+            self._h = v[1]
+
+        def temperature(self):
+            return self._t
+
+        def humidity(self):
+            return self._h
+
+    class DHT11(DHTBase):
+        pass
+
+    class DHT22(DHTBase):
+        pass
+
+    mod = _Module()
+    mod.DHT11 = DHT11
+    mod.DHT22 = DHT22
+    return mod
+
+
+sys.modules["dht"] = _chico_build_dht()
+del _chico_build_dht
 `
 
 /**

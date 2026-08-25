@@ -46,6 +46,7 @@ export type ComponentType =
   | 'relay'
   | 'vibration'
   | 'traffic-light'
+  | 'dht'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -121,6 +122,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '리드 스위치(클릭해서 자석 대기)',
     short: '리드',
     emoji: '🧲',
+  },
+  {
+    type: 'dht',
+    category: 'input',
+    label: '온습도 센서 DHT11(온도·습도 슬라이더)',
+    short: '온습도',
+    emoji: '🌡️',
   },
   {
     type: 'ldr',
@@ -279,6 +287,12 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'green', dx: 6, dy: 62 },
     { pin: 'gnd', dx: 18, dy: 62 },
   ],
+  // DHT11 모듈과 같은 3핀(VCC/DATA/GND). 실물 알맹이는 4핀이지만 시중 모듈은 3핀이다.
+  dht: [
+    { pin: 'vcc', dx: -16, dy: 54 },
+    { pin: 'out', dx: 0, dy: 54 },
+    { pin: 'gnd', dx: 16, dy: 54 },
+  ],
   // 조도센서 모듈(CDS + 저항이 보드에 같이 붙은 형태)과 같은 3핀. 실물 CDS 알맹이만
   // 쓰면 분압 저항을 따로 달아야 하는데, 이 시뮬레이터엔 저항 부품 자체가 없다 —
   // 모듈 형태로 두는 게 학생이 실제로 사는 부품과도 맞고 거짓말도 아니다.
@@ -320,6 +334,31 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   relay: { x: 0, y: 16 },
   vibration: { x: 0, y: 14 },
   'traffic-light': { x: 0, y: 28 },
+  dht: { x: 0, y: 21 },
+}
+
+/**
+ * 온습도 센서 슬라이더가 만드는 값의 범위. 교실에서 그럴듯한 폭으로 잡았다 —
+ * 실물 DHT11 스펙은 0~50도 / 20~90% 인데, 영하도 만들어볼 수 있게 -10도까지 준다.
+ */
+export const DHT_TEMP_MIN = -10
+export const DHT_TEMP_MAX = 50
+/** 슬라이더 기본값(0~1). 켜자마자 23도 50% 쯤에서 시작하게 한다. */
+export const DHT_DEFAULT_TEMP_RATIO = (23 - DHT_TEMP_MIN) / (DHT_TEMP_MAX - DHT_TEMP_MIN)
+export const DHT_DEFAULT_HUMIDITY_RATIO = 0.5
+
+export function dhtTemperature(ratio: number): number {
+  return Math.round(DHT_TEMP_MIN + ratio * (DHT_TEMP_MAX - DHT_TEMP_MIN))
+}
+export function dhtHumidity(ratio: number): number {
+  return Math.round(ratio * 100)
+}
+
+/** 아날로그 조작부가 여러 개인 부품(온습도)이 있어서, 값은 부품 id 가 아니라
+ *  "부품 id + 채널" 로 저장한다. 조작부가 하나뿐인 부품은 채널이 'value' 다. */
+export type AnalogChannel = 'value' | 'temp' | 'hum'
+export function analogKey(componentId: string, channel: AnalogChannel = 'value'): string {
+  return `${componentId}:${channel}`
 }
 
 /**
