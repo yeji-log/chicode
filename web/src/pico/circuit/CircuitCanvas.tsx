@@ -192,6 +192,18 @@ function CircuitCanvas(
     setRewiringState(next)
   }
 
+  /**
+   * 되돌리기/다시 실행. 회로 스냅샷을 통째로 쌓는다 — 부품 몇 개짜리 회로라 통짜 복사가
+   * 가벼운데다, "무엇이 바뀌었는지" 를 항목마다 따로 기록하는 것보다 틀릴 여지가 없다.
+   *
+   * state 가 아니라 ref 인 이유: 스택 자체가 바뀌었다고 다시 그릴 필요는 없고, 버튼을
+   * 흐리게/진하게 할 때만 필요해서 historyTick 으로 따로 알린다.
+   */
+  const historyRef = useRef<{ past: CircuitSnapshot[]; future: CircuitSnapshot[] }>({ past: [], future: [] })
+  const [historyTick, setHistoryTick] = useState(0)
+  // 드래그는 pointermove 마다 setState 를 부른다. 그때마다 기록하면 한 번 끄는 데
+  // 수십 칸이 쌓이므로, 실제로 움직이기 시작한 첫 순간에 한 번만 기록한다.
+  const dragHistoryRef = useRef<CircuitSnapshot | null>(null)
   // 지금부터 새로 잇는 전선에 쓸 색 — 팔레트에서 고르면 바뀐다(finishWire 참고).
   const [wireColor, setWireColor] = useState(DEFAULT_WIRE_COLOR)
   // 부품마다 "✕ 삭제"/"↻ 회전" 글자를 따로 두면 부품이 많아질수록 화면이 빽빽해지고
@@ -225,6 +237,48 @@ function CircuitCanvas(
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ components, breadboards, wires, board: boardPos }))
   }, [components, breadboards, wires, boardPos])
 
+  const snapshotNow = useCallback(
+    (): CircuitSnapshot => JSON.parse(JSON.stringify({ components, breadboards, wires, board: boardPos })),
+    [components, breadboards, wires, boardPos],
+  )
+
+  /** 바꾸기 "직전" 상태를 쌓는다. 실제로 회로를 건드리는 동작마다 먼저 부른다. */
+  const pushHistory = useCallback(
+    (snapshot?: CircuitSnapshot) => {
+      const h = historyRef.current
+      h.past.push(snapshot ?? snapshotNow())
+      // 무한정 쌓으면 메모리를 먹는다. 수업 중 되돌릴 만한 깊이로 충분하다.
+      if (h.past.length > 50) h.past.shift()
+      h.future = []
+      setHistoryTick((t) => t + 1)
+    },
+    [snapshotNow],
+  )
+
+  /** 되돌리기/다시 실행 공용. 진행 중이던 드래그·배선은 전부 취소한다 — 화면에 남아
+   *  있으면 방금 되돌린 회로와 어긋난 상태로 붙어버린다. */
+  const timeTravel = useCallback(
+    (direction: 'undo' | 'redo') => {
+      const h = historyRef.current
+      const from = direction === 'undo' ? h.past : h.future
+      const to = direction === 'undo' ? h.future : h.past
+      const target = from.pop()
+      if (!target) return
+      to.push(snapshotNow())
+      setState(withDefaultBoard(target))
+      setSelected(null)
+      setDraft(null)
+      setRewiring(null)
+      setDragging(null)
+      setHistoryTick((t) => t + 1)
+    },
+    [snapshotNow],
+  )
+
+  const canUndo = historyRef.current.past.length > 0
+  const canRedo = historyRef.current.future.length > 0
+  void historyTick // 스택이 바뀔 때 위 두 값을 다시 계산하려고 구독한다
+
   // "예제 불러오기" 가 이 handle 로 회로를 통째로 갈아끼운다. JSON 왕복으로 깊은 복사를
   // 해서, 같은 예제를 두 번 불러오거나 부품을 옮겨도 EXAMPLES 원본 데이터가 오염되지
   // 않게 한다(배열/객체를 그대로 두면 여러 로드가 같은 참조를 공유하게 된다).
@@ -232,6 +286,7 @@ function CircuitCanvas(
     ref,
     () => ({
       loadCircuit: (circuit) => {
+        pushHistory()
         setState(withDefaultBoard(JSON.parse(JSON.stringify(circuit)) as CircuitSnapshot))
         setDraft(null)
         setDragging(null)
@@ -241,7 +296,7 @@ function CircuitCanvas(
         setSelected(null)
       },
     }),
-    [],
+    [pushHistory],
   )
 
   const connectivity = useMemo(() => resolveConnectivity(wires), [wires])
@@ -365,6 +420,7 @@ function CircuitCanvas(
 
     // 다시 잇는 중이면 새 전선을 만드는 게 아니라 잡고 있던 끝만 옮긴다.
     if (rewiringRef.current) {
+      pushHistory()
       const target = rewiringRef.current
       setRewiring(null)
       setDraft(null)
@@ -391,6 +447,7 @@ function CircuitCanvas(
     setDraft((current) => {
       if (!current) return null
       if (pinRefKey(current.from) === pinRefKey(ref)) return null
+      pushHistory()
       // exists 체크를 setState 콜백 "안"에서 최신 s.wires 로 해야 한다 — 바깥의 wires 는
       // 클로저에 붙잡힌 예전 값이라, 한 제스처에서 finishWire 가 두 번 불리면 중복 전선이
       // 생긴다(실제로 재현해서 찾은 버그).
@@ -442,6 +499,11 @@ function CircuitCanvas(
     const p = toModelPoint(event.clientX, event.clientY)
     if (draft) setDraft((d) => (d ? { ...d, to: p } : d))
     if (dragging) {
+      // 누르기만 하고 안 움직였으면(=선택만 했으면) 기록하지 않는다.
+      if (dragHistoryRef.current) {
+        pushHistory(dragHistoryRef.current)
+        dragHistoryRef.current = null
+      }
       const nx = p.x - dragging.dx
       const ny = p.y - dragging.dy
       setState((s) => {
@@ -485,6 +547,7 @@ function CircuitCanvas(
       })
     }
     setDragging(null)
+    dragHistoryRef.current = null
     setDraft(null) // 빈 곳에서 놓으면 배선 취소
     setRewiring(null) // 다시 잇기도 마찬가지 — 전선은 원래 자리에 그대로 남는다
   }
@@ -500,6 +563,7 @@ function CircuitCanvas(
 
   const removeWire = (id: string) => {
     if (locked) return
+    pushHistory()
     setState((s) => ({ ...s, wires: s.wires.filter((w) => w.id !== id) }))
   }
 
@@ -508,10 +572,12 @@ function CircuitCanvas(
   const recolorWire = (id: string, event: React.MouseEvent) => {
     event.preventDefault()
     if (locked) return
+    pushHistory()
     setState((s) => ({ ...s, wires: s.wires.map((w) => (w.id === id ? { ...w, color: wireColor } : w)) }))
   }
 
-  /** 회로를 통째로 비운다 — 되돌릴 수 없어서 확인 모달을 거친다. 실제로 지우는 건
+  /** 회로를 통째로 비운다. 되돌리기로 살릴 수는 있지만 한 번에 다 날아가는 동작이라
+   *  확인 모달은 그대로 둔다. 실제로 지우는 건
    *  confirmClearAll(모달의 "지우기" 버튼)이 한다. */
   const clearAll = () => {
     if (locked) return
@@ -519,6 +585,7 @@ function CircuitCanvas(
   }
 
   const confirmClearAll = () => {
+    pushHistory()
     setState({ components: [], breadboards: [], wires: [] })
     setSelected(null)
     setConfirmingClearAll(false)
@@ -526,6 +593,7 @@ function CircuitCanvas(
 
   const addComponent = (type: ComponentType) => {
     if (locked) return
+    pushHistory()
     const id = `${type.replace('-', '')}${Date.now().toString(36)}`
     setState((s) => ({
       ...s,
@@ -535,6 +603,7 @@ function CircuitCanvas(
 
   const removeComponent = (id: string) => {
     if (locked) return
+    pushHistory()
     setState((s) => ({
       ...s,
       components: s.components.filter((c) => c.id !== id),
@@ -551,6 +620,7 @@ function CircuitCanvas(
    *  범위 밖으로 남겨둠 — LED/버튼 같은 낱개 부품만 우선). */
   const rotateComponent = (id: string) => {
     if (locked) return
+    pushHistory()
     setState((s) => ({
       ...s,
       components: s.components.map((c) =>
@@ -563,6 +633,7 @@ function CircuitCanvas(
    *  된다(사용자 요청). */
   const rotateBoard = () => {
     if (locked) return
+    pushHistory()
     setState((s) => {
       const current = s.board ?? DEFAULT_BOARD
       return { ...s, board: { ...current, rotation: (((current.rotation ?? 0) + 90) % 360) as PlacedBoard['rotation'] } }
@@ -571,6 +642,7 @@ function CircuitCanvas(
 
   const addBreadboard = (size: BreadboardSize) => {
     if (locked) return
+    pushHistory()
     const id = `bb${Date.now().toString(36)}`
     setState((s) => ({ ...s, breadboards: [...s.breadboards, { id, size, x: 24, y: 90 + s.breadboards.length * 40 }] }))
   }
@@ -580,6 +652,7 @@ function CircuitCanvas(
    *  돌린다(BreadboardGlyph, pinPoint 참고). */
   const rotateBreadboard = (id: string) => {
     if (locked) return
+    pushHistory()
     setState((s) => ({
       ...s,
       breadboards: s.breadboards.map((b) =>
@@ -590,6 +663,7 @@ function CircuitCanvas(
 
   const removeBreadboard = (id: string) => {
     if (locked) return
+    pushHistory()
     setState((s) => ({
       ...s,
       breadboards: s.breadboards.filter((b) => b.id !== id),
@@ -630,7 +704,17 @@ function CircuitCanvas(
       return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (locked || !selected || isTypingTarget(event.target)) return
+      if (locked || isTypingTarget(event.target)) return
+
+      // 되돌리기는 선택된 게 없어도 된다 — 방금 지운 걸 살리는 게 주 용도라서
+      // "지우고 나면 선택이 없다"는 상황이 오히려 기본이다.
+      if ((event.metaKey || event.ctrlKey) && (event.key === 'z' || event.key === 'Z')) {
+        event.preventDefault()
+        timeTravel(event.shiftKey ? 'redo' : 'undo')
+        return
+      }
+
+      if (!selected) return
       if (event.key === 'r' || event.key === 'R') {
         rotateSelected()
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -641,7 +725,7 @@ function CircuitCanvas(
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, locked])
+  }, [selected, locked, timeTravel])
 
   // 버튼/스위치는 locked 여부와 무관하게 항상 된다 — 실행 중인 회로를 눌러보는 게
   // 이번 요청의 핵심이라 여기만 잠금에서 뺐다.
@@ -805,6 +889,7 @@ function CircuitCanvas(
                     if (locked) return
                     setSelected({ kind: 'breadboard', id: b.id })
                     const p = toModelPoint(event.clientX, event.clientY)
+                    dragHistoryRef.current = snapshotNow()
                     setDragging({ id: b.id, kind: 'breadboard', dx: p.x - b.x, dy: p.y - b.y })
                   }}
                   onDotPointerDown={(ref) => startWire(ref, pinPoint(ref))}
@@ -821,6 +906,7 @@ function CircuitCanvas(
                 if (locked) return
                 setSelected({ kind: 'board', id: BOARD_ID })
                 const p = toModelPoint(event.clientX, event.clientY)
+                dragHistoryRef.current = snapshotNow()
                 setDragging({ id: BOARD_ID, kind: 'board', dx: p.x - boardPos.x, dy: p.y - boardPos.y })
               }}
               onPinPointerDown={(pin) => {
@@ -889,6 +975,7 @@ function CircuitCanvas(
                   if (locked) return
                   setSelected({ kind: 'component', id: c.id })
                   const p = toModelPoint(event.clientX, event.clientY)
+                  dragHistoryRef.current = snapshotNow()
                   setDragging({ id: c.id, kind: 'component', dx: p.x - c.x, dy: p.y - c.y })
                 }}
                 onPinPointerDown={(pin, event) => {
@@ -942,6 +1029,34 @@ function CircuitCanvas(
               })()}
           </g>
 
+          {/* 되돌리기 / 다시 실행. 줌 컨트롤과 같은 이유로 transform 그룹 밖에 둬서
+              확대/축소와 무관하게 항상 같은 자리에 있다. 팔레트가 아니라 캔버스 위에
+              둔 건 자리가 없어서이기도 하지만, 되돌릴 대상이 캔버스라 여기가 맞다. */}
+          <g transform={`translate(16 ${VIEW_HEIGHT - 40})`}>
+            <rect x={0} y={0} width={72} height={28} rx={14} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
+            {[
+              { dx: 20, label: '↶', onClick: () => timeTravel('undo'), aria: '되돌리기', enabled: canUndo },
+              { dx: 52, label: '↷', onClick: () => timeTravel('redo'), aria: '다시 실행', enabled: canRedo },
+            ].map((btn) => (
+              <text
+                key={btn.aria}
+                x={btn.dx}
+                y={20}
+                fontSize={16}
+                fontWeight="bold"
+                textAnchor="middle"
+                fill="#57534e"
+                opacity={btn.enabled && !locked ? 1 : 0.25}
+                className={btn.enabled && !locked ? 'cursor-pointer select-none' : 'select-none'}
+                aria-label={btn.aria}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => btn.enabled && !locked && btn.onClick()}
+              >
+                {btn.label}
+              </text>
+            ))}
+          </g>
+
           {/* 줌 컨트롤 — transform 그룹 밖에 그려서 확대/축소와 무관하게 항상 같은
               화면 위치·크기를 유지한다. 휠이 없는 아이패드 등 터치 기기에선 이 버튼이
               줌의 유일한 수단이라 꼭 있어야 한다. */}
@@ -977,7 +1092,7 @@ function CircuitCanvas(
       <p className="px-1 text-xs leading-relaxed text-ink-500">
         {locked
           ? '실행 중에는 배선을 편집할 수 없어요. 버튼/스위치는 눌러볼 수 있어요.'
-          : '부품/브레드보드/Pico 보드는 클릭해서 선택 후 R(회전)로 돌리고 끌어서 옮깁니다(보드는 삭제 불가). 핀(원)을 끌면 전선이 이어지고, 전선을 클릭하면 양 끝에 손잡이가 나와 다른 핀으로 옮길 수 있습니다(오른쪽 클릭은 색 바꾸기). 삭제는 Delete 키나 휴지통 버튼입니다.'}
+          : '부품/브레드보드/Pico 보드는 클릭해서 선택 후 R(회전)로 돌리고 끌어서 옮깁니다(보드는 삭제 불가). 핀(원)을 끌면 전선이 이어지고, 전선을 클릭하면 양 끝에 손잡이가 나와 다른 핀으로 옮길 수 있습니다(오른쪽 클릭은 색 바꾸기). 삭제는 Delete 키나 휴지통 버튼, 되돌리기는 ⌘/Ctrl+Z 입니다.'}
       </p>
 
       {confirmingClearAll && (
