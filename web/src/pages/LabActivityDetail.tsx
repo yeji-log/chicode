@@ -6,7 +6,7 @@ import { useAuth } from '../auth/AuthProvider'
 import CodeBlock from '../components/CodeBlock'
 import LabPresentationOverlay from '../components/LabPresentationOverlay'
 import LabPresenter from '../components/LabPresenter'
-import PptxSlideViewer from '../components/PptxSlideViewer'
+import PptxSlideViewer, { SLIDE_SECTION_BREAKOUT } from '../components/PptxSlideViewer'
 import { useLabScope } from '../lib/labScope'
 import { stopPresentation, subscribePresentation, type LabPresentationState } from '../lib/labPresentation'
 import {
@@ -290,6 +290,7 @@ export default function LabActivityDetail() {
           return (
             <section
               key={section.id}
+              style={SLIDE_SECTION_BREAKOUT}
               className="flex flex-col gap-2 rounded-2xl border border-cream-deep bg-white/70 p-6"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">

@@ -1,24 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type * as PptxPreview from 'pptx-preview'
 
 import PdfViewer from './PdfViewer'
 
 type PptxPreviewer = ReturnType<typeof PptxPreview.init>
 
-/**
- * Lab 활동에 첨부된 발표자료(PPT) 뷰어.
- *
- * pptx-preview로 실제 .pptx 렌더링을 먼저 시도한다. pptxgenjs로 만든 테스트
- * 파일로 직접 확인한 결과, 이 라이브러리가 렌더링 도중 내부에서 예외를
- * 던지는 경우가 있었다("Cannot read properties of undefined (reading
- * 'background')") — 실제 파워포인트에서 내보낸 파일은 다를 수도 있지만
- * 신뢰할 근거가 부족하다. 그래서 pptx 렌더링이 실패하면(예외든 슬라이드
- * 0장이든) 조용히 PDF 버전(교사가 함께 올렸다면)으로 넘어간다.
- *
- * 원본 Blob 은 렌더링에만 쓰고 다운로드 링크·URL로 절대 내보내지 않는다 —
- * "뷰어만, 다운로드 불가" 요구사항 때문이다. (PIN 잠금과 같은 수준의
- * 소프트한 방지다 — 화면을 캡처하는 것까지 막을 수는 없다.)
- */
 /**
  * 슬라이드 높이가 화면(뷰포트)의 이 비율을 넘지 않게 한다. 예전엔 폭을
  * max-w-3xl(768px)로 묶어놨는데, PC에서 자리가 남는데도 슬라이드가 작아서
@@ -34,13 +20,50 @@ const MAX_SLIDE_VIEWPORT_HEIGHT = 0.74
  *  끄는 동안 매번 pptx 를 다시 렌더하면 눈에 띄게 버벅인다. */
 const RESIZE_THRESHOLD = 24
 
-/** 쓸 수 있는 가로 폭에서 실제로 그릴 슬라이드 폭을 정한다(16:9 가정 —
- *  아래 init 에 넘기는 height 도 같은 가정이다). */
-function fitSlideWidth(available: number): number {
-  const maxHeight = window.innerHeight * MAX_SLIDE_VIEWPORT_HEIGHT
-  return Math.max(320, Math.min(available, (maxHeight * 16) / 9))
+/**
+ * 발표자료 카드를 본문 칸(App.tsx의 max-w-6xl = 1152px)보다 넓게 빼는 스타일.
+ *
+ * 본문 글줄은 1152px가 읽기 좋은 폭이지만 슬라이드는 다르다 — 학교 PC가
+ * 1920px인데 슬라이드가 1062px에 묶여 화면의 절반만 쓰고 있었다. 그래서
+ * 발표자료 섹션만 칸 밖으로 빼서 화면 폭(최대 1600px)까지 쓰게 한다.
+ *
+ * left:50% 는 부모 기준, translateX(-50%) 는 자기 자신 기준이라 부모가 얼마나
+ * 좁든 화면 한가운데에 놓인다. 100vw 는 세로 스크롤바까지 포함한 값이라
+ * 2.5rem(= 본문 좌우 여백 px-5 두 번)을 빼야 가로 스크롤바가 안 생긴다.
+ */
+export const SLIDE_SECTION_BREAKOUT: CSSProperties = {
+  position: 'relative',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  width: 'min(100vw - 2.5rem, 1600px)',
+  maxWidth: 'none',
 }
 
+/** 쓸 수 있는 가로 폭에서 실제로 그릴 슬라이드 폭을 정한다(16:9 가정 —
+ *  아래 init 에 넘기는 height 도 같은 가정이다).
+ *
+ *  아래한계(예: 320px)를 두면 안 된다 — 폰처럼 좁은 화면에서는 available 이
+ *  그보다 작아서 슬라이드가 카드 밖으로 삐져나온다(실측: 285px 자리에 320px
+ *  슬라이드). 좁으면 좁은 대로 자리에 맞추는 게 맞다. */
+function fitSlideWidth(available: number): number {
+  const maxHeight = window.innerHeight * MAX_SLIDE_VIEWPORT_HEIGHT
+  return Math.max(1, Math.min(available, (maxHeight * 16) / 9))
+}
+
+/**
+ * Lab 활동에 첨부된 발표자료(PPT) 뷰어.
+ *
+ * pptx-preview로 실제 .pptx 렌더링을 먼저 시도한다. pptxgenjs로 만든 테스트
+ * 파일로 직접 확인한 결과, 이 라이브러리가 렌더링 도중 내부에서 예외를
+ * 던지는 경우가 있었다("Cannot read properties of undefined (reading
+ * 'background')") — 실제 파워포인트에서 내보낸 파일은 다를 수도 있지만
+ * 신뢰할 근거가 부족하다. 그래서 pptx 렌더링이 실패하면(예외든 슬라이드
+ * 0장이든) 조용히 PDF 버전(교사가 함께 올렸다면)으로 넘어간다.
+ *
+ * 원본 Blob 은 렌더링에만 쓰고 다운로드 링크·URL로 절대 내보내지 않는다 —
+ * "뷰어만, 다운로드 불가" 요구사항 때문이다. (PIN 잠금과 같은 수준의
+ * 소프트한 방지다 — 화면을 캡처하는 것까지 막을 수는 없다.)
+ */
 export default function PptxSlideViewer({
   pptxFile,
   pdfFile,
@@ -99,6 +122,13 @@ export default function PptxSlideViewer({
         const width = fitSlideWidth(available)
         renderedWidthRef.current = width
 
+        // 여기까지 오는 동안(동적 import + arrayBuffer) 이 렌더가 이미 무효가
+        // 됐을 수 있다. init 은 되돌릴 수 없는 DOM 삽입이라, 그 전에 반드시
+        // 한 번 더 확인한다 — 이 확인이 없으면 창 크기를 빠르게 바꿀 때
+        // 옛 크기의 슬라이드가 새 것 아래에 그대로 남아 쌓인다.
+        if (cancelled) return
+        container!.replaceChildren()
+
         const viewer = init(container!, { width, height: (width * 9) / 16, mode: 'slide' })
         viewerRef.current = viewer
         await viewer.preview(buf)
@@ -150,13 +180,24 @@ export default function PptxSlideViewer({
   }, [pptxFile])
 
   if (state === 'fallback' && pdfFile) {
+    // PdfViewer 는 제 컨테이너 폭에 맞춰 그리므로, 폭을 CSS 로만 묶어주면
+    // fitSlideWidth 와 같은 규칙("가로는 자리껏, 세로는 한 화면 안")이 된다.
+    // 여기선 JS 로 잴 필요가 없다 — PdfViewer 자신이 ResizeObserver 로 창
+    // 크기 변화를 따라간다.
     return (
-      <PdfViewer
-        file={pdfFile}
-        filename={filename}
-        initialPage={initialPage}
-        onPageChange={onPageChange}
-      />
+      <div className="mx-auto flex w-full justify-center">
+        <div
+          className="min-w-0 flex-1"
+          style={{ maxWidth: `calc(${MAX_SLIDE_VIEWPORT_HEIGHT} * 100vh * 16 / 9)` }}
+        >
+          <PdfViewer
+            file={pdfFile}
+            filename={filename}
+            initialPage={initialPage}
+            onPageChange={onPageChange}
+          />
+        </div>
+      </div>
     )
   }
 

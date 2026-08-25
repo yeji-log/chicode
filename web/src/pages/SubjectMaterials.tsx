@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthProvider'
 import LabPresentationOverlay from '../components/LabPresentationOverlay'
 import LabPresenter from '../components/LabPresenter'
 import PdfViewer from '../components/PdfViewer'
-import PptxSlideViewer from '../components/PptxSlideViewer'
+import PptxSlideViewer, { SLIDE_SECTION_BREAKOUT } from '../components/PptxSlideViewer'
 import { stopPresentation, subscribePresentation, type LabPresentationState } from '../lib/labPresentation'
 import { getNotes, getSlidePdfFile, getSlidePptxFile, getSlideSet } from '../lib/labSlides'
 import {
@@ -451,7 +451,10 @@ function OtMaterialItem({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-cream-deep bg-white/70 p-6">
+    <div
+      style={SLIDE_SECTION_BREAKOUT}
+      className="flex flex-col gap-3 rounded-2xl border border-cream-deep bg-white/70 p-6"
+    >
       {showFollowerOverlay && slideFiles.pdf && (
         <LabPresentationOverlay
           pdfFile={slideFiles.pdf}
