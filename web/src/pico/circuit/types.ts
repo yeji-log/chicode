@@ -253,16 +253,16 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
   // 버튼·스위치와 똑같이 "디지털 IN 한 개" 구조라 핀 배치도 같다 — 다른 건 생김새와
   // 조작 방식뿐이다(TOGGLE_INPUT_TYPES 참고).
   pir: [
-    { pin: 'a', dx: -16, dy: 22 },
-    { pin: 'b', dx: 16, dy: 22 },
+    { pin: 'a', dx: -16, dy: 46 },
+    { pin: 'b', dx: 16, dy: 46 },
   ],
   tilt: [
-    { pin: 'a', dx: -14, dy: 20 },
-    { pin: 'b', dx: 14, dy: 20 },
+    { pin: 'a', dx: -14, dy: 46 },
+    { pin: 'b', dx: 14, dy: 46 },
   ],
   reed: [
-    { pin: 'a', dx: -16, dy: 18 },
-    { pin: 'b', dx: 16, dy: 18 },
+    { pin: 'a', dx: -16, dy: 46 },
+    { pin: 'b', dx: 16, dy: 46 },
   ],
   relay: [
     { pin: 'a', dx: -16, dy: 34 },
@@ -314,9 +314,9 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   potentiometer: { x: 0, y: 14 },
   servo: { x: 0, y: 14 },
   ldr: { x: 0, y: 16 },
-  pir: { x: 0, y: 11 },
-  tilt: { x: 0, y: 10 },
-  reed: { x: 0, y: 9 },
+  pir: { x: 0, y: 16 },
+  tilt: { x: 0, y: 15 },
+  reed: { x: 0, y: 15 },
   relay: { x: 0, y: 16 },
   vibration: { x: 0, y: 14 },
   'traffic-light': { x: 0, y: 28 },

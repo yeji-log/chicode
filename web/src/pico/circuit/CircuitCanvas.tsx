@@ -1803,7 +1803,10 @@ function ComponentGlyph({
         component.type === 'ldr' ||
         component.type === 'traffic-light' ||
         component.type === 'relay' ||
-        component.type === 'vibration') && <Legs />}
+        component.type === 'vibration' ||
+        component.type === 'pir' ||
+        component.type === 'tilt' ||
+        component.type === 'reed') && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -2003,17 +2006,26 @@ function ComponentGlyph({
       )}
 
       {component.type === 'pir' && (
-        <g
-          onPointerDown={locked ? undefined : onBodyPointerDown}
-          className={locked ? '' : 'cursor-grab'}
-          style={{ filter: 'url(#chico-shadow)' }}
-        >
-          {/* 실물 HC-SR501 처럼 하얀 프레넬 렌즈 돔. 감지 중이면 초록으로 빛난다. */}
-          <rect x={-18} y={2} width={36} height={18} rx={2} fill="#14532d" stroke="#052e16" strokeWidth={1.2} />
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          {/* 초록 보드가 렌즈 돔보다 넓게 나와 있어야 부품을 잡아 옮길 자리가 남는다 —
+              처음엔 돔이 보드를 거의 다 덮어서 끌 데가 없었다(실제로 재현해서 찾았다).
+              가변저항·버튼과 같은 규칙: 몸통은 끌고, 안쪽 조작부는 누른다. */}
+          <rect
+            x={-22}
+            y={6}
+            width={44}
+            height={24}
+            rx={2}
+            fill="#14532d"
+            stroke="#052e16"
+            strokeWidth={1.2}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
           <circle
             cx={0}
-            cy={2}
-            r={15}
+            cy={8}
+            r={13}
             fill={active ? '#bbf7d0' : '#f5f5f4'}
             stroke="#a8a29e"
             strokeWidth={1.5}
@@ -2024,21 +2036,32 @@ function ComponentGlyph({
               onInputActiveChange(!active)
             }}
           />
-          <path d="M -9 -4 A 9 9 0 0 1 9 -4" fill="none" stroke="#d6d3d1" strokeWidth={1.2} />
-          <text x={0} y={5} fontSize={9} textAnchor="middle" className="pointer-events-none select-none">
-            {active ? '🚶' : ''}
-          </text>
+          <path d="M -8 2 A 8 8 0 0 1 8 2" fill="none" stroke="#d6d3d1" strokeWidth={1.2} className="pointer-events-none" />
+          {active && (
+            <text x={0} y={12} fontSize={10} textAnchor="middle" className="pointer-events-none select-none">
+              🚶
+            </text>
+          )}
         </g>
       )}
 
       {component.type === 'tilt' && (
-        <g
-          onPointerDown={locked ? undefined : onBodyPointerDown}
-          className={locked ? '' : 'cursor-grab'}
-          style={{ filter: 'url(#chico-shadow)' }}
-        >
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          {/* 아래 받침이 끄는 자리, 위 유리관이 누르는 자리다(PIR 과 같은 규칙). */}
+          <rect
+            x={-16}
+            y={20}
+            width={32}
+            height={10}
+            rx={2}
+            fill="#44403c"
+            stroke="#292524"
+            strokeWidth={1.2}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
           {/* 기울이면 안의 구슬이 굴러가 접점이 붙는다 — 실물 볼 스위치 그대로다. */}
-          <g transform={`rotate(${active ? 28 : 0} 0 10)`}>
+          <g transform={`rotate(${active ? 28 : 0} 0 20)`}>
             <rect
               x={-11}
               y={0}
@@ -2060,15 +2083,23 @@ function ComponentGlyph({
       )}
 
       {component.type === 'reed' && (
-        <g
-          onPointerDown={locked ? undefined : onBodyPointerDown}
-          className={locked ? '' : 'cursor-grab'}
-          style={{ filter: 'url(#chico-shadow)' }}
-        >
-          {/* 유리관 안의 두 조각이 자석을 대면 붙는다. 자석은 옆에 나타난다. */}
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          <rect
+            x={-16}
+            y={20}
+            width={32}
+            height={10}
+            rx={2}
+            fill="#44403c"
+            stroke="#292524"
+            strokeWidth={1.2}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
+          {/* 유리관 안의 두 조각이 자석을 대면 붙는다. */}
           <rect
             x={-14}
-            y={2}
+            y={4}
             width={28}
             height={14}
             rx={7}
@@ -2082,10 +2113,10 @@ function ComponentGlyph({
               onInputActiveChange(!active)
             }}
           />
-          <line x1={-12} y1={active ? 9 : 6} x2={0} y2={active ? 9 : 6} stroke="#57534e" strokeWidth={2} />
-          <line x1={0} y1={active ? 9 : 12} x2={12} y2={active ? 9 : 12} stroke="#57534e" strokeWidth={2} />
+          <line x1={-12} y1={active ? 11 : 8} x2={0} y2={active ? 11 : 8} stroke="#57534e" strokeWidth={2} className="pointer-events-none" />
+          <line x1={0} y1={active ? 11 : 14} x2={12} y2={active ? 11 : 14} stroke="#57534e" strokeWidth={2} className="pointer-events-none" />
           {active && (
-            <text x={0} y={-4} fontSize={11} textAnchor="middle" className="pointer-events-none select-none">
+            <text x={0} y={-2} fontSize={11} textAnchor="middle" className="pointer-events-none select-none">
               🧲
             </text>
           )}
