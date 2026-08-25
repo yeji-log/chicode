@@ -152,6 +152,9 @@ export interface PlacedComponent {
   type: ComponentType
   x: number
   y: number
+  /** LED 알 색(LED_COLORS 의 key). LED 에만 쓴다. 없으면 기본색(빨강) — 이 필드가
+   *  생기기 전 저장된 회로도 그대로 읽혀야 하니 optional. */
+  color?: string
   /** 0/90/180/270도. 없으면 0(회전 없음)으로 취급 — 이 필드가 생기기 전 저장된
    *  회로(localStorage, EXAMPLES)도 그대로 읽혀야 하니 optional로 둔다. */
   rotation?: 0 | 90 | 180 | 270
@@ -180,6 +183,26 @@ export interface PlacedBoard {
   x: number
   y: number
   rotation?: 0 | 90 | 180 | 270
+}
+
+/**
+ * LED 알 색. 실물 LED 도 색마다 알맹이(꺼졌을 때) 색이 다르다 — 빨강 LED 는 분홍빛
+ * 반투명, 초록은 연두빛이다. 그래서 꺼진 색과 켜진 색을 짝으로 둔다.
+ *
+ * 예전엔 LED 가 꺼지면 분홍(#fca5a5), 켜지면 노랑(#fde047) 이었다. 분홍 알에서 노란
+ * 빛이 나오는 건 어느 색 LED 도 아니라서, 색을 고를 수 있게 하면서 기본값을 "빨강"
+ * (분홍 알 → 빨간 빛)으로 바로잡았다.
+ */
+export const LED_COLORS: { key: string; name: string; off: string; on: string; glow: string }[] = [
+  { key: 'red', name: '빨강', off: '#fca5a5', on: '#ef4444', glow: '#f87171' },
+  { key: 'yellow', name: '노랑', off: '#fde68a', on: '#facc15', glow: '#fde047' },
+  { key: 'green', name: '초록', off: '#bbf7d0', on: '#22c55e', glow: '#4ade80' },
+  { key: 'blue', name: '파랑', off: '#bfdbfe', on: '#3b82f6', glow: '#60a5fa' },
+  { key: 'white', name: '흰색', off: '#f5f5f4', on: '#fefce8', glow: '#fef08a' },
+]
+
+export function ledColorOf(key: string | undefined) {
+  return LED_COLORS.find((c) => c.key === key) ?? LED_COLORS[0]
 }
 
 /** 점퍼선 색 — 실제 브레드보드 배선 관례(전원=빨강, 접지=검정 등)를 그대로 옵션으로

@@ -37,6 +37,8 @@ import {
   dhtTemperature,
   KNOB_SWEEP_DEG,
   LDR_TRACK_HALF_WIDTH,
+  LED_COLORS,
+  ledColorOf,
   type PinRef,
   type PlacedBoard,
   type PlacedBreadboard,
@@ -713,6 +715,17 @@ function CircuitCanvas(
     setSelected(null)
   }
 
+  /** 선택한 LED 의 알 색을 바꾼다. 전선 색과 달리 "지금 고른 색"을 들고 다니지 않고
+   *  선택한 LED 에 바로 적용한다 — LED 는 놓은 뒤에 색을 정하는 게 자연스럽다. */
+  const setLedColor = (key: string) => {
+    if (locked || !selectedLed) return
+    pushHistory()
+    setState((s) => ({
+      ...s,
+      components: s.components.map((c) => (c.id === selectedLed.id ? { ...c, color: key } : c)),
+    }))
+  }
+
   const rotateSelected = () => {
     if (!selected) return
     if (selected.kind === 'component') rotateComponent(selected.id)
@@ -856,6 +869,12 @@ function CircuitCanvas(
 
   // 팔레트의 "선택 삭제" 버튼에 뭘 지우려는지 보여준다 — 부품은 COMPONENT_LIST의
   // 한글 이름을, 브레드보드는 고정 문구를 쓴다.
+  // LED 를 선택했을 때만 팔레트에 색 고르는 자리가 나온다.
+  const selectedLed =
+    selected?.kind === 'component'
+      ? components.find((c) => c.id === selected.id && c.type === 'led')
+      : undefined
+
   const selectedLabel =
     selected?.kind === 'component'
       ? (COMPONENT_LIST.find((c) => c.type === components.find((comp) => comp.id === selected.id)?.type)?.label ?? '부품')
@@ -881,6 +900,8 @@ function CircuitCanvas(
           onClearAll={clearAll}
           muted={muted}
           onToggleMute={() => setMuted((m) => !m)}
+          ledColor={selectedLed ? ledColorOf(selectedLed.color).key : null}
+          onLedColor={setLedColor}
           selectedLabel={selectedLabel}
           onDeleteSelected={deleteSelected}
         />
@@ -1198,6 +1219,8 @@ function Palette({
   onClearAll,
   muted,
   onToggleMute,
+  ledColor,
+  onLedColor,
   selectedLabel,
   onDeleteSelected,
 }: {
@@ -1210,6 +1233,10 @@ function Palette({
   /** 부저 음소거 상태. 소리는 수업 중에 꺼야 할 때가 있다. */
   muted: boolean
   onToggleMute: () => void
+  /** 지금 선택된 LED 의 색 key. LED 를 선택하지 않았으면 null — 이때는 색 고르는
+   *  자리를 아예 안 보여준다(전선 색과 달리 대상이 있어야 의미가 있다). */
+  ledColor: string | null
+  onLedColor: (key: string) => void
   /** 지금 선택된 부품/브레드보드의 한글 이름. 선택된 게 없으면 null — 이때는
    *  "선택 삭제" 버튼 자체를 안 보여준다(뭘 지울지 없으니). */
   selectedLabel: string | null
@@ -1303,6 +1330,30 @@ function Palette({
           ))}
         </div>
       </div>
+
+      {/* LED 를 선택했을 때만 나온다. 누르면 그 LED 알 색이 바로 바뀐다. */}
+      {ledColor && (
+        <div className="flex flex-col gap-1">
+          <PaletteHeading>LED 색</PaletteHeading>
+          <div className="flex flex-wrap justify-center gap-1 rounded-lg border border-cream-deep bg-white px-1 py-1.5">
+            {LED_COLORS.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                disabled={locked}
+                aria-label={c.name}
+                title={c.name}
+                onClick={() => onLedColor(c.key)}
+                className={[
+                  'h-5 w-5 rounded-full border-2 transition-transform disabled:cursor-not-allowed disabled:opacity-40',
+                  ledColor === c.key ? 'scale-110 border-ink-900' : 'border-white/60 hover:scale-105',
+                ].join(' ')}
+                style={{ backgroundColor: c.on }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 부저 소리 켜기/끄기. 실행 중에도 눌러야 하니 locked 와 무관하게 항상 활성. */}
       <button
@@ -1789,6 +1840,7 @@ function ComponentGlyph({
 
   // LED 는 두 다리 중 어느 쪽에 신호가 와도 켜진 것으로 본다(극성까지 따지진 않는다).
   const ledLit = Math.max(levelOf('anode'), levelOf('cathode'))
+  const ledColor = ledColorOf(component.color)
   // RGB 는 채널마다 세기가 다를 수 있다 — PWM 을 쓰면 실제로 색이 섞인다.
   const rgbChannel = (pin: string) => Math.round(90 + 165 * levelOf(pin))
   const buzzerFreq = freqOf('positive') ?? freqOf('negative')
@@ -1894,17 +1946,17 @@ function ComponentGlyph({
           <path d="M -13 20 A 13 13 0 1 1 13 20 L 13 26 L -13 26 Z" fill="#78716c" opacity={0.35} />
           {/* 꺼진 알을 항상 깔고, 켜진 알을 그 위에 세기만큼 투명도로 덮는다 — PWM 이
               걸리면 duty 에 따라 실제로 어둡게/밝게 보인다(켜짐·꺼짐 두 단계가 아니라). */}
-          <circle cx={0} cy={18} r={14} fill="#fca5a5" stroke="#b91c1c" strokeWidth={2} />
+          <circle cx={0} cy={18} r={14} fill={ledColor.off} stroke="#78716c" strokeWidth={1.5} />
           {ledLit > 0 && (
             <circle
               cx={0}
               cy={18}
               r={14}
-              fill="#fde047"
-              stroke="#f59e0b"
+              fill={ledColor.on}
+              stroke={ledColor.glow}
               strokeWidth={2}
               opacity={0.25 + 0.75 * ledLit}
-              style={{ filter: `drop-shadow(0 0 ${3 + 8 * ledLit}px #fbbf24)` }}
+              style={{ filter: `drop-shadow(0 0 ${3 + 8 * ledLit}px ${ledColor.glow})` }}
             />
           )}
           <ellipse cx={-4} cy={13} rx={4} ry={2.5} fill="#ffffff" opacity={0.5} />
