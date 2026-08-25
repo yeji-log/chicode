@@ -333,6 +333,7 @@ export default function LabPresenter({
             onPageChange={go}
             onPageCountChange={setPageCount}
             hideControls
+            fitToContainer
             overlay={
               <PresentationInk
                 strokes={currentSlideInk}

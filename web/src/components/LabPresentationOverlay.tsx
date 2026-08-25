@@ -62,6 +62,7 @@ export default function LabPresentationOverlay({
         filename={filename}
         page={currentSlide}
         hideControls
+        fitToContainer
         overlay={
           <PresentationInk
             strokes={ink?.[currentSlide] ?? EMPTY_INK_STROKES}

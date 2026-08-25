@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { asset } from '../lib/asset'
-import { pushDebug } from '../lib/debugLog'
+import { isDebugEnabled, pushDebug } from '../lib/debugLog'
 
 /**
  * PDF 뷰어.
@@ -37,6 +37,9 @@ type PdfPage = {
 
 const LOAD_TIMEOUT_MS = 15_000
 const RENDER_TIMEOUT_MS = 15_000
+
+/** 창 크기가 더 안 바뀔 때까지 기다렸다가 한 번만 다시 그리는 시간. */
+const RESIZE_SETTLE_MS = 120
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return Promise.race([
@@ -135,6 +138,7 @@ export default function PdfViewer({
   onPageChange,
   onPageCountChange,
   hideControls,
+  fitToContainer,
   overlay,
 }: {
   file: Blob
@@ -147,6 +151,16 @@ export default function PdfViewer({
   onPageChange?: (page: number) => void
   onPageCountChange?: (pageCount: number) => void
   hideControls?: boolean
+  /** 발표 화면처럼 "한 화면에 통째로" 보여야 하는 쓰임에 준다 — 폭뿐 아니라
+   *  컨테이너 높이에도 맞춰서 스크롤 없이 전부 보이게 한다. 안 주면 예전처럼
+   *  폭에만 맞추고 넘치는 만큼 세로로 스크롤한다(여러 쪽짜리 문서 열람용).
+   *
+   *  세로까지 맞추는 건 보기 좋으라고만 있는 게 아니다 — 폭에만 맞추면 세로가
+   *  넘쳐 스크롤바가 생기고, 스크롤바가 생기면 clientWidth 가 줄어 다시
+   *  그리고, 작아지니 스크롤바가 사라져 clientWidth 가 늘고… 하는 되먹임이
+   *  생긴다. 윈도우에서 F11 로 전체화면을 켰을 때 발표 화면이 떨린다는 보고의
+   *  원인이 이거였다(아래 renderPage 주석). */
+  fitToContainer?: boolean
   /** 실제로 그려진 PDF 캔버스 위에 정확히 겹쳐 그릴 내용(펜 오버레이 등).
    *  이 캔버스를 감싸는 wrapper가 캔버스 크기에 딱 맞게 shrink-wrap되어
    *  있어서(className="w-fit"), 위치·크기를 따로 재지 않아도 항상 캔버스와
@@ -160,6 +174,9 @@ export default function PdfViewer({
   const renderTaskRef = useRef<RenderTask | null>(null)
   /** 렌더를 한 줄로 세우기 위한 체인. 겹쳐 그리면 캔버스가 비어버린다. */
   const renderChainRef = useRef<Promise<void>>(Promise.resolve())
+  /** 마지막으로 그릴 때 기준으로 삼은 컨테이너 크기. ResizeObserver 가 알려온
+   *  변화가 진짜로 다시 그릴 만한 것인지 판단하는 데 쓴다. */
+  const lastRenderSizeRef = useRef({ width: 0, height: 0 })
   const generationRef = useRef(0)
 
   const [pageCount, setPageCount] = useState(0)
@@ -303,13 +320,41 @@ export default function PdfViewer({
         const target = await pdf.getPage(page)
         if (generation !== generationRef.current) return
 
-        await logFontDiagnostics(target)
+        // 이 진단은 페이지 내용을 통째로 두 번(연산자 목록 + 텍스트) 파싱해서
+        // 한 번에 수십 ms 가 든다. 창 크기가 바뀔 때마다 렌더가 다시 도는데
+        // 거기에 매번 얹히면 그 자체가 버벅임이 된다 — 원래 목적(갤럭시 탭
+        // 한글 깨짐 조사)대로 ?debug=1 로 켰을 때만 돌린다.
+        if (isDebugEnabled()) await logFontDiagnostics(target)
 
         const base = target.getViewport({ scale: 1 })
 
         // 폭을 컨테이너에 맞추고, 화면 배율(레티나 등)을 곱해 또렷하게 그린다.
-        const available = container.clientWidth - 32
-        const scale = Math.max(available / base.width, 0.1)
+        // 32 는 컨테이너의 p-4(양쪽 16px).
+        const availableWidth = container.clientWidth - 32
+        const availableHeight = container.clientHeight - 32
+        lastRenderSizeRef.current = {
+          width: container.clientWidth,
+          height: container.clientHeight,
+        }
+
+        // fitToContainer 면 세로도 같이 맞춘다 — 둘 중 더 빡빡한 쪽이 이긴다.
+        //
+        // 이게 없을 때 윈도우 F11 전체화면에서 발표 화면이 떨렸다. 폭에만
+        // 맞추면 16:9 슬라이드의 세로가 화면보다 몇 픽셀 넘치는데, 그러면
+        // overflow-auto 컨테이너에 세로 스크롤바가 생긴다 → clientWidth 가
+        // 스크롤바 폭만큼 줄어든다 → 더 작게 다시 그린다 → 이제 안 넘치니
+        // 스크롤바가 사라진다 → clientWidth 가 원래대로 는다 → 다시 크게
+        // 그린다 → … ResizeObserver 가 이 되먹임을 계속 돌린다. 창 높이가
+        // 딱 그 경계에 놓일 때만 나타나는데, F11 이 정확히 창 높이를 바꾸는
+        // 조작이라 거기서 잘 걸렸다. 세로까지 맞추면 애초에 넘치지 않아서
+        // 스크롤바가 생길 일이 없다(컨테이너도 아래에서 overflow-hidden 이 된다).
+        const widthScale = availableWidth / base.width
+        const scale = Math.max(
+          fitToContainer && availableHeight > 0
+            ? Math.min(widthScale, availableHeight / base.height)
+            : widthScale,
+          0.1,
+        )
         const ratio = Math.min(window.devicePixelRatio || 1, 2)
 
         // "화면에 보이는 크기"는 배율(ratio)과 무관하게 컨테이너 폭에만 맞춘다.
@@ -357,6 +402,8 @@ export default function PdfViewer({
         pushDebug('PdfViewer 렌더 시작', {
           page,
           containerClientWidth: container.clientWidth,
+          containerClientHeight: container.clientHeight,
+          fitToContainer: !!fitToContainer,
           canvasWidth: canvas.width,
           canvasHeight: canvas.height,
           cssWidth: displayViewport.width,
@@ -391,23 +438,43 @@ export default function PdfViewer({
 
     renderChainRef.current = chained
     return chained
-  }, [page])
+  }, [page, fitToContainer])
 
   useEffect(() => {
     if (loading || error) return
     void renderPage()
   }, [loading, error, renderPage])
 
-  // 창 크기가 바뀌면 폭에 다시 맞춘다.
+  // 창 크기가 바뀌면 다시 맞춘다.
   useEffect(() => {
     if (loading || error) return
     const container = containerRef.current
     if (!container) return
 
-    const observer = new ResizeObserver(() => void renderPage())
+    // F11 로 전체화면을 켜고 끌 때처럼 크기가 한 번에 여러 단계로 바뀌는
+    // 상황에서는 resize 가 연달아 들어온다. 그때마다 통째로 다시 그리면
+    // (한 번이 수십 ms 다) 화면이 눈에 띄게 버벅인다 — 마지막 크기 하나만
+    // 그리면 된다.
+    let timer: number | undefined
+
+    const observer = new ResizeObserver(() => {
+      // 실제로 기준이 바뀌었을 때만 다시 그린다. 폭에만 맞추는 모드에서는
+      // 높이가 아무리 변해도 결과가 같으므로 무시한다 — 쓸데없이 다시 그리면
+      // 그 자체가 레이아웃을 건드려 또 다른 resize 를 부를 수 있다.
+      const last = lastRenderSizeRef.current
+      const sameWidth = container.clientWidth === last.width
+      const sameHeight = container.clientHeight === last.height
+      if (sameWidth && (!fitToContainer || sameHeight)) return
+
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => void renderPage(), RESIZE_SETTLE_MS)
+    })
     observer.observe(container)
-    return () => observer.disconnect()
-  }, [loading, error, renderPage])
+    return () => {
+      window.clearTimeout(timer)
+      observer.disconnect()
+    }
+  }, [loading, error, renderPage, fitToContainer])
 
   if (error) {
     return <p className="p-8 text-center font-semibold text-ink-700">⚠️ {error}</p>
@@ -415,7 +482,20 @@ export default function PdfViewer({
 
   return (
     <div className="flex h-full flex-col">
-      <div ref={containerRef} className="flex-1 overflow-auto bg-ink-900/5 p-4">
+      <div
+        ref={containerRef}
+        className={
+          'flex-1 bg-ink-900/5 p-4 ' +
+          (fitToContainer
+            ? // 넘칠 일이 없으므로 스크롤을 아예 끈다(스크롤바가 폭을 흔드는
+              // 되먹임의 마지막 여지까지 없앤다). 남는 자리에는 슬라이드를
+              // 가운데 둔다.
+              'flex items-center justify-center overflow-hidden'
+            : // 스크롤바가 나타나고 사라져도 clientWidth 가 변하지 않게 자리를
+              // 미리 비워둔다 — 여기서도 같은 되먹임이 날 수 있어서다.
+              'overflow-auto [scrollbar-gutter:stable]')
+        }
+      >
         {loading ? (
           // 옅은 글자만 있으면 "그냥 빈 화면"처럼 보인다는 실사용 보고가
           // 있어서, 로딩 중이라는 게 눈에 확실히 띄도록 굵게·크게 바꿨다.
