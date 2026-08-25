@@ -15,8 +15,14 @@ const CODE_KEY = 'chicode.pico.code'
  * 코드만 "1. LED 켜고 끄기"로 시작해서 앞뒤가 안 맞는다. */
 const STARTER_CODE = 'from machine import Pin\n'
 
+type LabTab = 'circuit' | 'code'
+
 export default function PicoLab() {
   const [code, setCode] = useState(() => localStorage.getItem(CODE_KEY) ?? STARTER_CODE)
+  // 회로가 기본 화면이고 코드는 탭을 열어서 본다 — 나란히 놓으면 회로가 가로 절반밖에
+  // 못 써서, 캔버스를 넓혀도 남는 폭이 전부 빈 띠가 됐다(CircuitCanvas의
+  // MIN_VIEW_WIDTH 주석에 실측값). 콘솔은 탭 밖에 둬서 어느 탭에서든 보인다.
+  const [tab, setTab] = useState<LabTab>('circuit')
 
   const { status, output, elapsedMs, bootError, gpio, run, stop, clearOutput, setButton } = usePico()
   const outputRef = useRef<HTMLDivElement>(null)
@@ -123,16 +129,44 @@ export default function PicoLab() {
         <li>브레드보드는 10칸 + 전원 레일만 있는 축소판입니다</li>
       </SupportNote>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-        <section className="flex flex-col overflow-hidden rounded-2xl border border-cream-deep bg-white">
-          <div className="flex items-center justify-between border-b border-cream-deep px-4 py-2.5">
-            <h2 className="text-sm font-bold text-ink-700">코드</h2>
-            <span className="text-xs text-ink-500">
-              {running ? '실행 중에는 수정할 수 없어요 — 중지를 누르세요' : '⌘/Ctrl + Enter 로 실행'}
-            </span>
+      <section className="overflow-hidden rounded-2xl border border-cream-deep bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cream-deep px-3 py-2">
+          <div className="flex gap-1">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={[
+                  'rounded-lg px-3 py-1.5 text-sm font-bold transition-colors',
+                  tab === t.key ? 'bg-cheese-100 text-ink-900' : 'text-ink-500 hover:text-ink-700',
+                ].join(' ')}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
+          <span
+            className={[
+              'px-1 text-xs',
+              running ? 'font-semibold text-cheese-600' : 'text-ink-500',
+            ].join(' ')}
+          >
+            {running
+              ? tab === 'code'
+                ? '실행 중에는 수정할 수 없어요 — 중지를 누르세요'
+                : '실행 중 — 버튼/스위치는 눌러볼 수 있지만 배선은 중지 후에 바꿀 수 있어요'
+              : '⌘/Ctrl + Enter 로 실행'}
+          </span>
+        </div>
 
-          <div className="h-[300px]">
+        <TabPanel active={tab === 'circuit'}>
+          <div className="p-3">
+            <CircuitCanvas ref={circuitRef} gpioLevels={gpio} onButtonChange={setButton} locked={running} />
+          </div>
+        </TabPanel>
+
+        <TabPanel active={tab === 'code'}>
+          <div className="h-[420px]">
             <Editor
               language="python"
               theme="vs"
@@ -142,66 +176,64 @@ export default function PicoLab() {
               loading={<span className="text-sm text-ink-500">에디터 준비 중…</span>}
             />
           </div>
+        </TabPanel>
+      </section>
 
-          <div className="flex flex-1 flex-col overflow-hidden border-t border-cream-deep bg-board">
-            <div className="flex items-center justify-between px-4 py-2.5">
-              <h2 className="text-sm font-bold text-cheese-200">콘솔</h2>
-              <div className="flex items-center gap-3">
-                {elapsedMs !== null && (
-                  <span className="text-xs text-cheese-200/70">{elapsedMs}ms</span>
-                )}
-                <button
-                  onClick={clearOutput}
-                  className="text-xs font-semibold text-cheese-200/70 hover:text-cheese-200"
-                >
-                  지우기
-                </button>
-              </div>
-            </div>
-
-            <div
-              ref={outputRef}
-              className="h-[180px] overflow-auto p-4 font-mono text-sm leading-relaxed"
+      <section className="flex flex-col overflow-hidden rounded-2xl border border-cream-deep bg-board">
+        <div className="flex items-center justify-between px-4 py-2.5">
+          <h2 className="text-sm font-bold text-cheese-200">콘솔</h2>
+          <div className="flex items-center gap-3">
+            {elapsedMs !== null && <span className="text-xs text-cheese-200/70">{elapsedMs}ms</span>}
+            <button
+              onClick={clearOutput}
+              className="text-xs font-semibold text-cheese-200/70 hover:text-cheese-200"
             >
-              {output.length === 0 && !running && (
-                <p className="text-cheese-200/50">실행 버튼을 누르면 여기에 결과가 나옵니다.</p>
-              )}
-              {running && output.length === 0 && (
-                <p className="text-cheese-200/60">실행 중…</p>
-              )}
-              {output.map((line) => (
-                <pre
-                  key={line.id}
-                  className={[
-                    'whitespace-pre-wrap break-words',
-                    line.stream === 'err'
-                      ? 'text-red-300'
-                      : line.stream === 'sys'
-                        ? 'text-cheese-300 italic'
-                        : 'text-cream',
-                  ].join(' ')}
-                >
-                  {line.text}
-                </pre>
-              ))}
-            </div>
+              지우기
+            </button>
           </div>
-        </section>
+        </div>
 
-        <section className="rounded-2xl border border-cream-deep bg-white p-3">
-          <div className="mb-2 flex items-center justify-between px-1">
-            <h2 className="text-sm font-bold text-ink-700">회로</h2>
-            {running && (
-              <span className="text-xs font-semibold text-cheese-600">
-                실행 중 — 버튼/스위치는 눌러볼 수 있지만 배선은 중지 후에 바꿀 수 있어요
-              </span>
-            )}
-          </div>
-          <CircuitCanvas ref={circuitRef} gpioLevels={gpio} onButtonChange={setButton} locked={running} />
-        </section>
-      </div>
+        <div
+          ref={outputRef}
+          className="h-[180px] overflow-auto p-4 font-mono text-sm leading-relaxed"
+        >
+          {output.length === 0 && !running && (
+            <p className="text-cheese-200/50">실행 버튼을 누르면 여기에 결과가 나옵니다.</p>
+          )}
+          {running && output.length === 0 && <p className="text-cheese-200/60">실행 중…</p>}
+          {output.map((line) => (
+            <pre
+              key={line.id}
+              className={[
+                'whitespace-pre-wrap break-words',
+                line.stream === 'err'
+                  ? 'text-red-300'
+                  : line.stream === 'sys'
+                    ? 'text-cheese-300 italic'
+                    : 'text-cream',
+              ].join(' ')}
+            >
+              {line.text}
+            </pre>
+          ))}
+        </div>
+      </section>
     </div>
   )
+}
+
+const TABS: { key: LabTab; label: string }[] = [
+  { key: 'circuit', label: '회로' },
+  { key: 'code', label: '코드' },
+]
+
+/** 안 보이는 탭도 unmount 하지 않고 hidden(display:none)으로 숨기기만 한다 — Monaco는
+ *  다시 mount 하면 실행 취소 기록과 커서 위치가 날아가고, 회로 캔버스는 선택·줌/팬
+ *  상태가 초기화된다(회로 자체는 localStorage에 남지만 보던 자리가 튄다). 둘 다 다시
+ *  보이는 순간 스스로 크기를 다시 잡는다 — Monaco는 automaticLayout, 회로는
+ *  ResizeObserver. */
+function TabPanel({ active, children }: { active: boolean; children: React.ReactNode }) {
+  return <div className={active ? '' : 'hidden'}>{children}</div>
 }
 
 function StatusPill({ status }: { status: ReturnType<typeof usePico>['status'] }) {

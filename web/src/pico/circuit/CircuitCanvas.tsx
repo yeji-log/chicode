@@ -37,8 +37,20 @@ import {
 } from './types'
 
 const STORAGE_KEY = 'chicode.pico.circuit'
-const VIEW_WIDTH = 900
+
+/** 모델(회로) 좌표계의 세로 크기는 640으로 고정하고, 가로는 캔버스가 실제로 차지한
+ *  칸의 비율에 맞춰 늘린다.
+ *
+ *  viewBox를 900×640으로 못박아 두면 preserveAspectRatio 기본값(xMidYMid meet)
+ *  때문에 배율이 `min(가로/900, 세로/640)`으로 정해진다. 세로가 고정(520px)이라
+ *  가로를 아무리 넓혀도 배율이 세로에 묶여서, 늘어난 폭이 전부 양옆 빈 띠가 된다 —
+ *  실제로 재봤다. 컨테이너를 730→974px로 넓혀도 Pico 보드는 226px 그대로였다.
+ *  가로 viewBox를 비율만큼 같이 늘리면 그 폭이 "더 넓은 작업 공간"이 된다.
+ *
+ *  좁은 화면에서도 900 밑으로는 안 줄인다 — 기본 회로의 Pico 보드가 x≈640~815에
+ *  있어서, 그보다 좁히면 보드가 처음부터 화면 밖으로 나가버린다. */
 const VIEW_HEIGHT = 640
+const MIN_VIEW_WIDTH = 900
 
 /** 그리드/스냅/줌 — 팅커캐드처럼 부품이 격자에 맞춰 정돈되고, 화면을 확대/축소·이동해
  *  볼 수 있게 한다(계획 문서 "캔버스 기본기" 1단계). 모델 좌표(컴포넌트 x/y 등)는 이
@@ -145,6 +157,8 @@ function CircuitCanvas(
   // 브라우저, 일부 아이패드 웹뷰 등)에서 네이티브 confirm()이 아무 반응 없이 조용히
   // 취소로 처리되는 문제가 실제로 보고됐다(사용자가 "확인창 자체가 안 뜬다"고 확인).
   const [confirmingClearAll, setConfirmingClearAll] = useState(false)
+  // 캔버스 칸이 가로로 넓어진 만큼 viewBox도 넓힌다(위 MIN_VIEW_WIDTH 주석 참고).
+  const [viewWidth, setViewWidth] = useState(MIN_VIEW_WIDTH)
   const svgRef = useRef<SVGSVGElement>(null)
 
   // 줌/팬은 회로 데이터(components/breadboards/wires)와 달리 저장하지 않는다 — 매번
@@ -203,6 +217,20 @@ function CircuitCanvas(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectivity, activeInputs])
+
+  // 탭으로 숨겨진 동안엔 크기가 0으로 잡히므로(display:none) 그때는 그냥 넘긴다 —
+  // 다시 보이는 순간 ResizeObserver가 진짜 크기로 한 번 더 부른다.
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (!width || !height) return
+      setViewWidth(Math.max(MIN_VIEW_WIDTH, Math.round((width / height) * VIEW_HEIGHT)))
+    })
+    observer.observe(svg)
+    return () => observer.disconnect()
+  }, [])
 
   const toSvgPoint = useCallback((clientX: number, clientY: number): Point => {
     const svg = svgRef.current
@@ -356,8 +384,8 @@ function CircuitCanvas(
     setSelected(null) // 빈 곳을 누르면 선택 해제
   }
 
-  const zoomIn = () => zoomAt(1.2, { x: VIEW_WIDTH / 2, y: VIEW_HEIGHT / 2 })
-  const zoomOut = () => zoomAt(1 / 1.2, { x: VIEW_WIDTH / 2, y: VIEW_HEIGHT / 2 })
+  const zoomIn = () => zoomAt(1.2, { x: viewWidth / 2, y: VIEW_HEIGHT / 2 })
+  const zoomOut = () => zoomAt(1 / 1.2, { x: viewWidth / 2, y: VIEW_HEIGHT / 2 })
   const resetView = () => setView({ x: 0, y: 0, scale: 1 })
 
   const removeWire = (id: string) => {
@@ -580,8 +608,8 @@ function CircuitCanvas(
 
         <svg
           ref={svgRef}
-          viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
-          className="h-[520px] min-w-0 flex-1 touch-none rounded-xl border border-cream-deep bg-[#eef2ea] select-none"
+          viewBox={`0 0 ${viewWidth} ${VIEW_HEIGHT}`}
+          className="h-[clamp(520px,58vh,660px)] min-w-0 flex-1 touch-none rounded-xl border border-cream-deep bg-[#eef2ea] select-none"
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerLeave={onPointerUp}
@@ -615,7 +643,7 @@ function CircuitCanvas(
 
           {/* 빈 캔버스를 누르면 팬(화면 이동) — 부품/보드/전선이 위에 겹쳐 그려지므로
               그 위를 눌렀을 땐 이 배경이 아니라 해당 부품이 이벤트를 받는다. */}
-          <rect x={0} y={0} width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#chico-grid)" onPointerDown={onBackgroundPointerDown} />
+          <rect x={0} y={0} width={viewWidth} height={VIEW_HEIGHT} fill="url(#chico-grid)" onPointerDown={onBackgroundPointerDown} />
 
           <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
             {breadboards.map((b) => {
@@ -729,7 +757,7 @@ function CircuitCanvas(
           {/* 줌 컨트롤 — transform 그룹 밖에 그려서 확대/축소와 무관하게 항상 같은
               화면 위치·크기를 유지한다. 휠이 없는 아이패드 등 터치 기기에선 이 버튼이
               줌의 유일한 수단이라 꼭 있어야 한다. */}
-          <g transform={`translate(${VIEW_WIDTH - 112} ${VIEW_HEIGHT - 40})`}>
+          <g transform={`translate(${viewWidth - 112} ${VIEW_HEIGHT - 40})`}>
             <rect x={0} y={0} width={104} height={28} rx={14} fill="#ffffff" fillOpacity={0.9} stroke="#d9d2bd" />
             {[
               { dx: 14, label: '−', onClick: zoomOut, aria: '축소' },
