@@ -58,6 +58,17 @@ function buzzerOnly(): CircuitSnapshot {
   }
 }
 
+function servoOnly(): CircuitSnapshot {
+  return {
+    components: [{ id: 'servo1', type: 'servo', x: PART_X, y: 150 }],
+    breadboards: [{ id: 'bb1', size: 'mini', x: 24, y: 90 }],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'servo1', pin: 'signal' }, to: { kind: 'board', pinId: GP15 } },
+      { id: 'w2', from: { kind: 'component', componentId: 'servo1', pin: 'gnd' }, to: { kind: 'board', pinId: GND } },
+    ],
+  }
+}
+
 export const EXAMPLES: Example[] = [
   {
     name: '1. LED 켜고 끄기',
@@ -123,6 +134,26 @@ for name, hz in notes:
     time.sleep(0.4)
 
 buzzer.deinit()  # 소리 끄기
+`,
+  },
+  {
+    name: '5. 서보모터 움직이기',
+    circuit: servoOnly(),
+    code: `from machine import Pin, PWM
+import time
+
+servo = PWM(Pin(15))
+servo.freq(50)  # 서보는 50Hz 로 신호를 받는다 (20ms 마다 한 번)
+
+# 함수(def)를 쓰지 않는다 - 함수를 쓰면 실행이 끝난 뒤에야 결과를 볼 수 있어서
+# 팔이 움직이는 게 안 보인다 (아래 '무엇이 안 되나요?' 참고)
+while True:
+    for angle in (0, 90, 180, 90):
+        # 0도 = 0.5ms, 180도 = 2.5ms 짜리 펄스
+        pulse_ms = 0.5 + (angle / 180) * 2.0
+        servo.duty_ns(int(pulse_ms * 1000000))
+        print(angle, '도')
+        time.sleep(0.8)
 `,
   },
 ]

@@ -31,7 +31,14 @@ export function pinRefKey(ref: PinRef): string {
  * 안 하는" 상태가 된다. 그건 이 프로젝트가 제일 싫어하는 종류의 거짓말이라 뺐다
  * (계획 문서 4절 "우선 구현할 부품" 참고 — ADC/PWM 은 다음 단계).
  */
-export type ComponentType = 'led' | 'rgb-led' | 'buzzer' | 'button' | 'switch' | 'potentiometer'
+export type ComponentType =
+  | 'led'
+  | 'rgb-led'
+  | 'buzzer'
+  | 'button'
+  | 'switch'
+  | 'potentiometer'
+  | 'servo'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -50,6 +57,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
   { type: 'led', category: 'output', label: 'LED', short: 'LED', emoji: '💡' },
   { type: 'rgb-led', category: 'output', label: 'RGB LED', short: 'RGB', emoji: '🌈' },
   { type: 'buzzer', category: 'output', label: '부저', short: '부저', emoji: '🔔' },
+  {
+    type: 'servo',
+    category: 'output',
+    label: '서보모터(PWM 50Hz · 0~180도)',
+    short: '서보',
+    emoji: '⚙️',
+  },
   { type: 'button', category: 'input', label: '버튼(누르는 동안)', short: '버튼', emoji: '🔘' },
   { type: 'switch', category: 'input', label: '스위치(클릭해서 토글)', short: '스위치', emoji: '🔀' },
   {
@@ -180,6 +194,12 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'a', dx: -16, dy: 18 },
     { pin: 'b', dx: 16, dy: 18 },
   ],
+  // 실물 서보와 같은 3선: 신호(주황), 전원(빨강), 접지(갈색).
+  servo: [
+    { pin: 'signal', dx: -14, dy: 46 },
+    { pin: 'vcc', dx: 0, dy: 46 },
+    { pin: 'gnd', dx: 14, dy: 46 },
+  ],
   // 실물 가변저항과 같은 3핀: 양끝이 전원/접지, 가운데가 읽어가는 값(와이퍼).
   potentiometer: [
     { pin: 'vcc', dx: -18, dy: 40 },
@@ -199,4 +219,22 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   button: { x: 0, y: 10 },
   switch: { x: 0, y: 10 },
   potentiometer: { x: 0, y: 14 },
+  servo: { x: 0, y: 14 },
+}
+
+/**
+ * 서보가 알아듣는 펄스 폭(ms) → 각도. SG90 계열 기준으로 0.5ms 가 0도, 2.5ms 가 180도다.
+ * 주파수가 아니라 "펄스 폭"으로 계산하는 게 실물과 같은 동작이다 — 그래서 50Hz 가
+ * 아닌 주파수를 줘도 거짓말 없이 그 폭에 해당하는 각도(대개 0도에 붙는다)를 보여준다.
+ */
+export const SERVO_MIN_PULSE_MS = 0.5
+export const SERVO_MAX_PULSE_MS = 2.5
+
+/** PWM(주파수 Hz, duty 0~65535)이 서보를 몇 도로 돌리는지. 신호가 없으면 null. */
+export function servoAngleFromPwm(pwm: { freq: number; duty: number } | undefined): number | null {
+  if (!pwm || pwm.duty <= 0) return null
+  const periodMs = 1000 / Math.max(1, pwm.freq)
+  const pulseMs = (pwm.duty / 65535) * periodMs
+  const ratio = (pulseMs - SERVO_MIN_PULSE_MS) / (SERVO_MAX_PULSE_MS - SERVO_MIN_PULSE_MS)
+  return Math.round(Math.max(0, Math.min(1, ratio)) * 180)
 }

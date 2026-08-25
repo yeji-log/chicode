@@ -36,6 +36,7 @@ import {
   type Point,
   pinRefKey,
   rotateAround,
+  servoAngleFromPwm,
   type Wire,
   WIRE_COLORS,
 } from './types'
@@ -1709,11 +1710,14 @@ function ComponentGlyph({
    *  duty 비율이다 — 그래야 LED 가 "켜짐/꺼짐" 두 단계가 아니라 밝기로 보인다. */
   const levelOf = (pin: string) => levelOfGpio(gpioForPin(pin), gpioLevels, pwmLevels)
   const isOn = (pin: string) => levelOf(pin) > 0
-  /** 이 핀에 걸린 PWM 주파수(Hz). PWM 이 아니면 없음 — 부저가 음 높이를 보여줄 때 쓴다. */
-  const freqOf = (pin: string) => {
+  /** 이 핀에 걸린 PWM(주파수/듀티). PWM 이 아니면 없음. */
+  const pwmOf = (pin: string) => {
     const gpio = gpioForPin(pin)
-    if (gpio === undefined) return undefined
-    const pwm = pwmLevels.get(gpio)
+    return gpio === undefined ? undefined : pwmLevels.get(gpio)
+  }
+  /** 이 핀에 걸린 PWM 주파수(Hz) — 부저가 음 높이를 보여줄 때 쓴다. */
+  const freqOf = (pin: string) => {
+    const pwm = pwmOf(pin)
     return pwm && pwm.duty > 0 ? pwm.freq : undefined
   }
 
@@ -1722,6 +1726,11 @@ function ComponentGlyph({
   // RGB 는 채널마다 세기가 다를 수 있다 — PWM 을 쓰면 실제로 색이 섞인다.
   const rgbChannel = (pin: string) => Math.round(90 + 165 * levelOf(pin))
   const buzzerFreq = freqOf('positive') ?? freqOf('negative')
+  // 서보는 신호선의 펄스 폭으로 각도가 정해진다. 신호가 없으면 null — 실물 서보는
+  // 신호가 끊겨도 마지막 각도를 붙들고 있지만, 여기선 가운데(90도)로 두고 각도 표시를
+  // 지운다. "지금 붙들고 있는 각도"를 흉내 내려면 부품마다 상태를 따로 들고 있어야
+  // 하는데, 어차피 실행할 때마다 GPIO 가 초기화되는 시뮬레이터라 이득이 적다.
+  const servoAngle = servoAngleFromPwm(pwmOf('signal'))
 
   /** 부품 몸통에서 각 핀까지 내려가는 다리(리드선) — 실제 부품처럼 보이게 한다. */
   const Legs = () => (
@@ -1758,7 +1767,8 @@ function ComponentGlyph({
       {(component.type === 'led' ||
         component.type === 'rgb-led' ||
         component.type === 'buzzer' ||
-        component.type === 'potentiometer') && <Legs />}
+        component.type === 'potentiometer' ||
+        component.type === 'servo') && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -1874,6 +1884,29 @@ function ComponentGlyph({
           {buzzerFreq !== undefined && (
             <text x={0} y={-6} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#b91c1c" className="select-none">
               {buzzerFreq}Hz
+            </text>
+          )}
+        </g>
+      )}
+
+      {component.type === 'servo' && (
+        <g
+          onPointerDown={locked ? undefined : onBodyPointerDown}
+          className={locked ? '' : 'cursor-grab'}
+          style={{ filter: 'url(#chico-shadow)' }}
+        >
+          {/* SG90 처럼 파란 몸통 + 위쪽에 튀어나온 기어 박스, 그 위에 뿔(horn). */}
+          <rect x={-18} y={2} width={36} height={28} rx={3} fill="#2563eb" stroke="#1e40af" strokeWidth={1.5} />
+          <rect x={-11} y={-6} width={22} height={10} rx={2} fill="#1d4ed8" stroke="#1e3a8a" strokeWidth={1.2} />
+          {/* 0도가 왼쪽, 180도가 오른쪽, 90도가 위. 신호가 없으면 가운데에 둔다. */}
+          <g transform={`rotate(${(servoAngle ?? 90) - 90} 0 -1)`}>
+            <line x1={0} y1={-1} x2={0} y2={-17} stroke="#f8fafc" strokeWidth={4} strokeLinecap="round" />
+            <circle cx={0} cy={-17} r={2.5} fill="#f8fafc" />
+          </g>
+          <circle cx={0} cy={-1} r={4} fill="#e5e7eb" stroke="#64748b" strokeWidth={1.2} />
+          {servoAngle !== null && (
+            <text x={0} y={24} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#eff6ff" className="select-none">
+              {servoAngle}°
             </text>
           )}
         </g>
