@@ -55,6 +55,11 @@ export type ComponentType =
   | 'neopixel'
   | 'ultrasonic'
   | 'lcd'
+  | 'soil'
+  | 'rain'
+  | 'flame'
+  | 'temp-analog'
+  | 'ir-obstacle'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -165,6 +170,41 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '온습도 센서 DHT11(온도·습도 슬라이더)',
     short: '온습도',
     emoji: '🌡️',
+  },
+  {
+    type: 'soil',
+    category: 'input',
+    label: '토양 수분 센서(ADC · GP26~28)',
+    short: '토양',
+    emoji: '🪴',
+  },
+  {
+    type: 'rain',
+    category: 'input',
+    label: '빗물 감지 센서(ADC · GP26~28)',
+    short: '빗물',
+    emoji: '🌧️',
+  },
+  {
+    type: 'flame',
+    category: 'input',
+    label: '불꽃 감지 센서(ADC · GP26~28)',
+    short: '불꽃',
+    emoji: '🔥',
+  },
+  {
+    type: 'temp-analog',
+    category: 'input',
+    label: '아날로그 온도센서 TMP36(ADC · GP26~28)',
+    short: '온도',
+    emoji: '🌡',
+  },
+  {
+    type: 'ir-obstacle',
+    category: 'input',
+    label: 'IR 장애물 감지(클릭해서 켜고 끄기)',
+    short: 'IR',
+    emoji: '🚧',
   },
   {
     type: 'ldr',
@@ -407,6 +447,32 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'out', dx: 0, dy: 54 },
     { pin: 'gnd', dx: 16, dy: 54 },
   ],
+  // 아래 다섯은 전부 조도센서와 같은 3핀 모듈이다 — 시중 키트가 그런 모양으로 판다.
+  soil: [
+    { pin: 'vcc', dx: -14, dy: 46 },
+    { pin: 'out', dx: 0, dy: 46 },
+    { pin: 'gnd', dx: 14, dy: 46 },
+  ],
+  rain: [
+    { pin: 'vcc', dx: -14, dy: 46 },
+    { pin: 'out', dx: 0, dy: 46 },
+    { pin: 'gnd', dx: 14, dy: 46 },
+  ],
+  flame: [
+    { pin: 'vcc', dx: -14, dy: 46 },
+    { pin: 'out', dx: 0, dy: 46 },
+    { pin: 'gnd', dx: 14, dy: 46 },
+  ],
+  'temp-analog': [
+    { pin: 'vcc', dx: -14, dy: 46 },
+    { pin: 'out', dx: 0, dy: 46 },
+    { pin: 'gnd', dx: 14, dy: 46 },
+  ],
+  'ir-obstacle': [
+    { pin: 'vcc', dx: -14, dy: 46 },
+    { pin: 'out', dx: 0, dy: 46 },
+    { pin: 'gnd', dx: 14, dy: 46 },
+  ],
   // 조도센서 모듈(CDS + 저항이 보드에 같이 붙은 형태)과 같은 3핀. 실물 CDS 알맹이만
   // 쓰면 분압 저항을 따로 달아야 하는데, 이 시뮬레이터엔 저항 부품 자체가 없다 —
   // 모듈 형태로 두는 게 학생이 실제로 사는 부품과도 맞고 거짓말도 아니다.
@@ -453,6 +519,63 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   neopixel: { x: 0, y: 14 },
   ultrasonic: { x: 0, y: 20 },
   lcd: { x: 0, y: 24 },
+  soil: { x: 0, y: 16 },
+  rain: { x: 0, y: 16 },
+  flame: { x: 0, y: 16 },
+  'temp-analog': { x: 0, y: 16 },
+  'ir-obstacle': { x: 0, y: 16 },
+}
+
+/**
+ * 슬라이더 하나로 ADC 값을 만드는 센서들. 생김새(보드 색·아이콘)와 눈금만 다르고
+ * 구조는 전부 같다 — 조도센서를 만들 때 쓴 경로를 그대로 탄다.
+ *
+ * 온도센서만 값 변환이 다르다. 실물 TMP36 은 0도에서 0.5V, 1도 오를 때마다 10mV 를
+ * 내놓는 아날로그 소자라 학생이 그 계산을 직접 해야 한다 — 그게 이 부품의 수업 내용이다.
+ * 그래서 여기서도 "온도 → 전압 → ADC 값" 으로 바꿔서 내보낸다.
+ */
+export interface AnalogSensorMeta {
+  /** 슬라이더 옆에 붙는 단위. */
+  unit: string
+  min: number
+  max: number
+  /** 보드 색과 센서 알맹이 색. */
+  board: string
+  accent: string
+  /** 슬라이더 값(0~1)을 눈금 값으로. */
+  readingOf: (ratio: number) => number
+  /** 눈금 값을 실제 ADC 가 읽는 0~65535 로. */
+  adcOf: (ratio: number) => number
+}
+
+const percentSensor = (board: string, accent: string): AnalogSensorMeta => ({
+  unit: '%',
+  min: 0,
+  max: 100,
+  board,
+  accent,
+  readingOf: (r) => Math.round(r * 100),
+  adcOf: (r) => Math.round(r * 65535),
+})
+
+export const ANALOG_SENSORS: Partial<Record<ComponentType, AnalogSensorMeta>> = {
+  soil: percentSensor('#78350f', '#a16207'),
+  rain: percentSensor('#0c4a6e', '#38bdf8'),
+  flame: percentSensor('#1c1917', '#f97316'),
+  'temp-analog': {
+    unit: '°C',
+    min: -10,
+    max: 50,
+    board: '#292524',
+    accent: '#f87171',
+    readingOf: (r) => Math.round(-10 + r * 60),
+    // TMP36: 0도에서 0.5V, 1도당 10mV. Pico ADC 는 3.3V 를 65535 로 읽는다.
+    adcOf: (r) => {
+      const celsius = -10 + r * 60
+      const volts = 0.5 + 0.01 * celsius
+      return Math.round(Math.max(0, Math.min(1, volts / 3.3)) * 65535)
+    },
+  },
 }
 
 /** I2C LCD 백팩의 주소. 시중 모듈은 0x27 아니면 0x3F 인데, 여기선 0x27 하나로 둔다. */
@@ -513,7 +636,7 @@ export function analogKey(componentId: string, channel: AnalogChannel = 'value')
  * 디지털 IN 이고, 켜져 있는 동안 연결된 GPIO 가 1 로 읽힌다. 다른 건 생김새와 무슨
  * 상황을 흉내 내는지(사람이 지나감 / 기울어짐 / 자석이 붙음)뿐이다.
  */
-export const TOGGLE_INPUT_TYPES: ComponentType[] = ['switch', 'pir', 'tilt', 'reed']
+export const TOGGLE_INPUT_TYPES: ComponentType[] = ['switch', 'pir', 'tilt', 'reed', 'ir-obstacle']
 
 /** 눌린 동안에만 켜지는 입력. 지금은 버튼뿐이지만 목록으로 두면 판단이 한 군데에 모인다. */
 export const MOMENTARY_INPUT_TYPES: ComponentType[] = ['button']

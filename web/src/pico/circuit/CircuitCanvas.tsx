@@ -41,6 +41,7 @@ import {
   LED_COLORS,
   ledColorOf,
   mirrorX,
+  ANALOG_SENSORS,
   LCD_COLUMNS,
   LCD_I2C_ADDR,
   LCD_LINES,
@@ -395,6 +396,13 @@ function CircuitCanvas(
           dhtTemperature(analogValues.get(analogKey(c.id, 'temp')) ?? DHT_DEFAULT_TEMP_RATIO),
           dhtHumidity(analogValues.get(analogKey(c.id, 'hum')) ?? DHT_DEFAULT_HUMIDITY_RATIO),
         )
+        continue
+      }
+      const sensor = ANALOG_SENSORS[c.type]
+      if (sensor) {
+        const gpio = gpioForPin(c.id, 'out')
+        if (gpio === undefined) continue
+        onAnalogChange(gpio, sensor.adcOf(analogValues.get(analogKey(c.id)) ?? 0))
         continue
       }
       if (c.type !== 'potentiometer' && c.type !== 'ldr') continue
@@ -929,7 +937,8 @@ function CircuitCanvas(
     component.type === 'ldr' ||
     component.type === 'dht' ||
     component.type === 'ultrasonic' ||
-    component.type === 'pir'
+    component.type === 'pir' ||
+    ANALOG_SENSORS[component.type]
       ? sliderValueAt(component, p)
       : knobValueAt(component, p)
 
@@ -1962,6 +1971,7 @@ function ComponentGlyph({
   // LED 는 두 다리 중 어느 쪽에 신호가 와도 켜진 것으로 본다(극성까지 따지진 않는다).
   const ledLit = Math.max(levelOf('anode'), levelOf('cathode'))
   const ledColor = ledColorOf(component.color)
+  const analogSensor = ANALOG_SENSORS[component.type]
 
   /** 부품을 반전하면 안쪽 글자까지 거울로 뒤집혀 읽을 수 없게 된다. 값 표시만 되돌린다.
    *  부품들의 값 글자가 전부 x=0(textAnchor middle)이라 scale(-1 1) 한 번이면 맞는다. */
@@ -2051,7 +2061,9 @@ function ComponentGlyph({
         component.type === 'seven-segment' ||
         component.type === 'neopixel' ||
         component.type === 'ultrasonic' ||
-        component.type === 'lcd') && <Legs />}
+        component.type === 'lcd' ||
+        component.type === 'ir-obstacle' ||
+        ANALOG_SENSORS[component.type]) && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -2283,6 +2295,105 @@ function ComponentGlyph({
             className="cursor-pointer"
             onPointerDown={onKnobPointerDown}
           />
+        </g>
+      )}
+
+      {analogSensor && (
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          {/* 조도센서와 같은 짜임 — 모듈 보드는 끄는 자리, 위 슬라이더가 누르는 자리다.
+              생김새와 눈금만 부품마다 다르다(ANALOG_SENSORS). */}
+          <rect
+            x={-21}
+            y={2}
+            width={42}
+            height={28}
+            rx={3}
+            fill={analogSensor.board}
+            stroke="#0c0a09"
+            strokeWidth={1.5}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
+          {/* 값이 커질수록 진해지는 알맹이 — 흙이 젖고, 비가 오고, 불이 세지는 것. */}
+          <circle
+            cx={0}
+            cy={16}
+            r={9}
+            fill={analogSensor.accent}
+            opacity={0.35 + 0.65 * analogValue}
+            stroke="#0c0a09"
+            strokeWidth={1.2}
+            className="pointer-events-none"
+          />
+          <Unflip>
+            <text x={0} y={-18} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              {analogSensor.readingOf(analogValue)}
+              {analogSensor.unit}
+            </text>
+          </Unflip>
+          <line
+            x1={-LDR_TRACK_HALF_WIDTH}
+            y1={-8}
+            x2={LDR_TRACK_HALF_WIDTH}
+            y2={-8}
+            stroke="#a8a29e"
+            strokeWidth={3}
+            strokeLinecap="round"
+            className="cursor-pointer"
+            onPointerDown={onKnobPointerDown}
+          />
+          <circle
+            cx={-LDR_TRACK_HALF_WIDTH + analogValue * LDR_TRACK_HALF_WIDTH * 2}
+            cy={-8}
+            r={6}
+            fill={analogSensor.accent}
+            stroke="#0c0a09"
+            strokeWidth={1.5}
+            className="cursor-pointer"
+            onPointerDown={onKnobPointerDown}
+          />
+        </g>
+      )}
+
+      {component.type === 'ir-obstacle' && (
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          <rect
+            x={-21}
+            y={2}
+            width={42}
+            height={28}
+            rx={3}
+            fill="#134e4a"
+            stroke="#042f2e"
+            strokeWidth={1.5}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
+          {/* IR 은 눈이 두 개다 — 하나는 쏘고 하나는 받는다. 막히면 받는 쪽이 켜진다. */}
+          {[-9, 9].map((cx) => (
+            <circle
+              key={cx}
+              cx={cx}
+              cy={16}
+              r={7}
+              fill={active ? '#5eead4' : '#1e293b'}
+              stroke="#042f2e"
+              strokeWidth={1.2}
+              className="cursor-pointer"
+              style={active ? { filter: 'drop-shadow(0 0 6px #2dd4bf)' } : undefined}
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                onInputActiveChange(!active)
+              }}
+            />
+          ))}
+          {active && (
+            <Unflip>
+              <text x={0} y={-6} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#0f766e" className="select-none">
+                막힘
+              </text>
+            </Unflip>
+          )}
         </g>
       )}
 

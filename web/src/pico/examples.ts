@@ -274,6 +274,34 @@ function lcdOnly(): CircuitSnapshot {
   }
 }
 
+function soilAndBuzzer(): CircuitSnapshot {
+  return {
+    components: [
+      { id: 'soil1', type: 'soil', x: PART_X, y: 90 },
+      { id: 'buzzer1', type: 'buzzer', x: PART_X, y: 250 },
+    ],
+    breadboards: [SHARED_BREADBOARD],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'soil1', pin: 'out' }, to: { kind: 'board', pinId: GP26 }, color: '#dc2626' },
+      { id: 'w2', from: { kind: 'component', componentId: 'soil1', pin: 'gnd' }, to: minusRail(1), color: '#1f2937' },
+      { id: 'w3', from: { kind: 'component', componentId: 'buzzer1', pin: 'positive' }, to: { kind: 'board', pinId: GP15 }, color: '#dc2626' },
+      { id: 'w4', from: { kind: 'component', componentId: 'buzzer1', pin: 'negative' }, to: minusRail(4), color: '#1f2937' },
+      { id: 'w5', from: minusRail(8), to: { kind: 'board', pinId: GND }, color: '#1f2937' },
+    ],
+  }
+}
+
+function tempAnalog(): CircuitSnapshot {
+  return {
+    components: [{ id: 'temp1', type: 'temp-analog', x: PART_X, y: 130 }],
+    breadboards: [],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'temp1', pin: 'out' }, to: { kind: 'board', pinId: GP26 }, color: '#dc2626' },
+      { id: 'w2', from: { kind: 'component', componentId: 'temp1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
+    ],
+  }
+}
+
 export const EXAMPLES: Example[] = [
   {
     name: '1. LED 켜고 끄기',
@@ -631,6 +659,46 @@ while True:
     print('count', count)
     count = count + 1
     time.sleep(0.6)
+`,
+  },
+  {
+    name: '17. 흙이 마르면 알려주기 (토양 수분)',
+    circuit: soilAndBuzzer(),
+    code: `from machine import Pin, ADC, PWM
+import time
+
+soil = ADC(Pin(26))       # 토양 수분 센서 - 슬라이더로 흙을 적셔 보세요
+buzzer = PWM(Pin(15))
+buzzer.freq(660)
+
+while True:
+    wet = soil.read_u16() * 100 // 65535
+    print('수분', wet, '%')
+
+    if wet < 30:
+        print('  목말라요! 물 주세요')
+        buzzer.duty_u16(15000)
+    else:
+        buzzer.duty_u16(0)
+
+    time.sleep(0.5)
+`,
+  },
+  {
+    name: '18. 아날로그 온도센서 읽기 (TMP36)',
+    circuit: tempAnalog(),
+    code: `from machine import Pin, ADC
+import time
+
+sensor = ADC(Pin(26))
+
+while True:
+    raw = sensor.read_u16()          # 0 ~ 65535
+    volts = raw * 3.3 / 65535        # 몇 볼트인지로 바꾸고
+    celsius = (volts - 0.5) * 100    # TMP36 은 0도에서 0.5V, 1도당 10mV
+
+    print(raw, '->', round(volts, 2), 'V ->', round(celsius, 1), '도')
+    time.sleep(0.5)
 `,
   },
 ]
