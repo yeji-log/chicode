@@ -41,6 +41,8 @@ import {
   ledColorOf,
   mirrorX,
   NEOPIXEL_COUNT,
+  ULTRASONIC_DEFAULT_RATIO,
+  ultrasonicDistance,
   type PinRef,
   type PlacedBoard,
   type PlacedBreadboard,
@@ -144,6 +146,9 @@ export interface CircuitCanvasProps {
   onAnalogChange: (gpio: number, value: number) => void
   /** 온습도 센서 슬라이더를 움직일 때, 연결된 GPIO 번호로 온도(℃)·습도(%)를 알려준다. */
   onDhtChange: (gpio: number, temperature: number, humidity: number) => void
+  /** 초음파 센서의 배선(trig/echo 짝)과 거리를 알려준다. 워커가 trig 를 보고 echo
+   *  펄스를 만들어야 해서 값 하나가 아니라 목록 통째로 보낸다. */
+  onUltrasonicChange: (sensors: { trig: number; echo: number; distanceCm: number }[]) => void
   /**
    * true 면 배선/부품 편집을 전부 막는다(코드 실행 중). 버튼·스위치를 눌러보는 것만은
    * 계속 된다 — "실행 중인 회로가 실제로 반응하는 걸 보는" 게 이 잠금의 목적이지,
@@ -181,7 +186,7 @@ type Selection = { id: string; kind: 'component' | 'breadboard' | 'board' | 'wir
 type Rewiring = { wireId: string; end: 'from' | 'to' } | null
 
 function CircuitCanvas(
-  { gpioLevels, pwmLevels, neopixelColors, onButtonChange, onAnalogChange, onDhtChange, locked = false }: CircuitCanvasProps,
+  { gpioLevels, pwmLevels, neopixelColors, onButtonChange, onAnalogChange, onDhtChange, onUltrasonicChange, locked = false }: CircuitCanvasProps,
   ref: React.Ref<CircuitCanvasHandle>,
 ) {
   const [{ components, breadboards, wires, board }, setState] = useState<CircuitSnapshot>(loadInitial)
@@ -379,6 +384,26 @@ function CircuitCanvas(
       if (gpio === undefined) continue
       onAnalogChange(gpio, Math.round((analogValues.get(analogKey(c.id)) ?? 0) * ADC_MAX))
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analogValues, connectivity, components])
+
+  /** 초음파는 값 하나가 아니라 "어느 핀이 trig 이고 어느 핀이 echo 인가" 까지 워커가
+   *  알아야 한다 — 워커가 trig 의 내림 edge 를 보고 echo 펄스를 직접 만들기 때문이다.
+   *  배선이나 거리 슬라이더가 바뀔 때마다 목록을 통째로 다시 보낸다. */
+  useEffect(() => {
+    const sensors: { trig: number; echo: number; distanceCm: number }[] = []
+    for (const c of components) {
+      if (c.type !== 'ultrasonic') continue
+      const trig = gpioForPin(c.id, 'trig')
+      const echo = gpioForPin(c.id, 'echo')
+      if (trig === undefined || echo === undefined) continue
+      sensors.push({
+        trig,
+        echo,
+        distanceCm: ultrasonicDistance(analogValues.get(analogKey(c.id)) ?? ULTRASONIC_DEFAULT_RATIO),
+      })
+    }
+    onUltrasonicChange(sensors)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analogValues, connectivity, components])
 
@@ -854,7 +879,7 @@ function CircuitCanvas(
   /** 포인터 위치를 아날로그 입력값(0~1)으로 바꾼다. 가변저항은 노브 각도로,
    *  조도센서는 슬라이더의 가로 위치로 정해진다. */
   const analogValueAt = (component: PlacedComponent, p: Point): number =>
-    component.type === 'ldr' || component.type === 'dht'
+    component.type === 'ldr' || component.type === 'dht' || component.type === 'ultrasonic'
       ? sliderValueAt(component, p)
       : knobValueAt(component, p)
 
@@ -1063,7 +1088,10 @@ function CircuitCanvas(
                 neopixelColors={neopixelColors}
                 gpioForPin={(pin) => gpioForPin(c.id, pin)}
                 active={activeInputs.has(c.id)}
-                analogValue={analogValues.get(analogKey(c.id)) ?? 0}
+                analogValue={
+                  analogValues.get(analogKey(c.id)) ??
+                  (c.type === 'ultrasonic' ? ULTRASONIC_DEFAULT_RATIO : 0)
+                }
                 tempValue={analogValues.get(analogKey(c.id, 'temp')) ?? DHT_DEFAULT_TEMP_RATIO}
                 humidityValue={analogValues.get(analogKey(c.id, 'hum')) ?? DHT_DEFAULT_HUMIDITY_RATIO}
                 locked={locked}
@@ -1941,7 +1969,8 @@ function ComponentGlyph({
         component.type === 'reed' ||
         component.type === 'dht' ||
         component.type === 'seven-segment' ||
-        component.type === 'neopixel') && <Legs />}
+        component.type === 'neopixel' ||
+        component.type === 'ultrasonic') && <Legs />}
 
       {component.type === 'potentiometer' && (
         <g style={{ filter: 'url(#chico-shadow)' }}>
@@ -2120,6 +2149,59 @@ function ComponentGlyph({
               {Math.round(analogValue * 100)}%
             </text>
           </Unflip>
+        </g>
+      )}
+
+      {component.type === 'ultrasonic' && (
+        <g style={{ filter: 'url(#chico-shadow)' }}>
+          {/* HC-SR04 특유의 눈 두 개(스피커·마이크). 몸통은 끄는 자리다. */}
+          <rect
+            x={-27}
+            y={6}
+            width={54}
+            height={30}
+            rx={3}
+            fill="#1e3a8a"
+            stroke="#172554"
+            strokeWidth={1.5}
+            onPointerDown={locked ? undefined : onBodyPointerDown}
+            className={locked ? '' : 'cursor-grab'}
+          />
+          {[-13, 13].map((cx) => (
+            <g key={cx} className="pointer-events-none">
+              <circle cx={cx} cy={21} r={11} fill="#334155" stroke="#0f172a" strokeWidth={1.2} />
+              <circle cx={cx} cy={21} r={7} fill="#1e293b" />
+            </g>
+          ))}
+          <rect x={-4} y={16} width={8} height={10} rx={1.5} fill="#94a3b8" className="pointer-events-none" />
+
+          <Unflip>
+            <text x={0} y={-16} fontSize={9} fontWeight="bold" textAnchor="middle" fill="#57534e" className="select-none">
+              {ultrasonicDistance(analogValue)}cm
+            </text>
+          </Unflip>
+          {/* 앞에 있는 물체까지의 거리를 학생이 직접 정한다. */}
+          <line
+            x1={-LDR_TRACK_HALF_WIDTH}
+            y1={-6}
+            x2={LDR_TRACK_HALF_WIDTH}
+            y2={-6}
+            stroke="#a8a29e"
+            strokeWidth={3}
+            strokeLinecap="round"
+            className="cursor-pointer"
+            onPointerDown={onKnobPointerDown}
+          />
+          <circle
+            cx={-LDR_TRACK_HALF_WIDTH + analogValue * LDR_TRACK_HALF_WIDTH * 2}
+            cy={-6}
+            r={6}
+            fill="#38bdf8"
+            stroke="#075985"
+            strokeWidth={1.5}
+            className="cursor-pointer"
+            onPointerDown={onKnobPointerDown}
+          />
         </g>
       )}
 

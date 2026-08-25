@@ -29,6 +29,9 @@ export interface UsePico {
   setAnalog: (pin: number, value: number) => void
   /** 온습도 센서 슬라이더를 움직일 때 호출한다(온도 ℃, 습도 %). */
   setDht: (pin: number, temperature: number, humidity: number) => void
+  /** 초음파 센서 배선·거리를 알려준다. 워커가 trig 를 보고 echo 펄스를 만들어야 해서
+   *  값 하나가 아니라 목록 통째로 보낸다. */
+  setUltrasonic: (sensors: { trig: number; echo: number; distanceCm: number }[]) => void
 }
 
 /**
@@ -173,6 +176,14 @@ export function usePico(): UsePico {
     workerRef.current?.postMessage(request)
   }, [])
 
+  const setUltrasonic = useCallback(
+    (sensors: { trig: number; echo: number; distanceCm: number }[]) => {
+      const request: WorkerRequest = { type: 'ultrasonic', sensors }
+      workerRef.current?.postMessage(request)
+    },
+    [],
+  )
+
   return {
     status,
     output,
@@ -187,5 +198,6 @@ export function usePico(): UsePico {
     setButton,
     setAnalog,
     setDht,
+    setUltrasonic,
   }
 }

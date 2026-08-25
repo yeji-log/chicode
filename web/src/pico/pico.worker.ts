@@ -30,6 +30,9 @@ export type WorkerRequest =
   | { type: 'analog'; pin: number; value: number }
   /** 온습도 센서가 그 핀에서 읽어갈 값. 온도는 ℃, 습도는 %. */
   | { type: 'dht'; pin: number; temperature: number; humidity: number }
+  /** 초음파 센서 목록. 워커가 trig 의 내림 edge 를 보고 echo 펄스를 만들어야 해서,
+   *  어느 핀이 짝인지(배선)를 UI 가 알려줘야 한다. */
+  | { type: 'ultrasonic'; sensors: { trig: number; echo: number; distanceCm: number }[] }
 
 export type WorkerResponse =
   | { type: 'ready' }
@@ -56,6 +59,29 @@ const gpioIn = new Map<number, boolean>()
  *  실행마다 비우지 않는다 — 노브를 돌려둔 상태는 실행과 무관한 "물리적" 상태다
  *  (버튼을 누르고 있는 것과 같다). */
 const adcIn = new Map<number, number>()
+
+/**
+ * 초음파 센서. 실물 HC-SR04 는 trig 에 짧은 펄스를 넣으면 잠시 뒤 echo 를 거리에
+ * 비례하는 시간만큼 HIGH 로 올린다. 학생 코드는 그 시간을 재서 거리를 구한다 —
+ * 그래서 여기서도 "값"이 아니라 "펄스"를 만들어줘야 한다.
+ *
+ * echoWindow 는 지금 진행 중인 echo 펄스의 시작·끝 시각(ms). pin_read 가 이 창
+ * 안이면 HIGH 를 돌려준다. 학생의 busy-wait 루프가 도는 동안에도 실제 시간이
+ * 흐르기 때문에(실측 확인) 이 방식이 성립한다.
+ */
+interface Ultrasonic {
+  trig: number
+  echo: number
+  distanceCm: number
+  echoFrom: number
+  echoTo: number
+}
+const ultrasonics = new Map<number, Ultrasonic>() // key: echo 핀
+
+/** trig 를 내린 뒤 echo 가 올라오기까지의 짬(ms). 실물도 바로 안 올라온다. */
+const ECHO_DELAY_MS = 0.2
+/** 소리가 1cm 왕복하는 데 걸리는 시간(us) — 학생이 나눗셈에 쓰는 그 58 이다. */
+const US_PER_CM = 58
 
 /** 온습도 센서(DHT11/22)가 핀마다 들고 있는 값. UI 의 슬라이더가 밀어 넣는다.
  *  아날로그 입력(adcIn)과 같은 구조지만 값이 두 개(온도/습도)라 따로 둔다. */
@@ -90,10 +116,25 @@ async function boot(): Promise<MicroPythonInterface> {
 
   mp.registerJsModule('_chico_hw', {
     pin_write(pin: number, value: number) {
+      const was = gpioOut.get(pin)
       gpioOut.set(pin, !!value)
+      // trig 가 1 → 0 으로 떨어지는 순간이 "재라"는 신호다(실물과 같다).
+      if (was && !value) {
+        for (const sensor of ultrasonics.values()) {
+          if (sensor.trig !== pin) continue
+          sensor.echoFrom = performance.now() + ECHO_DELAY_MS
+          sensor.echoTo = sensor.echoFrom + (sensor.distanceCm * US_PER_CM) / 1000
+        }
+      }
       post({ type: 'gpio', pin, value: value ? 1 : 0 })
     },
     pin_read(pin: number) {
+      // echo 핀은 지금이 펄스 창 안인지로 정해진다 — 시간에 따라 값이 변하는 유일한 핀이다.
+      const sensor = ultrasonics.get(pin)
+      if (sensor) {
+        const now = performance.now()
+        return now >= sensor.echoFrom && now < sensor.echoTo
+      }
       // 출력으로 쓴 적이 있는 핀이면 그 값을, 아니면 입력(버튼/스위치) 상태를 준다.
       const out = gpioOut.get(pin)
       return out !== undefined ? out : (gpioIn.get(pin) ?? false)
@@ -165,6 +206,25 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
   if (message.type === 'analog') {
     adcIn.set(message.pin, Math.max(0, Math.min(65535, Math.round(message.value))))
+    return
+  }
+
+  if (message.type === 'ultrasonic') {
+    // 배선이 바뀌면 통째로 다시 온다. 진행 중이던 펄스는 유지한다(거리만 바뀌는
+    // 경우가 대부분이라, 재측정 중에 창이 사라지면 학생 코드가 타임아웃에 걸린다).
+    const next = new Map<number, Ultrasonic>()
+    for (const s of message.sensors) {
+      const prev = ultrasonics.get(s.echo)
+      next.set(s.echo, {
+        trig: s.trig,
+        echo: s.echo,
+        distanceCm: s.distanceCm,
+        echoFrom: prev?.echoFrom ?? 0,
+        echoTo: prev?.echoTo ?? 0,
+      })
+    }
+    ultrasonics.clear()
+    for (const [k, v] of next) ultrasonics.set(k, v)
     return
   }
 
@@ -355,10 +415,26 @@ def _chico_build_machine():
         def _push(self):
             _chico_hw.pwm_set(self.id, self._freq, self._duty)
 
+    def time_pulse_us(pin, level, timeout_us=1000000):
+        """핀이 level 이 되기를 기다렸다가, level 인 동안의 길이를 us 로 돌려준다.
+        진짜 MicroPython 에 있는 함수고, 널리 쓰이는 hcsr04 드라이버가 이걸 쓴다.
+        시간 초과면 -2(안 올라옴) / -1(안 내려옴) — 실물과 같은 규약이다.
+        타임아웃이 있어야 센서를 안 꽂았을 때 무한 루프에 빠지지 않는다."""
+        start = _chico_hw.now_us()
+        while pin.value() != level:
+            if _chico_us_since(start) > timeout_us:
+                return -2
+        t0 = _chico_hw.now_us()
+        while pin.value() == level:
+            if _chico_us_since(t0) > timeout_us:
+                return -1
+        return _chico_us_since(t0)
+
     mod = _Module()
     mod.Pin = Pin
     mod.ADC = ADC
     mod.PWM = PWM
+    mod.time_pulse_us = time_pulse_us
     return mod
 
 sys.modules["machine"] = _chico_build_machine()

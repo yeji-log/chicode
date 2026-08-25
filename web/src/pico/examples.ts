@@ -250,6 +250,18 @@ function neopixelStrip(): CircuitSnapshot {
   }
 }
 
+function ultrasonicOnly(): CircuitSnapshot {
+  return {
+    components: [{ id: 'us1', type: 'ultrasonic', x: PART_X, y: 130 }],
+    breadboards: [],
+    wires: [
+      { id: 'w1', from: { kind: 'component', componentId: 'us1', pin: 'trig' }, to: { kind: 'board', pinId: GP3 }, color: '#dc2626' },
+      { id: 'w2', from: { kind: 'component', componentId: 'us1', pin: 'echo' }, to: { kind: 'board', pinId: GP2 }, color: '#eab308' },
+      { id: 'w3', from: { kind: 'component', componentId: 'us1', pin: 'gnd' }, to: { kind: 'board', pinId: GND }, color: '#1f2937' },
+    ],
+  }
+}
+
 export const EXAMPLES: Example[] = [
   {
     name: '1. LED 켜고 끄기',
@@ -546,6 +558,37 @@ while True:
     print('무지개', step)
     step = step + 1
     time.sleep(0.3)
+`,
+  },
+  {
+    name: '15. 초음파로 거리 재기',
+    circuit: ultrasonicOnly(),
+    code: `from machine import Pin, time_pulse_us
+import time
+
+trig = Pin(3, Pin.OUT)
+echo = Pin(2, Pin.IN)
+
+while True:
+    # 1) trig 에 10us 짜리 짧은 펄스를 넣어 "재라" 고 시킨다
+    trig.value(0)
+    time.sleep_us(2)
+    trig.value(1)
+    time.sleep_us(10)
+    trig.value(0)
+
+    # 2) echo 가 HIGH 인 시간을 잰다 (소리가 갔다 오는 시간)
+    us = time_pulse_us(echo, 1, 30000)
+
+    if us < 0:
+        print('신호를 못 받았어요 (배선을 확인하세요)')
+    else:
+        cm = us / 58          # 소리는 1cm 왕복에 58us 걸린다
+        print(round(cm), 'cm')
+        if cm < 15:
+            print('  너무 가까워요!')
+
+    time.sleep(0.4)
 `,
   },
 ]

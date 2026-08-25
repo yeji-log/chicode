@@ -53,6 +53,7 @@ export type ComponentType =
   | 'dht'
   | 'seven-segment'
   | 'neopixel'
+  | 'ultrasonic'
 
 export type ComponentCategory = 'output' | 'input'
 
@@ -142,6 +143,13 @@ export const COMPONENT_LIST: ComponentMeta[] = [
     label: '7세그먼트(획 7개 + 점, 핀 9개)',
     short: '7세그',
     emoji: '🔢',
+  },
+  {
+    type: 'ultrasonic',
+    category: 'input',
+    label: '초음파 거리센서 HC-SR04(거리 슬라이더)',
+    short: '초음파',
+    emoji: '📡',
   },
   {
     type: 'dht',
@@ -360,6 +368,13 @@ export const COMPONENT_PINS: Record<ComponentType, { pin: string; dx: number; dy
     { pin: 'dp', dx: 24, dy: 92 },
     { pin: 'common', dx: 32, dy: 92 },
   ],
+  // HC-SR04 와 같은 4핀. trig 로 "재라" 신호를 넣고 echo 로 걸린 시간을 받는다.
+  ultrasonic: [
+    { pin: 'vcc', dx: -24, dy: 52 },
+    { pin: 'trig', dx: -8, dy: 52 },
+    { pin: 'echo', dx: 8, dy: 52 },
+    { pin: 'gnd', dx: 24, dy: 52 },
+  ],
   // DHT11 모듈과 같은 3핀(VCC/DATA/GND). 실물 알맹이는 4핀이지만 시중 모듈은 3핀이다.
   dht: [
     { pin: 'vcc', dx: -16, dy: 54 },
@@ -410,7 +425,17 @@ export const COMPONENT_PIVOT: Record<ComponentType, Point> = {
   dht: { x: 0, y: 21 },
   'seven-segment': { x: 0, y: 38 },
   neopixel: { x: 0, y: 14 },
+  ultrasonic: { x: 0, y: 20 },
 }
+
+/** 초음파 거리 슬라이더 범위(cm). 실물 HC-SR04 도 2cm 아래는 못 재고 400cm 쯤이 한계다. */
+export const ULTRASONIC_MIN_CM = 2
+export const ULTRASONIC_MAX_CM = 200
+export function ultrasonicDistance(ratio: number): number {
+  return Math.round(ULTRASONIC_MIN_CM + ratio * (ULTRASONIC_MAX_CM - ULTRASONIC_MIN_CM))
+}
+/** 슬라이더 기본값 — 30cm 쯤에서 시작한다. */
+export const ULTRASONIC_DEFAULT_RATIO = (30 - ULTRASONIC_MIN_CM) / (ULTRASONIC_MAX_CM - ULTRASONIC_MIN_CM)
 
 /** 시뮬레이터 네오픽셀 스트립의 칸 수. 코드에서 더 많이 잡아도 여기까지만 보인다. */
 export const NEOPIXEL_COUNT = 8
