@@ -7,6 +7,7 @@ import {
   deleteExercise,
   listExercises,
   seedExercises,
+  setPublishedMany,
   updateExercise,
   type Exercise,
   type ExerciseDraft,
@@ -52,15 +53,43 @@ export default function TeacherExercises() {
     }
   }
 
+  const publishedCount = exercises.filter((exercise) => exercise.published).length
+
   const togglePublished = async (exercise: Exercise) => {
-    await updateExercise(exercise.id, { published: !exercise.published })
-    await reload()
+    // 실패를 조용히 넘기면 스위치가 원래 자리로 돌아갈 뿐이라, 교사는 눌린 건지
+    // 안 눌린 건지 알 수 없다. 반드시 말해준다.
+    setBusyMessage(null)
+    try {
+      await updateExercise(exercise.id, { published: !exercise.published })
+      await reload()
+    } catch (caught) {
+      console.error(caught)
+      setBusyMessage(`"${exercise.title}" 의 공개 상태를 바꾸지 못했습니다. 다시 눌러 주세요.`)
+    }
+  }
+
+  const setAllPublished = async (published: boolean) => {
+    setBusyMessage(published ? '모두 공개하는 중…' : '모두 숨기는 중…')
+    try {
+      await setPublishedMany(exercises.map((exercise) => exercise.id), published)
+      await reload()
+      setBusyMessage(published ? '모두 공개했습니다.' : '모두 숨겼습니다. 필요한 문제만 켜세요.')
+    } catch (caught) {
+      console.error(caught)
+      setBusyMessage('바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    }
   }
 
   const remove = async (exercise: Exercise) => {
     if (!confirm(`"${exercise.title}" 문제를 지울까요? 되돌릴 수 없습니다.`)) return
-    await deleteExercise(exercise.id)
-    await reload()
+    setBusyMessage(null)
+    try {
+      await deleteExercise(exercise.id)
+      await reload()
+    } catch (caught) {
+      console.error(caught)
+      setBusyMessage(`"${exercise.title}" 을 지우지 못했습니다.`)
+    }
   }
 
   if (loading) return <p className="text-ink-500">불러오는 중…</p>
@@ -83,8 +112,28 @@ export default function TeacherExercises() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-extrabold text-ink-900">연습문제</h2>
-        <span className="text-sm text-ink-500">{exercises.length}개</span>
+        <span className="text-sm text-ink-500">
+          {exercises.length}개 중 공개 {publishedCount}개
+        </span>
         <div className="ml-auto flex gap-2">
+          {exercises.length > 0 && (
+            <>
+              <button
+                onClick={() => setAllPublished(false)}
+                disabled={publishedCount === 0}
+                className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 hover:border-cheese-300 disabled:opacity-40"
+              >
+                모두 숨기기
+              </button>
+              <button
+                onClick={() => setAllPublished(true)}
+                disabled={publishedCount === exercises.length}
+                className="rounded-lg border border-cream-deep px-3 py-2 text-sm font-semibold text-ink-700 hover:border-cheese-300 disabled:opacity-40"
+              >
+                모두 공개
+              </button>
+            </>
+          )}
           {exercises.length === 0 && (
             <button
               onClick={handleSeed}
@@ -102,7 +151,18 @@ export default function TeacherExercises() {
         </div>
       </div>
 
-      {busyMessage && <p className="text-sm text-ink-500">{busyMessage}</p>}
+      {busyMessage && (
+        <p
+          className={[
+            'rounded-lg px-3 py-2 text-sm',
+            busyMessage.includes('못했습니다')
+              ? 'bg-warn-100 font-semibold text-warn-600'
+              : 'text-ink-500',
+          ].join(' ')}
+        >
+          {busyMessage}
+        </p>
+      )}
 
       {exercises.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
@@ -120,17 +180,7 @@ export default function TeacherExercises() {
               <span className="text-sm text-ink-500">{exercise.concept}</span>
               <span className="text-xs text-ink-500">테스트 {exercise.tests.length}개</span>
               <div className="ml-auto flex items-center gap-2">
-                <button
-                  onClick={() => togglePublished(exercise)}
-                  className={[
-                    'rounded-full px-3 py-1 text-xs font-bold',
-                    exercise.published
-                      ? 'bg-cheese-100 text-ink-900'
-                      : 'bg-ink-100 text-ink-500',
-                  ].join(' ')}
-                >
-                  {exercise.published ? '학생에게 공개됨' : '준비중'}
-                </button>
+                <PublishToggle exercise={exercise} onToggle={() => togglePublished(exercise)} />
                 <button
                   onClick={() => setEditing(exercise)}
                   className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 hover:border-cheese-300"
@@ -149,6 +199,45 @@ export default function TeacherExercises() {
         </ul>
       )}
     </div>
+  )
+}
+
+/**
+ * 공개 여부 스위치.
+ *
+ * 예전엔 알약 모양 배지("학생에게 공개됨")였는데, 그게 **누를 수 있는 것으로 보이지
+ * 않았다** — 상태 표시로 읽혀서 20개가 전부 공개인 채로 남아 있었다(실제로 그랬다).
+ * 손잡이가 좌우로 움직이는 진짜 스위치 모양으로 바꾸고, 글자도 지금 상태가 아니라
+ * 무엇이 되는지 함께 읽히게 둔다.
+ */
+function PublishToggle({ exercise, onToggle }: { exercise: Exercise; onToggle: () => void }) {
+  const on = exercise.published
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      title={on ? '누르면 학생에게 숨겨집니다' : '누르면 학생에게 보입니다'}
+      className="flex items-center gap-2"
+    >
+      <span
+        className={[
+          'flex h-6 w-11 items-center rounded-full p-0.5 transition-colors',
+          on ? 'bg-cheese-400' : 'bg-cream-deep',
+        ].join(' ')}
+      >
+        <span
+          className={[
+            'size-5 rounded-full bg-white shadow transition-transform',
+            on ? 'translate-x-5' : 'translate-x-0',
+          ].join(' ')}
+        />
+      </span>
+      <span className={`text-xs font-bold ${on ? 'text-ink-900' : 'text-ink-500'}`}>
+        {on ? '공개' : '숨김'}
+      </span>
+    </button>
   )
 }
 

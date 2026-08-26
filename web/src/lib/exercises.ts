@@ -119,6 +119,19 @@ export async function seedExercises(drafts: ExerciseDraft[]): Promise<number> {
 }
 
 /**
+ * 여러 문제의 공개 여부를 한 번에 바꾼다.
+ *
+ * 문제가 20개라 하나씩 누르는 건 수업 준비 때 실제로 번거롭다 — "전부 숨겨두고
+ * 오늘 나갈 것만 켜기" 가 가장 흔한 동선이라 그걸 한 번에 할 수 있게 한다.
+ * writeBatch 라 중간에 실패해서 일부만 바뀌는 상태가 생기지 않는다.
+ */
+export async function setPublishedMany(ids: string[], published: boolean): Promise<void> {
+  const batch = writeBatch(db)
+  for (const id of ids) batch.update(doc(db, EXERCISES, id), { published })
+  await batch.commit()
+}
+
+/**
  * 교사가 문제 순서를 드래그로 바꾼 뒤 통째로 저장한다(subjects.ts 의
  * reorderSubjects 와 같은 방식 — order 를 배열 인덱스로 다시 매긴다).
  */

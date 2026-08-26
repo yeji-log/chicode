@@ -31,9 +31,9 @@ const STARTER = '# 여기에 코드를 작성하세요\n'
  * (외부 CDN 을 안 쓰는 프로젝트라 무게가 그대로 학생 네트워크로 간다).
  * 백틱 개수가 홀수여도 그냥 글자로 남을 뿐 깨지지 않는다.
  */
-function RichText({ text, className }: { text: string; className?: string }) {
+function InlineCode({ text }: { text: string }) {
   return (
-    <p className={`whitespace-pre-wrap ${className ?? ''}`}>
+    <>
       {text.split('`').map((part, index) =>
         index % 2 === 1 ? (
           <code key={index} className="rounded bg-cream-deep/70 px-1 py-0.5 font-mono text-[0.9em]">
@@ -43,7 +43,36 @@ function RichText({ text, className }: { text: string; className?: string }) {
           part
         ),
       )}
-    </p>
+    </>
+  )
+}
+
+function RichText({ text, className }: { text: string; className?: string }) {
+  // ``` 로 둘러싼 덩어리는 코드 블록, 그 사이의 백틱 하나는 인라인 코드다.
+  // 홀수 번째 조각이 블록 안이라는 규칙은 백틱 하나짜리와 같다.
+  const blocks = text.split('```')
+  return (
+    <div className={className}>
+      {blocks.map((block, index) => {
+        if (index % 2 === 1) {
+          return (
+            <pre
+              key={index}
+              className="my-2 overflow-x-auto rounded-xl bg-cream-deep/60 px-4 py-3 font-mono text-sm text-ink-900"
+            >
+              {block.replace(/^\n+/, '').replace(/\n+$/, '')}
+            </pre>
+          )
+        }
+        const trimmed = block.replace(/^\n+/, '').replace(/\n+$/, '')
+        if (!trimmed) return null
+        return (
+          <p key={index} className="whitespace-pre-wrap">
+            <InlineCode text={trimmed} />
+          </p>
+        )
+      })}
+    </div>
   )
 }
 
@@ -178,6 +207,11 @@ export default function ExerciseDetail() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* 실행 왼쪽의 화살표 — 문제를 훑어보며 옮겨 다닐 때 화면 끝까지 내려가지
+              않아도 되게 한다(사용자 요청). 아래쪽 이전/다음 칸은 문제를 다 풀고
+              넘어가는 자리라 이름까지 보여주는 큰 칸으로 그대로 둔다. */}
+          <NeighborArrow exercise={previous} direction="prev" />
+          <NeighborArrow exercise={next} direction="next" />
           <button
             onClick={handleRun}
             disabled={busy}
@@ -439,6 +473,39 @@ export default function ExerciseDetail() {
         <NeighborLink exercise={next} direction="next" solved={solved} />
       </nav>
     </div>
+  )
+}
+
+/** 헤더의 작은 화살표. 이웃이 없으면 눌리지 않는 흐린 모양으로 자리를 지킨다 —
+ *  아예 없애면 버튼들이 좌우로 움직여서 누르려던 자리가 바뀐다. */
+function NeighborArrow({
+  exercise,
+  direction,
+}: {
+  exercise: Exercise | null
+  direction: 'prev' | 'next'
+}) {
+  const label = direction === 'prev' ? '이전 문제' : '다음 문제'
+  const arrow = direction === 'prev' ? '‹' : '›'
+  const shape =
+    'flex size-10 items-center justify-center rounded-xl border border-cream-deep text-xl font-bold'
+
+  if (!exercise) {
+    return (
+      <span className={`${shape} cursor-not-allowed bg-white/50 text-ink-500/40`} aria-hidden>
+        {arrow}
+      </span>
+    )
+  }
+  return (
+    <Link
+      to={`/exercises/${exercise.id}`}
+      title={`${label}: ${exercise.order}. ${exercise.title}`}
+      aria-label={`${label}: ${exercise.order}. ${exercise.title}`}
+      className={`${shape} bg-white text-ink-700 transition-colors hover:bg-cheese-50 hover:text-ink-900`}
+    >
+      {arrow}
+    </Link>
   )
 }
 

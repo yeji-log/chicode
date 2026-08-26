@@ -93,7 +93,7 @@ export default function Exercises() {
                       </span>
                       <span className="text-sm text-ink-500">{exercise.concept}</span>
                       {isTeacherViewer && !exercise.published && (
-                        <span className="mt-1 w-fit rounded-full bg-ink-100 px-2 py-0.5 text-xs font-semibold text-ink-500">
+                        <span className="mt-1 w-fit rounded-full bg-cream-deep px-2 py-0.5 text-xs font-semibold text-ink-500">
                           준비중 (학생에게 안 보임)
                         </span>
                       )}
