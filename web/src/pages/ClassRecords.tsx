@@ -551,7 +551,7 @@ function ClassRoster({
   }
 
   async function handleDeleteDate(dateRecord: DateRecord) {
-    if (!confirm(`${formatDateShort(dateRecord.date)} 수업 날짜를 지울까요? 그날의 참여 기록도 함께 지워지고 되돌릴 수 없습니다.`))
+    if (!confirm(`${dateLabel(dates ?? [], dateRecord)} 수업 날짜를 지울까요? 그날의 참여 기록도 함께 지워지고 되돌릴 수 없습니다.`))
       return
     try {
       await deleteDate(classMeta.id, dateRecord.id)
@@ -802,6 +802,20 @@ function formatDateShort(date: string): string {
   return `${Number(month)}/${Number(day)}`
 }
 
+/**
+ * 블록타임 수업처럼 같은 날짜로 수업 기록을 두 번 이상 만든 경우(classRecords.ts
+ * 머리말 참고), 컬럼 헤더가 전부 "8/26"으로만 보이면 어느 게 1교시고 어느 게
+ * 2교시인지 구분이 안 된다 — 같은 날짜가 여럿일 때만 만든 순서대로 "-1", "-2"를
+ * 붙인다. dates가 이미 date asc, createdAt asc로 정렬돼 있다는 전제(listDates,
+ * handleDateCreated의 append 순서)로 filter 결과 순서를 그대로 쓴다.
+ */
+function dateLabel(dates: DateRecord[], target: DateRecord): string {
+  const sameDate = dates.filter((entry) => entry.date === target.date)
+  if (sameDate.length <= 1) return formatDateShort(target.date)
+  const index = sameDate.findIndex((entry) => entry.id === target.id)
+  return `${formatDateShort(target.date)}-${index + 1}`
+}
+
 /** 가장 최근 날짜를 기준으로 요약한다 — "오늘 막 만든 기록 현황"을 보고 싶을
  *  때가 대부분이라, 날짜를 따로 선택하게 하지 않고 자동으로 마지막 컬럼을
  *  보여준다. */
@@ -867,10 +881,10 @@ function RecordTable({
                 className="w-16 border-b border-l border-cream-deep px-2 py-3 text-xs font-semibold text-ink-500"
               >
                 <div className="flex items-center justify-center gap-1">
-                  <span>{formatDateShort(entry.date)}</span>
+                  <span>{dateLabel(dates, entry)}</span>
                   <button
                     onClick={() => onDeleteDate(entry)}
-                    aria-label={`${formatDateShort(entry.date)} 날짜 삭제`}
+                    aria-label={`${dateLabel(dates, entry)} 날짜 삭제`}
                     className="shrink-0 rounded px-1 font-normal text-ink-400 transition-colors hover:text-red-600"
                   >
                     ×
@@ -907,7 +921,7 @@ function RecordTable({
                   <td key={dateRecord.id} className="border-b border-l border-cream-deep p-0 text-center">
                     <button
                       onClick={() => onToggle(dateRecord.id, student.id, !participating)}
-                      aria-label={`${student.name} ${formatDateShort(dateRecord.date)} ${
+                      aria-label={`${student.name} ${dateLabel(dates, dateRecord)} ${
                         participating ? '참여' : '미참여'
                       } — 클릭해서 전환`}
                       className="flex h-11 w-16 items-center justify-center text-lg transition-colors hover:bg-cheese-100"

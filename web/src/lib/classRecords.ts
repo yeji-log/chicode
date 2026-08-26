@@ -8,11 +8,24 @@
  *
  *   classRecords/{classId}              반 하나 (예: "2학년 1반")
  *     students/{studentId}              학생 한 명 (id는 crypto.randomUUID())
- *     dates/{date}                      수업 날짜 하나 (문서 id = "2026-08-21" 형식
- *                                        문자열 그대로 — 자연 정렬되고 같은 날짜를
- *                                        두 번 만들 수 없다)
+ *     dates/{dateRecordId}              수업 날짜 하나 (id는 crypto.randomUUID())
  *
- * dates/{date} 문서의 records 필드는 `{ [studentId]: boolean }` 맵이다(참여=true).
+ * dates 문서 id는 원래 날짜 문자열("2026-08-21")을 그대로 썼는데, 블록타임
+ * 수업(하루에 같은 반을 두 번 만나 참여를 두 번 체크해야 하는 경우)에서 같은
+ * 날짜로 "수업 날짜 추가"를 두 번 누르면 createDate가 "이미 있으니 그대로
+ * 돌려준다"며 기존 문서를 다시 내려줬다 — 화면에는 두 컬럼이 생긴 것처럼
+ * 보이지만(둘 다 같은 id를 optimistic하게 append) 실제로는 Firestore에 문서가
+ * 하나뿐이라 새로고침하면 하나로 줄어들었다(사용자가 "등록은 되는데 새로고침하면
+ * 지워진다"고 보고한 증상). id를 randomUUID로 바꿔서 같은 날짜라도 별개 문서로
+ * 여러 개 만들 수 있게 했다 — 대신 "같은 날짜 두 번 클릭 방지" 안전장치는
+ * 없어졌다(의도적 트레이드오프: 블록타임에선 그게 바로 필요한 동작이라 막을 수
+ * 없다). 실수로 만든 컬럼은 헤더의 × 버튼으로 지우면 된다.
+ * date 필드로 정렬해야 해서 문서마다 생성 시각(createdAt, epoch ms)도 같이
+ * 저장한다 — 같은 날짜인 문서끼리는 만든 순서(1교시가 왼쪽)로 나오게 하기
+ * 위해서다. Firestore 복합 색인을 피하려고 정렬은 클라이언트에서 한다(다른
+ * 컬렉션과 같은 패턴).
+ *
+ * dates 문서의 records 필드는 `{ [studentId]: boolean }` 맵이다(참여=true).
  * 새 학생이 지난 날짜엔 없을 수 있는데(그 학생이 그 날짜엔 반에 없었으니까), 이
  * 경우 "참여"로 간주한다 — timetable의 cells/classColors와 같은 dot-notation
  * updateDoc 패턴을 쓴다(saveCell 주석 참고, 실제 프로덕션에 스크래치 컬렉션을
@@ -24,7 +37,6 @@ import {
   deleteDoc,
   deleteField,
   doc,
-  getDoc,
   getDocs,
   orderBy,
   query,
@@ -234,34 +246,41 @@ export async function deleteStudent(classId: string, studentId: string): Promise
 }
 
 export async function listDates(classId: string): Promise<DateRecord[]> {
+  // orderBy를 date 하나로만 걸면(복합 색인 회피 원칙) 같은 날짜를 가진 문서끼리는
+  // 순서가 보장되지 않으므로, 생성 시각(createdAt)까지 클라이언트에서 함께
+  // 정렬한다 — 블록타임으로 같은 날짜에 문서가 여러 개면 만든 순서(1교시가
+  // 왼쪽)로 보이게 하기 위해서다. Firestore가 date로 이미 정렬해서 내려준다는
+  // 전제에 기대지 않고 date까지 직접 비교한다 — date만 보고 0을 반환하면
+  // "이미 정렬돼 있다"는 가정이 깨졌을 때(예: 쿼리가 바뀌거나 캐시된 결과가
+  // 섞일 때) 정렬이 조용히 틀어질 수 있어서다.
   const snapshot = await getDocs(
     query(collection(db, CLASS_RECORDS, classId, DATES), orderBy('date', 'asc')),
   )
-  return snapshot.docs.map((entry) => {
-    const data = entry.data()
-    return {
-      id: entry.id,
-      date: data.date as string,
-      records: (data.records as Record<string, boolean>) ?? {},
-    }
-  })
+  return snapshot.docs
+    .map((entry) => {
+      const data = entry.data()
+      return {
+        id: entry.id,
+        date: data.date as string,
+        records: (data.records as Record<string, boolean>) ?? {},
+        createdAt: (data.createdAt as number) ?? 0,
+      }
+    })
+    .sort((a, b) => (a.date === b.date ? a.createdAt - b.createdAt : a.date < b.date ? -1 : 1))
+    .map(({ id, date, records }) => ({ id, date, records }))
 }
 
 /**
- * 새 수업 날짜를 만든다. 이미 있으면(같은 날짜를 두 번 누른 경우) 있는 그대로
- * 돌려주고 새로 안 만든다 — 기존 기록을 덮어쓰면 안 되니까. 문서 id를
- * 날짜 문자열로 고정해서 이 중복 확인이 조회 한 번으로 끝난다.
+ * 새 수업 날짜를 만든다. id는 randomUUID라 같은 날짜로 여러 번 눌러도(블록타임처럼
+ * 하루에 두 번 참여를 체크해야 하는 경우) 매번 새 문서가 생긴다 — 파일 머리말의
+ * "dates 문서 id" 설명 참고. 대신 이미 있는 날짜를 다시 눌러도 알아서 걸러주는
+ * 안전장치는 없다: 실수로 만든 컬럼은 헤더 × 버튼으로 지운다.
  */
 export async function createDate(classId: string, date: string, studentIds: string[]): Promise<DateRecord> {
-  const ref = doc(db, CLASS_RECORDS, classId, DATES, date)
-  const existing = await getDoc(ref)
-  if (existing.exists()) {
-    const data = existing.data()
-    return { id: date, date, records: (data.records as Record<string, boolean>) ?? {} }
-  }
-  const records = Object.fromEntries(studentIds.map((id) => [id, true]))
-  await setDoc(ref, { date, records })
-  return { id: date, date, records }
+  const id = crypto.randomUUID()
+  const records = Object.fromEntries(studentIds.map((sid) => [sid, true]))
+  await setDoc(doc(db, CLASS_RECORDS, classId, DATES, id), { date, records, createdAt: Date.now() })
+  return { id, date, records }
 }
 
 export async function deleteDate(classId: string, dateId: string): Promise<void> {
