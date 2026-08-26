@@ -11,6 +11,8 @@ import { installMapUpsertPolyfill } from './lib/mapUpsertPolyfill'
 // pdf.js(PdfViewer.tsx)가 나중에 동적으로 로드되기 전에 먼저 채워둬야 한다.
 installMapUpsertPolyfill()
 import Home from './pages/Home'
+import Exercises from './pages/Exercises'
+import ExerciseDetail from './pages/ExerciseDetail'
 import News from './pages/News'
 import Materials from './pages/Materials'
 import SubjectMaterials, { MaterialsList, SubjectOt } from './pages/SubjectMaterials'
@@ -22,7 +24,6 @@ import LabActivities from './pages/LabActivities'
 import LabActivityDetail from './pages/LabActivityDetail'
 import Teacher from './pages/Teacher'
 import Timetable from './pages/Timetable'
-import ComingSoon from './pages/ComingSoon'
 import PicoGate from './pages/PicoGate'
 import NotFound from './pages/NotFound'
 
@@ -78,16 +79,13 @@ createRoot(document.getElementById('root')!).render(
             <Route path="practice/pico" element={<PicoGate />} />
             {/* 예전 주소로 온 링크·북마크가 끊기지 않도록 새 위치로 보낸다. */}
             <Route path="python" element={<Navigate to="/practice/python" replace />} />
-            <Route
-              path="projects"
-              element={
-                <ComingSoon
-                  emoji="🚀"
-                  title="프로젝트"
-                  description="배운 내용을 활용해 나만의 작품과 프로젝트를 만들어보는 공간입니다. 곧 열립니다!"
-                />
-              }
-            />
+            <Route path="exercises" element={<Exercises />} />
+            <Route path="exercises/:id" element={<ExerciseDetail />} />
+            {/* "프로젝트" 자리에 연습문제를 넣었다 — 그 탭은 만들다 만 자리표시자였고,
+                수업자료(읽기)와 실습(자유 작성) 사이의 "연습하고 확인하기"가 비어
+                있었다. 예전 주소로 온 링크는 끊지 않고 새 위치로 보낸다(python →
+                practice/python 과 같은 처리). */}
+            <Route path="projects" element={<Navigate to="/exercises" replace />} />
             {/* 핀을 통과해야 아래 활동 화면들이 그려진다 — LabGate 가 <Outlet/> 을 연다. */}
             <Route path="lab" element={<LabGate />}>
               <Route index element={<LabHome />} />

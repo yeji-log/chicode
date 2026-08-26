@@ -11,7 +11,19 @@
  */
 import type { PyodideInterface } from 'pyodide'
 
-export type WorkerRequest = { type: 'run'; code: string; stdin: string }
+export type WorkerRequest = {
+  type: 'run'
+  code: string
+  stdin: string
+  /**
+   * false 면 input() 이 진짜 CPython 처럼 동작한다 — 프롬프트만 출력하고 입력값은
+   * 되풀이하지 않는다. 연습문제 채점이 이 모드를 쓴다(useGrader).
+   *
+   * 기본값(생략)은 true 로, Python 실습 화면의 지금 동작(입력값까지 함께 찍어
+   * 터미널처럼 보이게 하기)을 그대로 유지한다 — 아래 _chicode_input 주석 참고.
+   */
+  echoInput?: boolean
+}
 
 export type WorkerResponse =
   | { type: 'ready' }
@@ -93,6 +105,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
   stdinLines = stdin.length > 0 ? stdin.replace(/\n$/, '').split('\n') : []
   stdinCursor = 0
+  // 채점은 입력값 되풀이를 끈다(RUNNER 의 _chicode_input 주석 참고).
+  pyodide.globals.set('_chicode_echo_input', event.data.echoInput !== false)
 
   try {
     // numpy 같은 외부 패키지를 import 하면 여기서 받아온다.
@@ -151,12 +165,21 @@ import builtins as _builtins, linecache as _linecache, sys as _sys, traceback as
 
 _FILENAME = "내 코드"
 
+# True 면 입력값을 결과창에 되풀이해 보여준다(실습 화면). 채점은 False 로 바꿔서
+# 진짜 CPython 과 똑같이 동작하게 한다 — 워커가 실행 직전에 갈아끼운다.
+_chicode_echo_input = True
+
 def _chicode_input(prompt=""):
-    """input() 을 터미널처럼 보이게 한다.
+    """실습 화면에서는 input() 을 터미널처럼 보이게 한다.
 
     기본 input() 은 프롬프트를 줄바꿈 없이 출력해서 결과창에
     "이름: 나이: 치코드님은…" 처럼 뭉쳐 보이고, 무엇을 입력했는지도 알 수 없다.
     프롬프트와 입력값을 한 줄로 함께 찍어 실제 실행 화면처럼 읽히게 한다.
+
+    다만 연습문제 채점에서는 이렇게 하면 안 된다 — 입력값(3, 5 …)이 출력에 섞여
+    들어가서, 정답인 코드도 기대 출력과 절대 같아지지 않는다(실제로 채점 화면을
+    만들다 이 문제를 밟았다). 그래서 채점 모드에서는 진짜 CPython 과 똑같이
+    프롬프트만 찍고 입력값은 되풀이하지 않는다.
     """
     line = _sys.stdin.readline()
     if line == "":
@@ -164,7 +187,13 @@ def _chicode_input(prompt=""):
             "입력값이 모자랍니다. 왼쪽 아래 '입력값' 칸에 줄을 더 추가해 주세요."
         )
     line = line.rstrip("\\n")
-    print(f"{prompt}{line}")
+    if _chicode_echo_input:
+        print(f"{prompt}{line}")
+    elif prompt:
+        # 진짜 파이썬도 프롬프트는 표준출력으로 나간다. 그래서 안내 문구를 넣은 코드는
+        # 채점에서 오답이 되는데, 그건 실물과 같은 동작이라 그대로 둔다 —
+        # 연습문제 화면이 "안내 문구를 빼세요" 라고 미리 알려준다.
+        print(prompt, end="")
     return line
 
 _builtins.input = _chicode_input

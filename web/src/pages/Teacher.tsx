@@ -33,6 +33,7 @@ import { ActivitiesPanel, SeasonsPanel } from './LabBoardEditor'
 import { OtFrame } from './SubjectMaterials'
 import TeacherLab from './TeacherLab'
 import TeacherNews from './TeacherNews'
+import TeacherExercises from './TeacherExercises'
 
 /** SubjectPanel의 "수업목차" 탭에서 쓰는 명사 — Lab의 시즌/활동에 대응하되
  *  수업자료 맥락에 맞게 이름만 바꿨다(사용자 요청). */
@@ -116,7 +117,9 @@ export default function Teacher() {
 
 function TeacherDashboard() {
   const { user, signOutTeacher } = useAuth()
-  const [section, setSection] = useState<'materials' | 'lab' | 'news' | 'practice'>('materials')
+  const [section, setSection] = useState<
+    'materials' | 'lab' | 'news' | 'exercises' | 'practice'
+  >('materials')
 
   return (
     <div className="flex flex-col gap-6">
@@ -167,6 +170,17 @@ function TeacherDashboard() {
           🔥 오늘의 뉴스
         </button>
         <button
+          onClick={() => setSection('exercises')}
+          className={[
+            'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
+            section === 'exercises'
+              ? 'bg-cheese-400 text-ink-900'
+              : 'text-ink-700 hover:bg-cheese-100',
+          ].join(' ')}
+        >
+          📝 연습문제
+        </button>
+        <button
           onClick={() => setSection('practice')}
           className={[
             'rounded-lg px-4 py-2 text-sm font-bold transition-colors',
@@ -180,6 +194,7 @@ function TeacherDashboard() {
       {section === 'materials' && <MaterialsSection uploaderEmail={user?.email ?? ''} />}
       {section === 'lab' && <TeacherLab uploaderEmail={user?.email ?? ''} />}
       {section === 'news' && <TeacherNews teacherEmail={user?.email ?? ''} />}
+      {section === 'exercises' && <TeacherExercises />}
       {section === 'practice' && <PracticeSection />}
     </div>
   )

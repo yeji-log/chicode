@@ -88,10 +88,10 @@ export default function Home() {
           <br />
           직접 코드를 작성하고 실행해 보세요.
         </FeatureCard>
-        <FeatureCard to="/projects" emoji="🚀" title="프로젝트">
-          배운 내용을 직접 활용해
+        <FeatureCard to="/exercises" emoji="📝" title="연습문제">
+          배운 내용을 문제로 풀고
           <br />
-          나만의 작품과 프로젝트를 만들어 보세요.
+          바로 채점해 확인해 보세요.
         </FeatureCard>
       </section>
     </div>

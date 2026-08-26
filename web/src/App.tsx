@@ -15,7 +15,7 @@ const TABS = [
   { to: '/', label: '홈', end: true },
   { to: '/materials', label: '수업자료', end: false },
   { to: '/practice', label: '실습', end: false },
-  { to: '/projects', label: '프로젝트', end: false },
+  { to: '/exercises', label: '연습문제', end: false },
   { to: '/lab', label: 'Lab', end: false },
 ]
 
