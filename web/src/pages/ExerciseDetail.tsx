@@ -2,14 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import { Link, useParams } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthProvider'
 import { EDITOR_OPTIONS } from '../lib/monaco'
 import {
   failCount,
   getExercise,
+  listExercises,
   loadDraftCode,
   markSolved,
   recordFailure,
   saveDraftCode,
+  solvedIds,
   type Exercise,
 } from '../lib/exercises'
 import { usesInputPrompt } from '../exercises/grade'
@@ -46,7 +49,12 @@ function RichText({ text, className }: { text: string; className?: string }) {
 
 export default function ExerciseDetail() {
   const { id = '' } = useParams()
+  const { state: authState } = useAuth()
+  const isTeacherViewer = authState === 'teacher'
   const [exercise, setExercise] = useState<Exercise | null>(null)
+  /** 이전·다음으로 넘어갈 이웃 문제들. 목록 화면과 같은 순서·같은 필터를 쓴다. */
+  const [siblings, setSiblings] = useState<Exercise[]>([])
+  const [solved, setSolved] = useState<Set<string>>(() => solvedIds())
   const [loading, setLoading] = useState(true)
 
   const [code, setCode] = useState(STARTER)
@@ -62,6 +70,15 @@ export default function ExerciseDetail() {
 
   useEffect(() => {
     let cancelled = false
+    // 같은 컴포넌트가 그대로 재사용되므로(주소만 바뀐다) 이전 문제의 채점 결과·
+    // 펼쳐둔 힌트가 그대로 남는다. 새 문제를 여는 것이니 전부 접고 비운다.
+    setLoading(true)
+    setResult(null)
+    setRunOutput(null)
+    setShowHint(false)
+    setShowAnswer(false)
+    setSolved(solvedIds())
+
     getExercise(id)
       .then((found) => {
         if (cancelled) return
@@ -82,6 +99,13 @@ export default function ExerciseDetail() {
   useEffect(() => {
     if (exercise) saveDraftCode(id, code)
   }, [code, id, exercise])
+
+  // 이웃 목록은 문제가 바뀌어도 그대로라, 화면에 처음 들어올 때 한 번만 읽는다.
+  useEffect(() => {
+    listExercises()
+      .then(setSiblings)
+      .catch((caught) => console.error('이웃 문제 목록 불러오기 실패', caught))
+  }, [])
 
   const handleGrade = useCallback(async () => {
     if (!exercise) return
@@ -126,6 +150,12 @@ export default function ExerciseDetail() {
       </div>
     )
   }
+
+  // 학생에게는 준비중 문제가 목록에 없으므로, 이동에서도 자연스럽게 건너뛴다.
+  const visible = siblings.filter((item) => isTeacherViewer || item.published)
+  const position = visible.findIndex((item) => item.id === exercise.id)
+  const previous = position > 0 ? visible[position - 1] : null
+  const next = position >= 0 && position < visible.length - 1 ? visible[position + 1] : null
 
   const openTests = exercise.tests.filter((test) => !test.hidden)
   const answerUnlocked = fails >= ANSWER_AFTER_FAILS
@@ -307,6 +337,15 @@ export default function ExerciseDetail() {
                     : `${result.total}개 중 ${result.passedCount}개 통과`}
                 </div>
 
+                {result.allPassed && (
+                  <Link
+                    to={next ? `/exercises/${next.id}` : '/exercises'}
+                    className="rounded-xl bg-cheese-400 px-4 py-3 text-center font-bold text-ink-900 transition-colors hover:bg-cheese-300"
+                  >
+                    {next ? `다음 문제 → ${next.order}. ${next.title}` : '마지막 문제예요 — 목록으로'}
+                  </Link>
+                )}
+
                 {result.stoppedEarly && (
                   <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                     시간이 너무 오래 걸려 멈췄습니다. 반복문이 끝나지 않는 건 아닌지
@@ -385,6 +424,51 @@ export default function ExerciseDetail() {
           </div>
         </section>
       </div>
+
+      {/* 맞히지 못했더라도 넘어갈 수 있어야 한다 — 한 문제에 막혀 진도가 멈추면
+          나머지를 아예 안 보게 된다. 이웃 문제 이름을 함께 보여줘서, 다음이
+          무엇인지 알고 넘어가게 한다. */}
+      <nav className="flex flex-wrap items-center gap-2">
+        <NeighborLink exercise={previous} direction="prev" solved={solved} />
+        <Link
+          to="/exercises"
+          className="rounded-xl border border-cream-deep bg-white px-4 py-3 text-sm font-bold text-ink-700 transition-colors hover:bg-cheese-50"
+        >
+          목록
+        </Link>
+        <NeighborLink exercise={next} direction="next" solved={solved} />
+      </nav>
     </div>
+  )
+}
+
+/** 이전·다음 문제로 가는 칸. 이웃이 없으면(첫 문제·마지막 문제) 자리만 비워 둔다. */
+function NeighborLink({
+  exercise,
+  direction,
+  solved,
+}: {
+  exercise: Exercise | null
+  direction: 'prev' | 'next'
+  solved: Set<string>
+}) {
+  if (!exercise) return <span className="flex-1" />
+  const done = solved.has(exercise.id)
+  return (
+    <Link
+      to={`/exercises/${exercise.id}`}
+      className={[
+        'flex flex-1 flex-col rounded-xl border border-cream-deep bg-white px-4 py-3 transition-all hover:-translate-y-0.5 hover:border-cheese-300',
+        direction === 'next' ? 'items-end text-right' : 'items-start',
+      ].join(' ')}
+    >
+      <span className="text-xs font-bold text-ink-500">
+        {direction === 'prev' ? '← 이전 문제' : '다음 문제 →'}
+      </span>
+      <span className="text-sm font-bold text-ink-900">
+        {done && '✅ '}
+        {exercise.order}. {exercise.title}
+      </span>
+    </Link>
   )
 }

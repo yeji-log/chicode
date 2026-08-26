@@ -47,6 +47,41 @@ let runner: ((source: string) => string | undefined) | null = null
 /** Python 쪽 _chicode_collect_images 핸들 (RUNNER 참고). */
 let collectImages: (() => unknown) | null = null
 
+/**
+ * 출력 모드를 건다. 실습 화면과 채점이 서로 다른 것을 원한다.
+ *
+ * - batched(실습): Pyodide 가 한 줄씩, **줄바꿈을 떼고** 콜백을 부른다. 결과창은
+ *   메시지 하나를 한 줄로 그리므로 화면이 정확히 맞는다.
+ * - write(채점): 바이트를 그대로 넘겨준다. 채점기는 조각을 이어 붙여 통째로
+ *   비교하는데, batched 로 받으면 줄바꿈이 전부 사라져서 여러 줄을 출력하는
+ *   문제(구구단·별 삼각형·FizzBuzz…)가 전부 오답이 된다 — 실제로 20번 문제를
+ *   채점하다 "1 2 4 5 7 8 10" 이 "12457810" 으로 붙는 걸 보고 찾았다.
+ *
+ * TextDecoder 는 stream 모드로 쓴다. 한글이 여러 바이트라, 조각 경계에서 잘리면
+ * 글자가 깨진다.
+ */
+const decoder = new TextDecoder('utf-8')
+
+function applyOutputMode(pyodide: PyodideInterface, batched: boolean) {
+  if (batched) {
+    pyodide.setStdout({ batched: (text: string) => post({ type: 'stdout', text }) })
+    pyodide.setStderr({ batched: (text: string) => post({ type: 'stderr', text }) })
+    return
+  }
+  pyodide.setStdout({
+    write: (buffer: Uint8Array) => {
+      post({ type: 'stdout', text: decoder.decode(buffer, { stream: true }) })
+      return buffer.length
+    },
+  })
+  pyodide.setStderr({
+    write: (buffer: Uint8Array) => {
+      post({ type: 'stderr', text: decoder.decode(buffer, { stream: true }) })
+      return buffer.length
+    },
+  })
+}
+
 const bootPromise = boot()
 
 async function boot(): Promise<PyodideInterface> {
@@ -70,8 +105,7 @@ async function boot(): Promise<PyodideInterface> {
     env: { MPLBACKEND: 'Agg' },
   })
 
-  pyodide.setStdout({ batched: (text: string) => post({ type: 'stdout', text }) })
-  pyodide.setStderr({ batched: (text: string) => post({ type: 'stderr', text }) })
+  applyOutputMode(pyodide, true)
   pyodide.setStdin({
     stdin: () => (stdinCursor < stdinLines.length ? stdinLines[stdinCursor++] : null),
   })
@@ -105,8 +139,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
   stdinLines = stdin.length > 0 ? stdin.replace(/\n$/, '').split('\n') : []
   stdinCursor = 0
-  // 채점은 입력값 되풀이를 끈다(RUNNER 의 _chicode_input 주석 참고).
-  pyodide.globals.set('_chicode_echo_input', event.data.echoInput !== false)
+  // 채점은 입력값 되풀이를 끄고(RUNNER 의 _chicode_input 참고), 출력도 바이트
+  // 그대로 받는다(applyOutputMode 참고). 두 가지가 늘 같이 움직여서 한 플래그로 묶는다.
+  const grading = event.data.echoInput === false
+  pyodide.globals.set('_chicode_echo_input', !grading)
+  applyOutputMode(pyodide, !grading)
 
   try {
     // numpy 같은 외부 패키지를 import 하면 여기서 받아온다.
