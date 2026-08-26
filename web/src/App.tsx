@@ -41,7 +41,13 @@ export default function App() {
               alt=""
               className="size-9 rounded-full ring-2 ring-cheese-300"
             />
-            <span className="text-lg font-bold tracking-tight text-ink-900">CHICODE</span>
+            {/* 좁은 화면에서는 글자를 접고 마크만 남긴다. 폰(375px)에서 이 글자가
+                90px 남짓을 먹어 탭 자리가 148px밖에 안 남았고, 그러면 "실습" 까지만
+                보여서 연습문제·Lab 이 없는 것처럼 보인다(가로 스크롤은 되지만
+                스크롤바를 숨겨둬서 밀 수 있다는 걸 알기 어렵다 — 실측으로 확인). */}
+            <span className="hidden text-lg font-bold tracking-tight text-ink-900 sm:inline">
+              CHICODE
+            </span>
           </NavLink>
 
           {/* 좁은 화면에서는 탭이 줄바꿈되는 대신 가로 스크롤되도록 한다 — 한글은
@@ -56,7 +62,7 @@ export default function App() {
                 end={tab.end}
                 className={({ isActive }) =>
                   [
-                    'shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
+                    'shrink-0 whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors sm:px-3',
                     isActive
                       ? 'bg-cheese-200 text-ink-900'
                       : 'text-ink-700 hover:bg-cheese-100 hover:text-ink-900',

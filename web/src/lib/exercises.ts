@@ -79,9 +79,30 @@ function normalize(id: string, data: Record<string, unknown>): Exercise {
   }
 }
 
+/**
+ * 마지막으로 읽어온 목록. 문제 화면이 이전·다음을 계산하는 데만 쓴다.
+ *
+ * ── 왜 캐시가 필요했나 ──
+ * 문제 하나를 열 때마다 문제 1건 + 이웃 목록 20건 = 21회 읽기가 나갔다. 30명이
+ * 20문제를 풀면 약 13,000회, 세 반이면 40,000회다 — Firebase 무료(Spark) 플랜의
+ * 하루 읽기 한도가 50,000회라 수업 두세 번이면 닿는다. "서버 비용 0원" 이 이
+ * 프로젝트의 첫 번째 원칙이라 그냥 둘 수 없었다.
+ *
+ * 목록 화면은 **항상 새로 읽는다**(캐시를 쓰지 않는다). 교사가 수업 중에 문제를
+ * 공개했는데 학생 화면에 안 뜨는 일이 생기면 안 되기 때문이다. 캐시는 이미 목록을
+ * 본 뒤 문제로 들어갈 때 이웃 계산에만 재사용하고, 새로고침하면 사라진다.
+ */
+let lastList: Exercise[] | null = null
+
 export async function listExercises(): Promise<Exercise[]> {
   const snapshot = await getDocs(query(collection(db, EXERCISES), orderBy('order', 'asc')))
-  return snapshot.docs.map((entry) => normalize(entry.id, entry.data()))
+  lastList = snapshot.docs.map((entry) => normalize(entry.id, entry.data()))
+  return lastList
+}
+
+/** 방금 읽어둔 목록이 있으면 돌려준다(없으면 null — 호출부가 listExercises 로 읽는다). */
+export function cachedExercises(): Exercise[] | null {
+  return lastList
 }
 
 export async function getExercise(id: string): Promise<Exercise | null> {
@@ -97,10 +118,12 @@ export async function createExercise(draft: ExerciseDraft): Promise<Exercise> {
 
 export async function updateExercise(id: string, patch: Partial<ExerciseDraft>): Promise<void> {
   await updateDoc(doc(db, EXERCISES, id), patch)
+  lastList = null
 }
 
 export async function deleteExercise(id: string): Promise<void> {
   await deleteDoc(doc(db, EXERCISES, id))
+  lastList = null
 }
 
 /**
@@ -129,6 +152,7 @@ export async function setPublishedMany(ids: string[], published: boolean): Promi
   const batch = writeBatch(db)
   for (const id of ids) batch.update(doc(db, EXERCISES, id), { published })
   await batch.commit()
+  lastList = null
 }
 
 /**

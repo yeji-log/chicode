@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { EDITOR_OPTIONS } from '../lib/monaco'
 import {
+  cachedExercises,
   failCount,
   getExercise,
   listExercises,
@@ -129,8 +130,16 @@ export default function ExerciseDetail() {
     if (exercise) saveDraftCode(id, code)
   }, [code, id, exercise])
 
-  // 이웃 목록은 문제가 바뀌어도 그대로라, 화면에 처음 들어올 때 한 번만 읽는다.
+  // 이웃 목록은 이전·다음을 계산하는 데만 쓴다. 목록 화면을 거쳐 들어왔다면 그때
+  // 읽어둔 것을 그대로 쓴다 — 문제마다 20건씩 다시 읽으면 무료 플랜의 하루 읽기
+  // 한도에 금방 닿는다(exercises.ts 의 lastList 주석에 계산이 있다).
+  // 주소로 곧장 들어온 경우에만 한 번 읽는다.
   useEffect(() => {
+    const cached = cachedExercises()
+    if (cached) {
+      setSiblings(cached)
+      return
+    }
     listExercises()
       .then(setSiblings)
       .catch((caught) => console.error('이웃 문제 목록 불러오기 실패', caught))

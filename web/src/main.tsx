@@ -12,7 +12,6 @@ import { installMapUpsertPolyfill } from './lib/mapUpsertPolyfill'
 installMapUpsertPolyfill()
 import Home from './pages/Home'
 import Exercises from './pages/Exercises'
-import ExerciseDetail from './pages/ExerciseDetail'
 import News from './pages/News'
 import Materials from './pages/Materials'
 import SubjectMaterials, { MaterialsList, SubjectOt } from './pages/SubjectMaterials'
@@ -30,6 +29,11 @@ import NotFound from './pages/NotFound'
 // Monaco 에디터는 무겁다(2MB 남짓). 홈과 수업자료 화면까지 느려지지 않도록
 // Python 실습에 들어갈 때만 내려받는다. Pico 는 PicoGate.tsx 가 자체적으로
 // lazy import 한다(교사/공개 여부를 먼저 가린 뒤에만 받아오도록).
+// 문제 푸는 화면은 Monaco 에디터(2MB 남짓)를 쓴다 — PythonLab/CLab/PicoLab 과 같은
+// 이유로 들어갈 때만 내려받는다. 정적으로 두면 홈 화면을 여는 모든 학생이 에디터를
+// 함께 받게 된다(실제로 그렇게 만들어 index 청크가 1.1MB → 3.8MB 로 뛰었다).
+// 목록 화면(Exercises)은 에디터를 안 쓰므로 정적이어도 된다.
+const ExerciseDetail = lazy(() => import('./pages/ExerciseDetail'))
 const PythonLab = lazy(() => import('./pages/PythonLab'))
 const CLab = lazy(() => import('./pages/CLab'))
 
@@ -80,7 +84,14 @@ createRoot(document.getElementById('root')!).render(
             {/* 예전 주소로 온 링크·북마크가 끊기지 않도록 새 위치로 보낸다. */}
             <Route path="python" element={<Navigate to="/practice/python" replace />} />
             <Route path="exercises" element={<Exercises />} />
-            <Route path="exercises/:id" element={<ExerciseDetail />} />
+            <Route
+              path="exercises/:id"
+              element={
+                <Suspense fallback={<p className="text-ink-500">문제를 여는 중…</p>}>
+                  <ExerciseDetail />
+                </Suspense>
+              }
+            />
             {/* "프로젝트" 자리에 연습문제를 넣었다 — 그 탭은 만들다 만 자리표시자였고,
                 수업자료(읽기)와 실습(자유 작성) 사이의 "연습하고 확인하기"가 비어
                 있었다. 예전 주소로 온 링크는 끊지 않고 새 위치로 보낸다(python →
