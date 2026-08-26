@@ -130,7 +130,10 @@ export default function PicoLab() {
       )}
 
       <SupportNote>
-        <li>machine.Pin(디지털 입출력)만 지원합니다 — ADC/PWM/I2C/SPI/UART는 아직입니다</li>
+        <li>
+          machine 의 Pin·ADC(GP26~28)·PWM·I2C 와 dht·neopixel·ssd1306·pico_i2c_lcd 모듈을
+          지원합니다 — SPI·UART 와 무선(network)은 아직입니다
+        </li>
         <li>
           보드에 붙어 있는 LED 는 전선 없이 machine.Pin("LED") 로 켜고 끕니다 — 진짜 Pico 2 W
           도 이 LED 는 GP 번호가 없어서 이름으로 엽니다(무선 없는 옛날 Pico 의 Pin(25) 가
