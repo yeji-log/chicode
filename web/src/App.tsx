@@ -33,7 +33,12 @@ export default function App() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="sticky top-0 z-20 border-b border-cream-deep bg-cream/85 backdrop-blur">
+      {/* 스크롤 성능: backdrop-blur(backdrop-filter) 는 iPad Safari 에서 스크롤할
+          때마다 헤더 뒤 영역을 매 프레임 다시 블러 처리해 버벅임을 만든다 —
+          수업자료처럼 길게 스크롤하는 화면에서 특히 티가 났다. 블러 없이 반투명만
+          남기면 스크롤 중 뒤 내용이 그대로 비쳐 지저분하므로, 불투명 배경 +
+          아래 테두리 + sticky 로 "바" 느낌만 남긴다. */}
+      <header className="sticky top-0 z-20 border-b border-cream-deep bg-cream">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-5 sm:gap-6">
           <NavLink to="/" className="flex shrink-0 items-center gap-2.5">
             <img
