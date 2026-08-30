@@ -56,8 +56,15 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   /* 히어로의 확대된 캐릭터가 오른쪽 여백 밖으로 의도적으로 살짝 번진다.
-     그 bleed 가 가로 스크롤바를 만들지 않도록 여기서 잘라낸다. */
+     그 bleed 가 가로 스크롤바를 만들지 않도록 여기서 잘라낸다.
+
+     overflow-x: hidden 은 <body> 를 가로 스크롤 컨테이너로 만드는데, iPad
+     Safari 에서 이게 주소창이 접혔다 펴질 때(아래로 스크롤=접힘, 위로=펴짐)
+     페이지 전체가 확대·축소되는 것처럼 보이는 버그를 일으킨다. clip 은
+     스크롤 포트를 만들지 않아 같은 효과(넘침 잘라내기)를 내면서 그 버그를
+     피한다. 구형 Safari(16 미만)를 위해 hidden 을 먼저 두어 폴백으로 남긴다. */
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* 종이 질감을 아주 옅게 — 브랜드 이미지의 따뜻한 책상 느낌 */
