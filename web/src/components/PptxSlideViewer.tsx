@@ -197,7 +197,19 @@ export default function PptxSlideViewer({
     // 멈춘 뒤 한 번만 그린다.
     let timer: number | undefined
 
+    // iPad Safari 는 스크롤로 상단 주소창이 접혔다 펴질 때마다 window 에 resize
+    // 를 쏘고 window.innerHeight 가 수십~수백 px 출렁인다. fitSlideWidth 는 그
+    // 높이로 슬라이드 폭을 정하므로, 매 스크롤마다 다른 값이 나와 pptx 를
+    // 처음부터 다시 여는 통에 슬라이드가 스크롤 중에 커졌다 작아졌다 하고
+    // 화면이 버벅였다(사용자 보고 + 화면 녹화로 확인). 슬라이드 자리를 실제로
+    // 바꾸는 건 가로폭 변화(회전·분할보기 크기 조절)뿐이므로, 가로가 그대로면
+    // — 즉 주소창만 여닫힌 resize 는 — 무시한다.
+    let lastWidth = window.innerWidth
+
     const onResize = () => {
+      if (window.innerWidth === lastWidth) return
+      lastWidth = window.innerWidth
+
       const sizing = sizingRef.current
       if (!sizing || !sizing.clientWidth) return
       const next = fitSlideWidth(sizing.clientWidth)
