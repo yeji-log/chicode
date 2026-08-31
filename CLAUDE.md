@@ -40,14 +40,14 @@ MicroPython), Firebase Google 로그인 기반 교사 인증. 학생은 회원�
 | 홈 화면 | `/` | 히어로 배경(hero-desk.webp, 알파 페이드), Jua 폰트 |
 | 수업자료 — 과목 선택 | `/materials` | 과목 카드(정보 / 인공지능 기초) 목록. `web/src/lib/subjects.ts` |
 | 수업자료 — 과목별 자료 | `/materials/:subjectId` | 핀번호 입력 후 열람. `web/src/pages/SubjectMaterials.tsx`. 아래 "과목별 핀잠금" 참고 |
-| 실습 선택 | `/practice` | Python / C언어 / Pico(준비중) 카드 |
-| Python 실습 | `/practice/python` | Pyodide(WASM CPython), Web Worker, 무한루프 중지 가능. numpy/pandas/matplotlib 사용 가능(matplotlib은 결과창에 이미지로) |
-| C 실습 | `/practice/c` | **진짜 clang을 브라우저에서 실행**. 아래 "C 실습 구조" 참고 |
-| Pico 2 W 실습 | `/practice/pico` | **회로 / 코드 탭 전환**(`PicoLab.tsx`, 콘솔은 코드 탭 안). 부품 28종 + 되돌리기 + 부저 실제 소리. 아래 "Pico 시뮬레이터 확장" 참고. `PicoGate.tsx`가 교사/학생(설정 공개 여부)로 게이트. Monaco는 진입 시 동적 로드 |
+| 실습 선택 | `/practice` | Python / C언어 / Pico 카드 |
+| Python 실습 | `/practice/python` | Pyodide(WASM CPython), Web Worker, 무한루프 중지 가능. numpy/pandas/matplotlib 사용 가능(matplotlib은 결과창에 이미지로). 보관함·공유 있음(아래 "실습 코드 보관함·공유") |
+| C 실습 | `/practice/c` | **진짜 clang을 브라우저에서 실행**. 아래 "C 실습 구조" 참고. 보관함·공유 있음 |
+| Pico 2 W 실습 | `/practice/pico` | **회로 / 코드 탭 전환**(`PicoLab.tsx`, 콘솔은 코드 탭 안). 부품 28종 + 되돌리기 + 부저 실제 소리. 아래 "Pico 시뮬레이터 확장" 참고. `PicoGate.tsx`가 교사/학생(설정 공개 여부)로 게이트. Monaco는 진입 시 동적 로드. 보관함·공유는 코드+회로를 함께 담는다 |
 | Lab (활동/발표) | `/lab` | 핀 게이트(`LabGate.tsx`) 아래 홈·로드맵(시즌 카드)·활동 목록·활동 상세. `/materials/:subjectId`에도 로드맵·활동 화면이 과목별로 재마운트됨(`useLabScope`). 교사용 보드 에디터는 `LabBoardEditor.tsx` |
 | 시간표 / 수업기록 | `/timetable` | 그리드(`TimetableBoard`)와 반별 수업기록(`ClassRecords.tsx`, 반 탭 드래그 정렬·학생 참여 기록·메모)을 탭 전환 |
 | 뉴스 | `/news` | 홈 히어로 "오늘의 AI·IT 이슈" 버튼에서 진입하는 공개 페이지. 교사는 `/teacher`의 뉴스 탭(`TeacherNews.tsx`)에서 후보 관리 |
-| 프로젝트 | `/projects` | 아직 내용 없음, ComingSoon 자리표시자 |
+| 연습문제 | `/exercises` | 문제를 풀고 브라우저에서 바로 채점(`Exercises.tsx`/`ExerciseDetail.tsx`). 교사는 `/teacher`의 연습문제 탭. `/projects`는 여기로 리다이렉트("프로젝트" 탭 자리에 연습문제를 넣었다) |
 | 교사 인증 | `/teacher` | Firebase Auth(Google) + Firestore `teachers` 컬렉션 화이트리스트. Lab/뉴스/과목별 자료 관리 탭도 이 페이지 안에 있음 |
 | 정책 팝업 | 풋터 | 개인정보처리방침 / 이용약관, 실제 데이터 처리 방식 검증 후 작성함 |
 
@@ -257,6 +257,35 @@ GPIO 메시지가 전부 숫자 하나라 내장 LED 에는 실제 핀과 안 �
   (projectId 는 `web/.env.local`). 화면에 안 나오는 데이터를 의심할 때 제일 빠른 길이다.
   실제로 이 방법으로 `subjectId` 가 없어서 학생·교사 어느 화면에도 안 잡히던 자료 1건을
   찾아냈다(2026-08-26 에 콘솔에서 삭제 — 쓰기는 `isTeacher()` 라 REST 로는 못 지운다).
+
+## 실습 코드 보관함·공유 (2026-08-31, 완료)
+
+설계는 `학생_작업물_저장_공유_구현_계획.md`, 세부는 `web/src/practice/` 를 믿을 것.
+세 실습(Python·C·Pico) 헤더의 "예제 불러오기" 옆에 **보관함**·**공유** 버튼을 붙였다.
+
+- **보관함** — 지금 코드(Pico 는 회로까지)를 이름 붙여 여러 벌 `localStorage` 에
+  저장/불러오기/이름변경/삭제. 20개 상한, 용량 초과 시 오래된 것부터 밀어낸다
+  (`draftStore.ts`). 계정 동기화는 학생 로그인이 없어 구조상 불가능 —
+  `exercises.ts` 가 풀이 기록을 서버에 안 남긴 것과 같은 이유.
+- **공유** — 코드(+회로)를 `deflate-raw`+base64url 로 압축해 `#s=` 해시에 통째로
+  싣는다(`shareLink.ts`). 서버에 아무것도 안 올라가고, 해시라 액세스 로그에도 안
+  남는다. Firestore 로 안 한 이유: `firestore.rules` 가 학생 쓰기를 전부 막고,
+  열면 무료 플랜 할당량이 스팸에 노출된다(수업자료 핀과 같은 판단).
+  - 형식: `버전(1) + 인코딩(z=deflate / r=raw) + payload`. 둘 다 만들어 짧은 쪽을
+    쓴다. 버전은 엔벨로프가 바뀌면 올린다 — 옛 링크를 잘못 읽지 않게.
+  - 실측: 7세그먼트 회로 예제가 URL 912자, 부품 15개짜리 무거운 회로도 압축 후
+    ~1.2KB. 8000자 소프트 상한은 사실상 여유.
+  - `CompressionStream` 이 없으면(구형 사파리) 자동으로 raw 로 떨어진다.
+- **링크를 열면** 헤더 아래 배너로 확인받는다 — "불러올까요? 지금 코드는 보관함에
+  '불러오기 전 코드'로 저장됩니다". 종류가 안 맞으면(Python 링크를 C 화면에서)
+  올바른 실습으로 가는 링크를 토큰째로 보여준다.
+- 파싱은 `JSON.parse` + 스키마 검증만. 불러온 코드는 자동 실행 안 함(예제
+  불러오기와 같다).
+- 회로를 뽑아오려고 `CircuitCanvasHandle` 에 `getSnapshot()` 을 더했다.
+- 토스트(`components/Toast.tsx`, `App.tsx` 에 `ToastHost` 한 번) — `alert()` 는
+  일부 아이패드 웹뷰에서 조용히 무시돼서(회로 캔버스 `confirm` 주석과 같은 이유).
+- **다음 단계**(계획 문서 13절): 교사용 "제출 링크 모으기" — 이 공유 링크를
+  붙여넣으면 목록으로 쌓이는 화면. 이 위에 얹으면 된다.
 
 ## 작업 스타일 (중요 — 이 톤을 유지할 것)
 

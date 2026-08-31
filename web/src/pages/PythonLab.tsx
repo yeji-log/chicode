@@ -6,6 +6,11 @@ import SupportNote from '../components/SupportNote'
 import { EDITOR_OPTIONS } from '../lib/monaco'
 import { usePython } from '../python/usePython'
 import { EXAMPLES } from '../python/examples'
+import DraftBar from '../practice/DraftBar'
+import IncomingShareBanner from '../practice/IncomingShareBanner'
+import { useSharedDraft, type DraftContent } from '../practice/useSharedDraft'
+import type { SharePayload } from '../practice/shareLink'
+import type { SavedDraft } from '../practice/draftStore'
 
 const CODE_KEY = 'chicode.python.code'
 const STDIN_KEY = 'chicode.python.stdin'
@@ -17,6 +22,21 @@ export default function PythonLab() {
 
   const { status, output, images, elapsedMs, bootError, run, stop, clearOutput } = usePython()
   const outputRef = useRef<HTMLDivElement>(null)
+
+  const draft = useSharedDraft('python')
+  const getContent = (): DraftContent => ({ code, stdin })
+  const applyContent = (next: { code: string; stdin?: string }) => {
+    draft.stash(getContent())
+    setCode(next.code)
+    setStdin(next.stdin ?? '')
+    setShowStdin((next.stdin ?? '') !== '')
+    clearOutput()
+  }
+  const loadSaved = (item: SavedDraft) => applyContent(item)
+  const acceptShare = (payload: SharePayload) => {
+    applyContent(payload)
+    draft.dismissIncoming()
+  }
 
   // 새로고침해도 쓰던 코드가 남아 있도록 (아직 서버 저장은 없다)
   useEffect(() => {
@@ -73,10 +93,7 @@ export default function PythonLab() {
             onChange={(event) => {
               const example = EXAMPLES.find((item) => item.name === event.target.value)
               if (!example) return
-              setCode(example.code)
-              setStdin(example.stdin)
-              setShowStdin(example.stdin !== '')
-              clearOutput()
+              applyContent({ code: example.code, stdin: example.stdin })
             }}
           >
             <option value="">예제 불러오기…</option>
@@ -86,6 +103,8 @@ export default function PythonLab() {
               </option>
             ))}
           </select>
+
+          <DraftBar draft={draft} getContent={getContent} onLoad={loadSaved} />
 
           {running ? (
             <button
@@ -105,6 +124,8 @@ export default function PythonLab() {
           )}
         </div>
       </header>
+
+      <IncomingShareBanner draft={draft} onAccept={acceptShare} />
 
       {bootError && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

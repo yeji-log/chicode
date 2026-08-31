@@ -8,6 +8,11 @@ import { usePico } from '../pico/usePico'
 import { EXAMPLES } from '../pico/examples'
 import { buzzerAudio } from '../pico/circuit/buzzerAudio'
 import CircuitCanvas, { type CircuitCanvasHandle } from '../pico/circuit/CircuitCanvas'
+import DraftBar from '../practice/DraftBar'
+import IncomingShareBanner from '../practice/IncomingShareBanner'
+import { useSharedDraft, type DraftContent } from '../practice/useSharedDraft'
+import type { SharePayload } from '../practice/shareLink'
+import type { SavedDraft } from '../practice/draftStore'
 
 const CODE_KEY = 'chicode.pico.code'
 
@@ -29,6 +34,20 @@ export default function PicoLab() {
     usePico()
   const outputRef = useRef<HTMLDivElement>(null)
   const circuitRef = useRef<CircuitCanvasHandle>(null)
+
+  const draft = useSharedDraft('pico')
+  const getContent = (): DraftContent => ({ code, circuit: circuitRef.current?.getSnapshot() })
+  const applyContent = (next: { code: string; circuit?: SharePayload['circuit'] }) => {
+    draft.stash(getContent())
+    setCode(next.code)
+    if (next.circuit) circuitRef.current?.loadCircuit(next.circuit)
+    clearOutput()
+  }
+  const loadSaved = (item: SavedDraft) => applyContent(item)
+  const acceptShare = (payload: SharePayload) => {
+    applyContent(payload)
+    draft.dismissIncoming()
+  }
 
   useEffect(() => {
     localStorage.setItem(CODE_KEY, code)
@@ -86,9 +105,7 @@ export default function PicoLab() {
             onChange={(event) => {
               const example = EXAMPLES.find((item) => item.name === event.target.value)
               if (!example) return
-              setCode(example.code)
-              circuitRef.current?.loadCircuit(example.circuit)
-              clearOutput()
+              applyContent({ code: example.code, circuit: example.circuit })
             }}
           >
             <option value="">예제 불러오기…</option>
@@ -98,6 +115,8 @@ export default function PicoLab() {
               </option>
             ))}
           </select>
+
+          <DraftBar draft={draft} getContent={getContent} onLoad={loadSaved} disabled={running} />
 
           {running ? (
             <button
@@ -122,6 +141,8 @@ export default function PicoLab() {
           )}
         </div>
       </header>
+
+      <IncomingShareBanner draft={draft} onAccept={acceptShare} />
 
       {bootError && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

@@ -7,6 +7,7 @@ import PolicyModal from './components/PolicyModal'
 import LabRules from './content/LabRules'
 import PrivacyPolicy, { PRIVACY_POLICY_EFFECTIVE_DATE } from './content/PrivacyPolicy'
 import TermsOfService, { TERMS_OF_SERVICE_EFFECTIVE_DATE } from './content/TermsOfService'
+import { ToastHost } from './components/Toast'
 import { asset } from './lib/asset'
 
 type OpenPolicy = 'privacy' | 'terms' | 'labRules' | null
@@ -155,6 +156,7 @@ export default function App() {
       )}
 
       <DebugPanel />
+      <ToastHost />
     </div>
   )
 }

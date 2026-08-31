@@ -45,10 +45,14 @@ npm run dev
 | `/practice/python` | Python 에디터 + 실행 결과 (numpy/pandas/matplotlib 포함) |
 | `/practice/c` | C 에디터 + 컴파일·실행 결과 |
 | `/practice/pico` | Pico 2 W 시뮬레이터 — 회로 캔버스 + MicroPython 에디터. 교사는 항상, 학생은 공개 설정이 켜져야 들어감 |
+| `/exercises` | 연습문제 — 브라우저에서 바로 채점 (`/projects` 는 여기로 리다이렉트) |
 | `/lab` | 핀 게이트 뒤 활동(시즌 로드맵·활동 목록·상세). 교사용 보드 에디터도 포함 |
 | `/timetable` | 시간표 그리드 + 반별 수업기록 |
-| `/projects` | 아직 내용 없음, ComingSoon 자리표시자 |
 | `/teacher` | 자료 업로드·삭제 + Lab/뉴스/과목 관리 (Google 로그인 + 허용 계정 확인) |
+
+세 실습(python/c/pico) 모두 헤더에 **보관함**(코드·회로를 이름 붙여 여러 벌
+localStorage 저장)과 **공유**(코드·회로를 통째로 담은 `#s=` 링크 생성) 버튼이 있다.
+서버를 안 쓴다 — `src/practice/`, `CLAUDE.md` 의 "실습 코드 보관함·공유" 절 참고.
 
 풋터에 개인정보처리방침·이용약관 팝업이 있다 (`src/content/PrivacyPolicy.tsx`,
 `TermsOfService.tsx`). 실제 데이터 처리 방식(Firebase Auth가 어떤 정보를 받는지,

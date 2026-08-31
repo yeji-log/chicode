@@ -194,6 +194,8 @@ export interface CircuitCanvasProps {
 /** "예제 불러오기" 가 코드와 함께 회로도 같이 구성할 수 있도록 여는 창구. */
 export interface CircuitCanvasHandle {
   loadCircuit: (circuit: CircuitSnapshot) => void
+  /** 지금 회로를 통째로 뽑아온다 — 보관함 저장·공유 링크에 쓴다(useSharedDraft). */
+  getSnapshot: () => CircuitSnapshot
 }
 
 /** 부품의 회전 중심을 화면 배율까지 반영해서 돌려준다. */
@@ -394,8 +396,9 @@ function CircuitCanvas(
         setAnalogDrag(null)
         setSelected(null)
       },
+      getSnapshot: () => snapshotNow(),
     }),
-    [pushHistory],
+    [pushHistory, snapshotNow],
   )
 
   const connectivity = useMemo(() => resolveConnectivity(wires), [wires])
