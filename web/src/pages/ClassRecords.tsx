@@ -862,18 +862,23 @@ function RecordTable({
   // dates.map(...)이 그대로 빈 배열을 돌기만 하면 되므로 따로 분기할 필요가
   // 없다.
   return (
+    // 왼쪽 3열(순서·학번·이름)을 position:sticky 로 고정한다. border-collapse 와
+    // sticky 를 같이 쓰면 아이패드 사파리에서 셀 폭 계산이 깨져 — 고정열이
+    // 좁아지고 그 사이 틈으로 스크롤되는 날짜 칸이 비쳐 보였다(사용자 화면 녹화로
+    // 확인). border-separate 로 바꾸고, 폭은 셀이 아니라 안쪽 div 에 걸어(box-border)
+    // 확실히 고정한다 — 셀에 걸린 width 는 auto 레이아웃이 무시한다.
     <div className="overflow-x-auto rounded-2xl border border-cream-deep bg-white/70">
-      <table className="border-collapse text-sm">
+      <table className="border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 w-12 border-b border-cream-deep bg-white px-2 py-3 text-xs font-semibold text-ink-500">
-              순서
+            <th className="sticky left-0 z-10 border-b border-cream-deep bg-white text-xs font-semibold text-ink-500">
+              <div className="w-12 px-2 py-3">순서</div>
             </th>
-            <th className="sticky left-12 z-10 w-20 border-b border-l border-cream-deep bg-white px-2 py-3 text-xs font-semibold text-ink-500">
-              학번
+            <th className="sticky left-12 z-10 border-b border-l border-cream-deep bg-white text-xs font-semibold text-ink-500">
+              <div className="w-20 px-2 py-3">학번</div>
             </th>
-            <th className="sticky left-[128px] z-10 w-32 border-b border-l border-cream-deep bg-white px-2 py-3 text-left text-xs font-semibold text-ink-500">
-              이름
+            <th className="sticky left-[128px] z-10 border-b border-l border-cream-deep bg-white text-left text-xs font-semibold text-ink-500">
+              <div className="w-32 px-2 py-3">이름</div>
             </th>
             {dates.map((entry) => (
               <th
@@ -897,14 +902,14 @@ function RecordTable({
         <tbody>
           {students.map((student, index) => (
             <tr key={student.id}>
-              <td className="sticky left-0 z-10 border-b border-cream-deep bg-white px-2 py-2 text-center text-ink-500">
-                {index + 1}
+              <td className="sticky left-0 z-10 border-b border-cream-deep bg-white text-center text-ink-500">
+                <div className="w-12 px-2 py-2">{index + 1}</div>
               </td>
-              <td className="sticky left-12 z-10 border-b border-l border-cream-deep bg-white px-2 py-2 text-center text-ink-700">
-                {student.studentNumber}
+              <td className="sticky left-12 z-10 border-b border-l border-cream-deep bg-white text-center text-ink-700">
+                <div className="w-20 px-2 py-2">{student.studentNumber}</div>
               </td>
-              <td className="sticky left-[128px] z-10 border-b border-l border-cream-deep bg-white px-2 py-2 text-ink-900">
-                <div className="flex items-center gap-1.5">
+              <td className="sticky left-[128px] z-10 border-b border-l border-cream-deep bg-white text-ink-900">
+                <div className="flex w-32 items-center gap-1.5 px-2 py-2">
                   <span className="truncate font-semibold">{student.name}</span>
                   <button
                     onClick={() => onDelete(student)}
