@@ -17,6 +17,10 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# Claude Code 로컬 설정 — dev 서버 실행 설정(launch.json)은 저장소 루트 .claude/ 에
+# 이미 커밋돼 있다. preview 도구가 web/ 에서 만드는 중복본은 올리지 않는다.
+.claude/
 *.suo
 *.ntvs*
 *.njsproj
