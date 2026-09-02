@@ -71,7 +71,7 @@ export default function Home() {
               to="/news"
               className="rounded-xl border border-cream-deep bg-white/60 px-5 py-3 font-bold text-ink-700 transition-colors hover:border-cheese-300"
             >
-              🔥 오늘의 AI·IT 이슈
+              🔥 AI·IT 새소식
             </Link>
           </div>
         </div>

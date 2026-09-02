@@ -102,6 +102,19 @@ const SOURCES = [
   // 대덕특구(카이스트·정부출연연구기관) 중심 과학기술 전문매체. 위 "과학·공학
   // 전문 매체" 주석 참고.
   { name: '헬로디디', url: 'https://www.hellodd.com/rss/allArticle.xml', lang: 'ko' },
+  // 국내 IT·AI 전문 매체. 위 기업 블로그들은 발행이 뜸해서 국내 소식이 헬로디디
+  // 한 곳에 쏠려 있었다(2026-09-02 실측: 후보 27건 중 17건). 그 쏠림을 푸는 것과,
+  // 헬로디디가 대덕특구 연구기관 소식 위주라 학생 눈높이의 산업·서비스 뉴스가
+  // 비어 있던 것을 함께 메우려고 추가했다.
+  //
+  // 후보 20곳을 실제로 받아보고(ZDNet·블로터·동아사이언스·IT조선·연합뉴스·
+  // 과기정통부 등은 404/403이거나 RSS가 아니라 탈락) 아래 셋만 남겼다.
+  // 한겨레 과학(hani.co.kr/rss/science/)은 RSS는 살아 있지만 30건 전부에 발행
+  // 날짜가 없어서 수집 단계(publishedAt 검사)에서 100% 탈락한다 — 그래서 뺐다.
+  // 아이뉴스24는 태깅은 29건 통과했지만 연예·MOU 기사가 많이 섞여 보류했다.
+  { name: 'AI타임스', url: 'https://www.aitimes.com/rss/allArticle.xml', lang: 'ko' },
+  { name: '테크42', url: 'https://www.tech42.co.kr/feed/', lang: 'ko' },
+  { name: '전자신문', url: 'https://rss.etnews.com/Section901.xml', lang: 'ko' },
 ]
 
 // 기획서 4번 "뉴스 수집 분야"와 수집 가이드라인 5번 "우선적으로 수집할 뉴스"를
@@ -256,6 +269,26 @@ const EXCLUDE_PATTERNS = [
   /주가|급등락|상한가|하한가|시가총액|목표주가|매수 추천|매도 추천/,
   /루머|미확인 정보|~라는 설/,
   /경품 이벤트|할인 프로모션/,
+  // 언론사가 관습적으로 쓰는 정형 코너 표기 — 기사가 아니라 인사·부고·공지다.
+  // 실제로 "[인사]한국생명공학연구원" 이 후보로 올라온 걸 보고 넣었다(2026-09-02).
+  // 제목 맨 앞에 붙은 것만 잡는다(^) — 본문 중간의 대괄호까지 걸면 오탐이 난다.
+  // 날짜형 대괄호("[9월1일] …")는 일부러 안 넣었다. AI타임스의 일일 브리핑이 그
+  // 형식인데 내용은 멀쩡한 기사라, 이 파일 위쪽 원칙대로 애매하면 남긴다.
+  /^\s*\[(인사|부고|동정|신간|알림|공지|포토|영상|카드뉴스|조간브리핑|주간브리핑)\]/,
+  // 사건·사고·법조. 국내 종합매체를 소스에 넣으면서 필요해졌다 — 실제로 "로봇청소기로
+  // 아내 불륜 몰래 녹화한 남편…징역형" 이 '로봇' 키워드 하나로 robotics 태깅을 통과해
+  // 후보에 올라왔다(2026-09-02 드라이런). 교사 검증 없이 학생 화면에 바로 나가는
+  // 구조라 이건 반드시 막아야 한다.
+  //
+  // "몰래카메라"는 일부러 뺐다 — "스마트폰으로 몰래카메라 찾는다, KAIST AI 탐지 기술"
+  // 같은 좋은 기사가 같이 지워진다. "구속"도 단독으로는 안 쓰고 "구속영장"만 쓴다
+  // (최적화 문맥의 '구속 조건'과 겹친다).
+  /불륜|이혼 소송|징역|실형|구속영장|기소|성범죄|성착취|음주운전|살인|사기 혐의|횡령/,
+  // 기업 자금조달·정치 일정. 학생이 읽을 기술 소식이 아니라 성인 대상 경제·정치면이다.
+  // 위 "주가" 패턴과 같은 취지인데, 종합매체가 들어오면서 형태가 늘었다.
+  // "투자"를 통째로 막지는 않는다 — "정부, AI에 3조 투자" 같은 건 볼 만하다.
+  /프리IPO|코스닥 상장|상장 예비심사|투자 유치|시리즈 [A-Z] 투자/,
+  /정기국회|국정감사|대정부질문|의원총회|국무회의|여야 합의/,
 ]
 
 function isExcluded(text) {
@@ -303,6 +336,66 @@ const STUDENT_LIFE_KEYWORDS = [
 const RECENT_HOURS = 48
 const HISTORY_DAYS = 14
 const MAX_CANDIDATES = 20
+
+/**
+ * 한 매체가 후보 목록을 통째로 차지하지 않도록 두는 소스당 상한.
+ *
+ * 그냥 점수순으로 20건을 자르면 기사를 많이 쏟아내는 매체가 목록을 독점한다 —
+ * 실제로 헬로디디가 후보 27건 중 17건이었다(2026-09-02). 학생 화면에는 따로 3건
+ * 상한이 걸려 있지만(lib/news.ts 의 listNewsFeed) 그건 교사 검토 목록을 지켜주지
+ * 못한다. 게다가 이번에 추가한 AI타임스는 하루 46건이 태깅을 통과해서 헬로디디의
+ * 세 배다 — 상한이 없으면 독점하는 매체 이름만 바뀐다.
+ */
+const MAX_PER_SOURCE = 5
+
+/** 최종 후보 중 해외 소식에 남겨두는 최소 몫. balanceRegions 주석 참고. */
+const MIN_OVERSEAS = 6
+
+/** 점수순으로 정렬된 목록에서, 소스마다 maxPerSource 건까지만 남긴다. */
+function capPerSource(items, maxPerSource) {
+  const usedBySource = new Map()
+  const picked = []
+  for (const item of items) {
+    const used = usedBySource.get(item.sourceName) ?? 0
+    if (used >= maxPerSource) continue
+    usedBySource.set(item.sourceName, used + 1)
+    picked.push(item)
+  }
+  return picked
+}
+
+/**
+ * 최종 후보에서 해외 소식이 밀려나지 않게 몫을 따로 잡아둔다.
+ *
+ * 국내 종합매체를 추가했더니 발행량 차이 때문에 후보 20건 중 국내가 19건이 됐다
+ * (2026-09-02 드라이런, 그 전엔 국내 21 / 해외 6). OpenAI·DeepMind 같은 해외 소스는
+ * 하루 몇 건씩만 올리니 점수순으로 줄을 세우면 국내 매체 물량에 그냥 묻힌다.
+ * 소스당 상한(capPerSource)만으로는 안 풀린다 — 국내 매체가 여러 곳이라 각각
+ * 상한을 채우면 합계가 여전히 크기 때문이다.
+ *
+ * 해외가 minOverseas 보다 적은 날은 있는 만큼만 쓰고 나머지는 국내로 채운다.
+ * 반대의 경우도 마찬가지다 — 몫은 하한이지 정원이 아니다.
+ */
+function balanceRegions(items, total, minOverseas) {
+  const overseas = items.filter((item) => item.region === '해외')
+  const domestic = items.filter((item) => item.region === '국내')
+
+  const overseasQuota = Math.min(minOverseas, overseas.length)
+  const picked = [...overseas.slice(0, overseasQuota), ...domestic.slice(0, total - overseasQuota)]
+
+  // 한쪽이 모자라 total 을 못 채우면 남은 것으로 마저 채운다.
+  if (picked.length < total) {
+    const used = new Set(picked)
+    for (const item of items) {
+      if (picked.length >= total) break
+      if (used.has(item)) continue
+      picked.push(item)
+    }
+  }
+
+  // 교사 화면은 점수 높은 순으로 보이는 게 맞으므로 다시 정렬해서 돌려준다.
+  return picked.sort((a, b) => b.score - a.score)
+}
 
 function idOf(link) {
   return createHash('sha1').update(link).digest('hex').slice(0, 16)
@@ -522,7 +615,7 @@ async function main() {
     .get()
   const historyTitles = historySnapshot.docs.map((entry) => entry.data().title ?? '')
 
-  const fresh = groups
+  const scored = groups
     .filter((item) => !historyTitles.some((title) => titleSimilarity(title, item.title) > 0.6))
     .map((item) => ({
       ...item,
@@ -533,7 +626,11 @@ async function main() {
     // 잘리게, 그리고 교사 화면에서도 위에서부터 보이게. 단, 이건 정렬 순서일
     // 뿐이지 자동 제외 기준이 아니다(파일 맨 위 주석 참고).
     .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_CANDIDATES)
+
+  // 소스당 상한을 자르기 "전에" 적용한다 — 뒤에 적용하면 이미 한 매체로 채워진
+  // 20건 안에서 고르는 셈이라 아무 소용이 없다(MAX_PER_SOURCE 주석 참고).
+  const capped = capPerSource(scored, MAX_PER_SOURCE)
+  const fresh = balanceRegions(capped, MAX_CANDIDATES, MIN_OVERSEAS)
 
   // 6) 오래된 후보 정리 — 교사가 며칠 손 못 댄 후보가 쌓이지 않도록.
   const staleCutoff = Date.now() - RECENT_HOURS * 60 * 60 * 1000
@@ -563,17 +660,32 @@ async function main() {
   }
   if (fresh.length > 0) await writeBatch.commit()
 
+  const cappedOut = scored.length - capped.length
   console.log(
-    `[fetch-news] 수집 ${rawItems.length}건 → 분야 태깅 통과 ${tagged.length}건 → 제외 신호 ${excluded.length}건 걸러냄 → 이슈 단위로 묶어 ${groups.length}건 → 최근 발행분과 대조 후 신규 후보 ${fresh.length}건 기록 (오래된 후보 ${staleSnapshot.size}건 정리)`,
+    `[fetch-news] 수집 ${rawItems.length}건 → 분야 태깅 통과 ${tagged.length}건 → 제외 신호 ${excluded.length}건 걸러냄 → 이슈 단위로 묶어 ${groups.length}건 → 최근 발행분과 대조 후 ${scored.length}건 → 소스당 ${MAX_PER_SOURCE}건 상한으로 ${cappedOut}건 제외 → 신규 후보 ${fresh.length}건 기록 (오래된 후보 ${staleSnapshot.size}건 정리)`,
   )
+  const bySource = {}
+  for (const item of fresh) bySource[item.sourceName] = (bySource[item.sourceName] ?? 0) + 1
+  console.log('[fetch-news] 소스별 후보 수:', JSON.stringify(bySource, null, 0))
 }
 
-// SOURCES/tagCategory 를 export 해서, Firestore(FIREBASE_SERVICE_ACCOUNT_KEY)를
-// 안 건드리고도 "이 소스들이 실제로 어느 카테고리로 태깅되는지"를 별도 스크립트로
-// 확인할 수 있게 했다 — 과학·공학 소스를 추가할 때 이 방식으로 직접 검증했다.
+// 아래 순수 함수들을 export 해서, Firestore(FIREBASE_SERVICE_ACCOUNT_KEY)를
+// 안 건드리고도 "이 소스들이 실제로 어느 카테고리로 태깅되고, 무엇이 걸러지고,
+// 소스당 상한을 걸면 분포가 어떻게 되는지"를 별도 스크립트로 확인할 수 있게 했다 —
+// 과학·공학 소스와 국내 IT 매체를 추가할 때 이 방식으로 직접 검증했다.
 // import.meta.url 가드가 없으면 이 파일을 import 만 해도 main()이 즉시 실행돼
 // FIREBASE_SERVICE_ACCOUNT_KEY 없이 죽는다.
-export { SOURCES, tagCategory }
+export {
+  SOURCES,
+  tagCategory,
+  isExcluded,
+  computeScore,
+  capPerSource,
+  balanceRegions,
+  MAX_PER_SOURCE,
+  MIN_OVERSEAS,
+  MAX_CANDIDATES,
+}
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((caught) => {

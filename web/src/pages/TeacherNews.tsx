@@ -101,7 +101,7 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
 
         {candidates.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
-            아직 검토할 후보가 없습니다. 매일 KST 06:00에 자동으로 수집됩니다.
+            아직 검토할 후보가 없습니다. 매일 KST 05:00에 자동으로 수집됩니다.
           </p>
         ) : (
           <ul className="flex flex-col gap-3">

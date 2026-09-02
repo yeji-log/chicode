@@ -45,15 +45,24 @@ service cloud.firestore {
       }
     }
 
-    // 오늘의 AI·IT 이슈 — 후보(자동 수집, 아직 학생에게 비공개).
+    // AI·IT 새소식 — 자동 수집분.
     //
     // 매일 아침 GitHub Actions가 Firebase Admin SDK로 이 컬렉션에 쓴다. Admin SDK는
     // 이 규칙 자체를 우회하므로 아래에서 create/update를 막아도 자동화는 그대로
     // 동작한다 — 여기서 막는 대상은 "클라이언트에서 가짜 후보를 써넣는 것"이다.
-    // 원문을 그대로 모아둔 검증 전 자료라 학생에게는 보여주지 않는다(교사만 읽기).
-    // 교사가 "건너뛰기"를 누르면 지워야 하니 delete만은 교사에게 열어준다.
+    //
+    // 2026-09-02 부터 읽기를 학생에게도 연다. 원래는 "검증 전 자료라 학생에게 안
+    // 보여준다"였는데, 교사가 매일 요약을 타이핑해야만 발행되는 구조라 실제로 발행이
+    // 끊겼고(8/24 이후 9일간 0건) 학생 화면이 통째로 비었다. 검증 안 된 글이 보이는
+    // 것보다 아무것도 안 보이는 게 나쁘다고 판단해 트레이드오프를 바꾼 것이다 —
+    // 대신 학생 화면에 "자동으로 모았고 선생님이 고른 글이 아니다"라고 밝히고,
+    // 소스는 공식 기술 블로그로만 제한되어 있다(scripts/fetch-news.mjs 의 SOURCES).
+    // materials/subjects 와 같은 패턴이 됐다: 읽기 공개, 쓰기는 막힘.
+    //
+    // 교사가 "건너뛰기"로 부적절한 것을 내려야 하니 delete는 교사에게 열어둔다.
     match /newsCandidates/{candidateId} {
-      allow read, delete: if isTeacher();
+      allow read: if true;
+      allow delete: if isTeacher();
       allow create, update: if false;
     }
 
