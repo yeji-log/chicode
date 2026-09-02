@@ -8,6 +8,7 @@ import {
   formatRelativeTime,
   listCandidates,
   listPublishedNews,
+  STUDENT_VISIBLE_DAYS,
   publishNews,
   updateNewsIssue,
   type NewsCandidate,
@@ -18,10 +19,21 @@ import {
 /**
  * 교사 페이지의 "오늘의 뉴스" 탭.
  *
- * newsCandidates 는 GitHub Actions가 매일 아침 자동으로 채워둔 원문 후보다(요약도
- * "왜 중요한가"도 없다). 교사가 그중 몇 개를 골라 직접 문장을 써서 승인해야만
- * 학생 홈 화면에 뜬다 — LLM 요약 없이 무료로 운영하기로 한 대신 이 판단은 사람이
- * 한다는 게 이 화면의 존재 이유다.
+ * ── 2026-09-02 로 역할이 바뀌었다 ──
+ * 전에는 여기서 승인해야만 학생 화면에 떴다("검토 대기 후보"). 그런데 매일 요약을
+ * 타이핑하는 부담 때문에 발행이 끊기고 학생 화면이 비어서, 자동 수집분을 학생에게
+ * 바로 보여주도록 바꿨다(lib/news.ts 머리말 참고).
+ *
+ * 그래서 이 화면은 이제 "관문"이 아니라 "손볼 수 있는 자리"다. 교사가 한 번도
+ * 안 들어와도 학생 화면은 매일 채워진다. 여기서 할 수 있는 건 두 가지다:
+ *
+ *   빼기   — 부적절하거나 무관한 소식을 학생 화면에서 내린다(discardCandidate).
+ *            전엔 교사 목록 정리였지만 이제 학생에게 보이는 걸 내리는 동작이라
+ *            되돌릴 수 없다 — confirm 을 붙인 이유다.
+ *   올리기 — 특히 다루고 싶은 소식에 요약과 "왜 중요한가"를 붙여 학생 화면 맨 위
+ *            "선생님이 고른 이슈"로 발행한다(publishNews). 이제 선택 사항이다.
+ *
+ * 화면 문구도 이 역할에 맞춰야 한다 — "승인해야 뜬다"고 적어두면 거짓말이 된다.
  */
 export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) {
   const [candidates, setCandidates] = useState<NewsCandidate[]>([])
@@ -44,6 +56,10 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
   }, [])
 
   async function handleDiscard(candidateId: string) {
+    // 예전엔 교사 검토 목록에서만 빼는 동작이라 조용히 지웠는데, 이제 이 후보는
+    // 학생 화면에도 이미 보이고 있고 지우면 되돌릴 수 없다(다음 수집 때 다시
+    // 올라오지도 않는다 — 링크 해시가 같아 중복으로 걸린다). 그래서 한 번 묻는다.
+    if (!confirm('이 소식을 학생 화면에서 내릴까요? 되돌릴 수 없습니다.')) return
     await discardCandidate(candidateId)
     setCandidates((list) => list.filter((item) => item.id !== candidateId))
   }
@@ -91,17 +107,22 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-3">
         <div>
-          <h2 className="font-bold text-ink-900">검토 대기 후보 ({candidates.length})</h2>
+          <h2 className="font-bold text-ink-900">
+            자동 수집 새소식 ({candidates.length}) — 학생 화면에 이미 노출 중
+          </h2>
           <p className="text-sm text-ink-500">
-            매일 아침 자동으로 모인 원문입니다(중요도 점수 높은 순). 3~5개를 골라 요약과 "왜
-            중요한가"를 직접 쓰고 승인해야 학생 화면에 뜹니다. 중요도 점수는 참고용 힌트일 뿐,
-            최종 선정은 직접 판단해 주세요.
+            매일 새벽 5시에 자동으로 모입니다(중요도 점수 높은 순). <b>여기 있는 글은 승인 없이도
+            학생 화면 /news 에 그대로 보입니다</b> — 선생님이 아무것도 안 하셔도 됩니다. 다만 두
+            가지를 하실 수 있습니다: 부적절하거나 수업과 무관한 글은 <b>학생 화면에서 빼기</b>로
+            내리고, 특히 다루고 싶은 소식은 <b>카드 만들기</b>로 요약을 붙여 학생 화면 맨 위
+            &ldquo;선생님이 고른 이슈&rdquo;에 올릴 수 있습니다. 중요도 점수는 참고용 힌트일 뿐,
+            판단은 직접 해 주세요.
           </p>
         </div>
 
         {candidates.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
-            아직 검토할 후보가 없습니다. 매일 KST 05:00에 자동으로 수집됩니다.
+            아직 모인 소식이 없습니다. 매일 KST 05:00에 자동으로 수집됩니다.
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
@@ -172,7 +193,7 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
                     onClick={() => handleDiscard(candidate.id)}
                     className="rounded-lg border border-cream-deep px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:border-cheese-300"
                   >
-                    건너뛰기
+                    학생 화면에서 빼기
                   </button>
                 </div>
 
@@ -198,7 +219,13 @@ export default function TeacherNews({ teacherEmail }: { teacherEmail: string }) 
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="font-bold text-ink-900">발행됨 (최근 {published.length}개)</h2>
+        <h2 className="font-bold text-ink-900">
+          선생님이 고른 이슈 (최근 {published.length}개)
+        </h2>
+        <p className="-mt-2 text-sm text-ink-500">
+          학생 화면 맨 위에 강조되어 뜹니다. {STUDENT_VISIBLE_DAYS}일이 지나면 학생 화면에서만
+          내려가고 여기에는 남습니다.
+        </p>
 
         {published.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-cream-deep px-6 py-10 text-center text-sm text-ink-500">
