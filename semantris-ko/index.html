@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; font: 14px system-ui, sans-serif }
+img { max-width: 100% }
+[hidden] { display: none !important }
+</style>
+</head><body>
+<title>연상 아케이드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;600;700&family=Gothic+A1:wght@400;500;600;700;800&display=swap">
+
+<style>
+/* Layout: one full-height column — header, scoreboard strip, card field, docked input.
+   Light-first. The look is a desk of word cards: white stock, crisp edges, one confident
+   blue for action, amber for the streak, and category tags so the board's themes are legible. */
+:root {
+  --ground: #e9edf4;
+  --panel: #ffffff;
+  --panel-2: #f2f5fa;
+  --line: #d8dfea;
+  --line-strong: #c2cbda;
+  --ink: #161920;
+  --ink-dim: #586273;
+  --ink-faint: #8d96a6;
+  --accent: #2f5fec;
+  --accent-soft: #e7edfe;
+  --amber: #e08c00;
+  --amber-soft: #fdf2dd;
+  --green: #15935a;
+  --red: #dc3b40;
+  --red-soft: #fdeaea;
+  --card-shadow: 0 1px 1px rgba(22,25,32,.05), 0 3px 8px -4px rgba(22,25,32,.16);
+  --field-shadow: inset 0 1px 3px rgba(22,25,32,.05);
+  --display: "Hahmlet", "Apple SD Gothic Neo", "Noto Serif KR", serif;
+  --ui: "Gothic A1", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  color-scheme: light;
+}
+/* Light by default on every device; dark is available from the toggle only. */
+:root[data-theme="dark"] {
+  --ground: #15181e;
+  --panel: #1d222b;
+  --panel-2: #252b36;
+  --line: #333b48;
+  --line-strong: #445062;
+  --ink: #eef1f6;
+  --ink-dim: #a3adbd;
+  --ink-faint: #717c8d;
+  --accent: #6f93ff;
+  --accent-soft: #23304f;
+  --amber: #f0ab3d;
+  --amber-soft: #3a2f16;
+  --green: #40c184;
+  --red: #f06a6e;
+  --red-soft: #3d2124;
+  --card-shadow: 0 1px 1px rgba(0,0,0,.3), 0 3px 10px -4px rgba(0,0,0,.5);
+  --field-shadow: inset 0 1px 3px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box }
+html, body { height: 100% }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font-family: var(--ui); -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+#app { height: 100%; display: flex; flex-direction: column; max-width: 600px; margin: 0 auto;
+       padding-inline: 16px; padding-block: 14px 0; gap: 12px }
+
+/* ---------- header ---------- */
+header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
+.brand { margin-right: auto; display: flex; align-items: baseline; gap: 8px }
+.brand b { font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: -.02em }
+.brand span { font-size: 9.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+              color: var(--ink-faint) }
+.tabs { display: flex; background: var(--panel-2); border: 1px solid var(--line);
+        border-radius: 9px; padding: 3px; gap: 3px }
+.tabs button { font: inherit; font-size: 12.5px; font-weight: 700; padding: 6px 14px; border: 0;
+               border-radius: 6px; background: transparent; color: var(--ink-dim); cursor: pointer }
+.tabs button[aria-selected="true"] { background: var(--accent); color: #fff }
+.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.theme-btn { font: inherit; font-size: 14px; line-height: 1; width: 34px; height: 34px; border-radius: 9px;
+             border: 1px solid var(--line); background: var(--panel); color: var(--ink-dim); cursor: pointer }
+.theme-btn:hover { border-color: var(--line-strong) }
+.theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+/* ---------- scoreboard ---------- */
+.scores { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 }
+.scores div { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+              padding: 8px 11px; box-shadow: var(--card-shadow) }
+.scores dt { font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+             color: var(--ink-faint); margin: 0 0 3px }
+.scores dd { margin: 0; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+             line-height: 1.05; letter-spacing: -.02em }
+.scores dd small { font-size: 11px; font-weight: 600; color: var(--ink-faint); margin-left: 1px }
+#streak-v.hot { color: var(--amber) }
+#streak-v.hot small { color: var(--amber) }
+
+/* ---------- field ---------- */
+.field { flex: 1; min-height: 0; position: relative; background: var(--panel-2);
+         border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+         box-shadow: var(--field-shadow) }
+.dangerline { position: absolute; left: 0; right: 0; top: 0; height: 46px; z-index: 3;
+              pointer-events: none;
+              background: linear-gradient(to bottom, var(--red-soft), transparent);
+              border-top: 2px solid var(--red) }
+.dangerline::after { content: "위험"; position: absolute; right: 10px; top: 5px; font-size: 9px;
+                     font-weight: 800; letter-spacing: .14em; color: var(--red) }
+
+/* arcade: cards stack up from the floor */
+#arcade-field { position: absolute; inset: 0; display: flex; flex-direction: column;
+                justify-content: flex-end; gap: 5px; padding: 9px }
+.tile { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 9px;
+        background: var(--panel); border: 1px solid var(--line); box-shadow: var(--card-shadow);
+        animation: rise .22s cubic-bezier(.2,.8,.3,1) }
+.tile .idx { font-size: 10px; font-weight: 700; color: var(--ink-faint);
+             font-variant-numeric: tabular-nums; min-width: 15px }
+.tile .w { font-family: var(--display); font-size: 19px; font-weight: 700; line-height: 1.1;
+           letter-spacing: -.015em }
+.tile .cat { margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
+             color: var(--ink-faint); background: var(--panel-2); border: 1px solid var(--line);
+             border-radius: 999px; padding: 2px 8px; white-space: nowrap }
+.tile.warn { border-color: var(--red); background: var(--red-soft) }
+.tile.warn .cat { border-color: color-mix(in oklab, var(--red) 35%, var(--line)) }
+.tile.hit { background: var(--accent); border-color: var(--accent); box-shadow: none }
+.tile.hit .w, .tile.hit .idx { color: #fff }
+.tile.hit .cat { color: #fff; background: rgba(255,255,255,.18); border-color: transparent }
+.tile.hit { animation: pop .3s ease-out forwards }
+.tile .gain { font-size: 12px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums }
+@keyframes rise { from { opacity: 0; transform: translateY(10px) } }
+@keyframes pop { 55% { transform: scale(1.015) } to { opacity: 0; transform: scale(.95) } }
+
+/* blocks: a 7-wide grid filling from the floor */
+#blocks-field { position: absolute; inset: 0; padding: 9px; display: grid; gap: 4px;
+                grid-template-columns: repeat(7, 1fr); align-content: end }
+.cell { aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+        text-align: center; font-family: var(--display); font-weight: 700; line-height: 1.08;
+        font-size: clamp(9px, 2.6vw, 13.5px); padding: 3px; overflow: hidden;
+        overflow-wrap: anywhere; box-shadow: var(--card-shadow);
+        animation: rise .22s cubic-bezier(.2,.8,.3,1) }
+.cell.empty { background: transparent; box-shadow: none; animation: none }
+.cell.c0 { background: #2f5fec; color: #fff }
+.cell.c1 { background: #f5a524; color: #3a2600 }
+.cell.c2 { background: #17a35b; color: #fff }
+.cell.c3 { background: #9b5de5; color: #fff }
+:root[data-theme="dark"] .cell.c0, :root[data-theme="dark"] .cell.c2, :root[data-theme="dark"] .cell.c3 { color: #fff }
+.cell.hit { animation: flash .3s ease-out forwards; outline: 3px solid var(--ink); outline-offset: -1px }
+@keyframes flash { to { opacity: 0; transform: scale(.86) } }
+
+/* ---------- feedback ---------- */
+.feedback { min-height: 38px; display: flex; align-items: center; gap: 7px; font-size: 13px;
+            color: var(--ink-dim); padding: 0 3px; flex-wrap: wrap }
+.feedback b { font-family: var(--display); font-size: 16px; font-weight: 700; color: var(--ink) }
+.feedback .arrow { color: var(--ink-faint) }
+.feedback .acc { font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums;
+                 color: var(--accent); padding: 2px 7px; border-radius: 999px; background: var(--accent-soft) }
+.feedback .also { font-size: 10.5px; font-weight: 700; color: var(--amber); padding: 2px 7px;
+                  border-radius: 999px; background: var(--amber-soft) }
+.feedback .pts { margin-left: auto; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--green) }
+.feedback.bad { color: var(--red) }
+.feedback.bad b { color: var(--red) }
+
+/* ---------- input ---------- */
+form { display: flex; gap: 9px; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)) }
+input[type=text] { flex: 1; min-width: 0; font: inherit; font-size: 16px; font-weight: 500;
+                   padding: 13px 15px; border-radius: 11px; border: 1px solid var(--line-strong);
+                   background: var(--panel); color: var(--ink); box-shadow: var(--card-shadow) }
+input[type=text]::placeholder { color: var(--ink-faint); font-weight: 400 }
+input[type=text]:focus { outline: 3px solid var(--accent-soft); outline-offset: 0;
+                         border-color: var(--accent) }
+button.send { font: inherit; font-size: 14px; font-weight: 800; padding: 0 20px; border-radius: 11px;
+              border: 0; background: var(--accent); color: #fff; cursor: pointer;
+              box-shadow: var(--card-shadow) }
+button.send:disabled { background: var(--line); color: var(--ink-faint); cursor: default; box-shadow: none }
+button.send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+/* ---------- overlay ---------- */
+.overlay { position: absolute; inset: 0; z-index: 5; background: var(--panel);
+           display: flex; flex-direction: column; justify-content: center;
+           gap: 14px; padding: 22px; overflow-y: auto }
+.overlay h2 { font-family: var(--display); font-size: 26px; font-weight: 700; margin: 0;
+              text-wrap: balance; letter-spacing: -.03em; line-height: 1.25 }
+.overlay p { margin: 0; font-size: 13.5px; line-height: 1.65; color: var(--ink-dim); max-width: 46ch }
+.overlay code { font-family: var(--ui); font-weight: 700; font-size: .9em; color: var(--accent);
+                background: var(--accent-soft); border-radius: 5px; padding: 2px 6px }
+.overlay .how { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none }
+.overlay .how li { display: flex; gap: 10px; font-size: 13px; line-height: 1.5; color: var(--ink-dim) }
+.overlay .how b { color: var(--ink); font-weight: 700 }
+.overlay .how .k { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 6px;
+                   background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 800;
+                   display: grid; place-items: center; margin-top: 1px }
+.overlay .start { align-self: flex-start; font: inherit; font-size: 14.5px; font-weight: 800;
+                  padding: 12px 26px; border: 0; border-radius: 11px; background: var(--accent);
+                  color: #fff; cursor: pointer; box-shadow: var(--card-shadow) }
+.overlay .start:disabled { background: var(--line); color: var(--ink-faint); box-shadow: none }
+.overlay .start:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.overlay .meta { font-size: 11.5px; color: var(--ink-faint); line-height: 1.6 }
+.finalscore { font-family: var(--display); font-size: 48px; font-weight: 700; line-height: 1;
+              font-variant-numeric: tabular-nums; color: var(--accent); letter-spacing: -.03em }
+.missed { display: flex; flex-wrap: wrap; gap: 6px }
+.missed span { font-size: 11.5px; font-weight: 500; padding: 4px 9px; border-radius: 7px;
+               background: var(--panel-2); border: 1px solid var(--line); color: var(--ink-dim) }
+.missed span em { font-family: var(--display); font-style: normal; font-weight: 700; color: var(--ink) }
+.bar { height: 4px; border-radius: 3px; background: var(--panel-2); overflow: hidden }
+.bar i { display: block; height: 100%; background: var(--accent); width: 0%; transition: width .2s }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important } }
+</style>
+
+<div id="app">
+  <header>
+    <div class="brand"><b>연상 아케이드</b><span>Semantris KO</span></div>
+    <div class="tabs" role="tablist" aria-label="게임 모드">
+      <button role="tab" id="tab-arcade" aria-selected="true">아케이드</button>
+      <button role="tab" id="tab-blocks" aria-selected="false">블록</button>
+    </div>
+    <button class="theme-btn" id="theme" title="밝기 전환" aria-label="밝기 전환">◑</button>
+  </header>
+
+  <dl class="scores">
+    <div><dt>점수</dt><dd id="score-v">0</dd></div>
+    <div><dt>연속</dt><dd id="streak-v">0<small>×1.0</small></dd></div>
+    <div><dt>제거</dt><dd id="cleared-v">0</dd></div>
+    <div><dt>최고</dt><dd id="best-v">0</dd></div>
+  </dl>
+
+  <div class="field" id="field">
+    <div class="dangerline" hidden id="dangerline"></div>
+    <div id="arcade-field"></div>
+    <div id="blocks-field" hidden></div>
+
+    <div class="overlay" id="overlay">
+      <h2 id="ov-title">단어를 직접 쓰지 않고 맞히는 게임</h2>
+      <p id="ov-body">화면에 단어가 쌓입니다. 그 단어와 <b>뜻이 가까운 다른 단어</b>를 입력하면 가장 가까운 것이 사라집니다. <code>해변</code>을 지우려면 <code>모래</code>나 <code>파라솔</code>처럼요.</p>
+      <ul class="how" id="ov-how">
+        <li><i class="k">1</i><div>단어 자체는 쓸 수 없습니다. <b>연상되는 말</b>을 쓰세요.</div></li>
+        <li><i class="k">2</i><div>단서가 <b>정확할수록</b> 옆 단어까지 함께 터집니다. 연속 성공은 배수로 쌓입니다.</div></li>
+        <li><i class="k">3</i><div>위쪽 <b>위험선</b>까지 차면 끝납니다.</div></li>
+      </ul>
+      <button class="start" id="ov-start" disabled>데이터 불러오는 중…</button>
+      <div class="bar" id="ov-bar"><i></i></div>
+      <p class="meta" id="ov-meta">한국어 임베딩 모델 KURE-v1로 미리 계산한 단서 7,335개 × 단어 486개의 의미 거리표를 씁니다. 모든 판정은 기기 안에서 끝나고, 입력은 어디로도 전송되지 않습니다.</p>
+    </div>
+  </div>
+
+  <div class="feedback" id="feedback"></div>
+
+  <form id="form" autocomplete="off">
+    <input type="text" id="clue" placeholder="연상되는 단어" enterkeyhint="send"
+           autocapitalize="off" spellcheck="false" aria-label="연상되는 단어" disabled>
+    <button type="submit" class="send" id="send" disabled>입력</button>
+  </form>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+// ---------- constants ----------
+const TILE_H        = 43;    // tile height plus gap, used to fit the stack to the field
+let   ARCADE_CAP   = 12;     // recomputed from the field's real height
+const ARCADE_WARN   = 3;     // top tiles marked as urgent
+const BLOCK_COLS    = 7;
+const BLOCK_ROWS    = 9;
+const MATCH_MIN     = 130;   // measured: 99.8% of real associations clear this, 90% of unrelated words don't
+const PRECISE_1     = 215;   // 70% of real associations reach this; unrelated words, 0.2%
+const PRECISE_2     = 248;   // 42% reach this — a precise clue takes the neighbours with it
+const CLUSTER_P     = 0.3;   // chance a new word comes from a category already on the board
+const SPAWN_START   = 3400;  // ms between new words
+const SPAWN_FLOOR   = 1250;
+const SPAWN_DECAY   = 70;    // ms removed per spawn
+const COLORS        = 4;
+
+// ---------- state ----------
+let DATA = null, SIM = null, clueIndex = null, targetIndex = null;
+let mode = "arcade";
+let running = false, spawnTimer = 0, spawnEvery = SPAWN_START;
+let score = 0, streak = 0, bestStreak = 0, cleared = 0;
+let best = { arcade: 0, blocks: 0 };
+let tiles = [];                 // arcade: [{word, id, uid}] index 0 = highest
+let grid = [];                  // blocks: grid[col] = [{word,id,color,uid}] bottom-up
+let uid = 0;
+
+const $ = (id) => document.getElementById(id);
+const el = {
+  score: $("score-v"), streak: $("streak-v"), cleared: $("cleared-v"), bestv: $("best-v"),
+  field: $("field"), arcade: $("arcade-field"), blocks: $("blocks-field"),
+  danger: $("dangerline"), overlay: $("overlay"), ovTitle: $("ov-title"), ovBody: $("ov-body"),
+  ovHow: $("ov-how"), ovStart: $("ov-start"), ovBar: $("ov-bar"), ovMeta: $("ov-meta"),
+  feedback: $("feedback"), form: $("form"), clue: $("clue"), send: $("send"),
+  tabA: $("tab-arcade"), tabB: $("tab-blocks"), theme: $("theme"),
+};
+
+// ---------- storage (per-viewer convenience only) ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); }
+              catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+// ---------- data ----------
+async function load() {
+  const bar = el.ovBar.firstElementChild;
+  const meta = await fetch("dist/game.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  bar.style.width = "35%";
+  // the distance table ships base64-encoded, since artifacts only serve text and media types
+  const b64 = await fetch("dist/sim.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); });
+  bar.style.width = "85%";
+  const bin = atob(b64.trim());
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  bar.style.width = "100%";
+  DATA = meta;
+  SIM = bytes;
+  if (SIM.length !== meta.rows * meta.cols) throw new Error("거리표 크기가 맞지 않습니다");
+  clueIndex = new Map(meta.clues.map((c, i) => [c, i]));
+  targetIndex = new Map(meta.targets.map((t, i) => [t, i]));
+  buildCats();
+}
+
+const sim = (row, targetId) => SIM[row * DATA.cols + targetId];
+
+// ---------- input resolution ----------
+const PARTICLES = ["으로서","으로써","이라고","이라는","에서는","에게는","한테는","으로는","라고","라는",
+  "에서","에게","한테","께서","보다","처럼","마다","조차","밖에","이나","부터","까지","으로","이란",
+  "라도","이야","은","는","이","가","을","를","의","에","와","과","도","만","로","나","란","야","께"];
+
+function resolve(raw) {
+  const w = raw.trim().replace(/\s+/g, "");
+  if (!w) return null;
+  if (clueIndex.has(w)) return { word: w, row: clueIndex.get(w) };
+  const surf = DATA.surface[w];
+  if (surf && clueIndex.has(surf)) return { word: surf, row: clueIndex.get(surf) };
+  for (const p of PARTICLES) {
+    if (w.length - p.length >= 2 && w.endsWith(p)) {
+      const base = w.slice(0, -p.length);
+      if (clueIndex.has(base)) return { word: base, row: clueIndex.get(base) };
+    }
+  }
+  // predicate typed as a conjugation: fall back to the dictionary form
+  for (const end of ["어요","아요","습니다","하다","다"]) {
+    if (w.endsWith(end)) {
+      const stem = w.slice(0, -end.length);
+      for (const cand of [stem + "다", stem]) {
+        if (cand.length >= 2 && clueIndex.has(cand)) return { word: cand, row: clueIndex.get(cand) };
+      }
+    }
+  }
+  return null;
+}
+
+// ---------- scoreboard ----------
+const mult = () => 1 + Math.min(streak, 10) * 0.2;
+function paintScores() {
+  el.score.textContent = score.toLocaleString("ko-KR");
+  el.streak.innerHTML = streak + "<small>×" + mult().toFixed(1) + "</small>";
+  el.streak.classList.toggle("hot", streak >= 3);
+  el.cleared.textContent = cleared;
+  el.bestv.textContent = (best[mode] || 0).toLocaleString("ko-KR");
+}
+
+function say(html, kind) {
+  el.feedback.className = "feedback" + (kind ? " " + kind : "");
+  el.feedback.innerHTML = html;
+}
+
+// ---------- arcade ----------
+let byCat = null;
+function buildCats() {
+  byCat = new Map();
+  (DATA.catOf || []).forEach((c, id) => {
+    if (!byCat.has(c)) byCat.set(c, []);
+    byCat.get(c).push(id);
+  });
+}
+
+function randomWord(exclude) {
+  const t = DATA.targets;
+  // sometimes extend a category already on the board, so the field reads as a theme
+  if (byCat && byCat.size && exclude.size && Math.random() < CLUSTER_P) {
+    const on = [...exclude];
+    const seed = on[Math.floor(Math.random() * on.length)];
+    const pool = (byCat.get(DATA.catOf[seed]) || []).filter(id => !exclude.has(id));
+    if (pool.length) { const id = pool[Math.floor(Math.random() * pool.length)]; return { word: t[id], id }; }
+  }
+  for (let i = 0; i < 40; i++) {
+    const id = Math.floor(Math.random() * t.length);
+    if (!exclude.has(id)) return { word: t[id], id };
+  }
+  const id = Math.floor(Math.random() * t.length);
+  return { word: t[id], id };
+}
+
+function paintArcade() {
+  el.arcade.replaceChildren(...tiles.map((t, i) => {
+    const d = document.createElement("div");
+    d.className = "tile" + (i < ARCADE_WARN && tiles.length >= ARCADE_CAP - 2 ? " warn" : "");
+    d.dataset.uid = t.uid;
+    const n = document.createElement("i");
+    n.className = "idx";
+    n.textContent = tiles.length - i;
+    const w = document.createElement("span");
+    w.className = "w";
+    w.textContent = t.word;
+    d.append(n, w);
+    const catName = DATA.categories && DATA.catOf ? DATA.categories[DATA.catOf[t.id]] : null;
+    if (catName) {
+      const c = document.createElement("span");
+      c.className = "cat";
+      c.textContent = catName;
+      d.append(c);
+    }
+    return d;
+  }));
+}
+
+function spawnArcade() {
+  const on = new Set(tiles.map(t => t.id));
+  const w = randomWord(on);
+  tiles.push({ ...w, uid: ++uid });
+  if (tiles.length > ARCADE_CAP) { paintArcade(); return gameOver(); }
+  paintArcade();
+}
+
+function guessArcade(res) {
+  let bestI = -1, bestS = -1;
+  tiles.forEach((t, i) => { const s = sim(res.row, t.id); if (s > bestS) { bestS = s; bestI = i; } });
+  if (bestI < 0 || bestS < MATCH_MIN) return null;
+
+  // a precise clue takes its neighbours with it; a merely adequate one does not
+  const matched = tiles[bestI].word;
+  const extra = bestS >= PRECISE_2 ? 2 : bestS >= PRECISE_1 ? 1 : 0;
+  const group = [bestI];
+  // prefer the tile above, which is the one closest to the danger line
+  const nudge = [bestI - 1, bestI + 1, bestI - 2, bestI + 2];
+  for (const i of nudge) {
+    if (group.length >= 1 + extra) break;
+    if (i >= 0 && i < tiles.length && !group.includes(i)) group.push(i);
+  }
+  group.sort((a, b) => a - b);
+
+  const words = group.map(i => tiles[i].word);
+  const depth = group.reduce((a, i) => a + (tiles.length - i), 0) / group.length;
+  const gain = Math.round((60 + depth * 8) * group.length * mult());
+
+  group.forEach(i => {
+    const node = el.arcade.querySelector(`[data-uid="${tiles[i].uid}"]`);
+    if (!node) return;
+    node.classList.add("hit");
+    const g = document.createElement("b");
+    g.className = "gain";
+    g.textContent = "+" + Math.round(gain / group.length);
+    node.append(g);
+  });
+  const dying = new Set(group.map(i => tiles[i].uid));
+  tiles = tiles.filter(t => !dying.has(t.uid));
+  setTimeout(() => { if (running) paintArcade(); }, 290);
+
+  return { words, gain, strength: bestS, matched, extra: words.length - 1 };
+}
+
+// ---------- blocks ----------
+function paintBlocks() {
+  const frag = [];
+  for (let r = BLOCK_ROWS - 1; r >= 0; r--) {
+    for (let c = 0; c < BLOCK_COLS; c++) {
+      const b = grid[c][r];
+      const d = document.createElement("div");
+      if (!b) { d.className = "cell empty"; }
+      else { d.className = "cell c" + b.color; d.textContent = b.word; d.dataset.uid = b.uid; }
+      frag.push(d);
+    }
+  }
+  el.blocks.replaceChildren(...frag);
+}
+
+function spawnBlock() {
+  const open = [];
+  for (let c = 0; c < BLOCK_COLS; c++) if (grid[c].length < BLOCK_ROWS) open.push(c);
+  if (!open.length) { return gameOver(); }
+  const col = open[Math.floor(Math.random() * open.length)];
+  const on = new Set(grid.flat().map(b => b.id));
+  const w = randomWord(on);
+  grid[col].push({ ...w, color: Math.floor(Math.random() * COLORS), uid: ++uid });
+  paintBlocks();
+  if (grid.every(c => c.length >= BLOCK_ROWS)) return gameOver();
+}
+
+function guessBlocks(res) {
+  let bc = -1, br = -1, bestS = -1;
+  grid.forEach((col, c) => col.forEach((b, r) => {
+    const s = sim(res.row, b.id);
+    if (s > bestS) { bestS = s; bc = c; br = r; }
+  }));
+  if (bc < 0 || bestS < MATCH_MIN) return null;
+
+  // flood-fill the matched block's colour through orthogonal neighbours
+  const color = grid[bc][br].color;
+  const seen = new Set([bc + ":" + br]);
+  const stack = [[bc, br]], hits = [[bc, br]];
+  while (stack.length) {
+    const [c, r] = stack.pop();
+    for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nc = c + dc, nr = r + dr, key = nc + ":" + nr;
+      if (nc < 0 || nc >= BLOCK_COLS || nr < 0 || seen.has(key)) continue;
+      const nb = grid[nc] && grid[nc][nr];
+      if (!nb || nb.color !== color) continue;
+      seen.add(key); stack.push([nc, nr]); hits.push([nc, nr]);
+    }
+  }
+
+  const matched = grid[bc][br].word;
+  const words = hits.map(([c, r]) => grid[c][r].word);
+  hits.forEach(([c, r]) => {
+    const node = el.blocks.querySelector(`[data-uid="${grid[c][r].uid}"]`);
+    if (node) node.classList.add("hit");
+  });
+  const gain = Math.round(70 * hits.length * (1 + (hits.length - 1) * 0.35) * mult());
+
+  const kill = new Set(hits.map(([c, r]) => grid[c][r].uid));
+  setTimeout(() => {
+    if (!running) return;
+    for (let c = 0; c < BLOCK_COLS; c++) grid[c] = grid[c].filter(b => !kill.has(b.uid));
+    paintBlocks();
+  }, 290);
+
+  return { words, gain, strength: bestS, matched, extra: words.length - 1 };
+}
+
+// ---------- turn ----------
+function submit(e) {
+  e.preventDefault();
+  if (!running) return;
+  const raw = el.clue.value;
+  el.clue.value = "";
+  const res = resolve(raw);
+
+  if (!res) {
+    streak = 0; paintScores();
+    return say(`<span><b>${escapeHtml(raw.trim() || "…")}</b> 는 아는 단어가 아니에요. 다른 말로 해보세요.</span>`, "bad");
+  }
+  if (targetIndex.has(res.word) && onBoard(res.word)) {
+    streak = 0; paintScores();
+    return say(`<span><b>${escapeHtml(res.word)}</b> 는 화면에 있는 단어예요. 연상되는 다른 말을 쓰세요.</span>`, "bad");
+  }
+
+  const out = mode === "arcade" ? guessArcade(res) : guessBlocks(res);
+  if (!out) {
+    streak = 0; paintScores();
+    return say(`<span><b>${escapeHtml(res.word)}</b> 와 가까운 단어가 화면에 없어요.</span>`, "bad");
+  }
+
+  score += out.gain;
+  cleared += out.words.length;
+  streak += 1;
+  bestStreak = Math.max(bestStreak, streak);
+  paintScores();
+  const pct = Math.round(out.strength / 255 * 100);
+  const also = out.extra > 0
+    ? `<span class="also">${mode === "arcade" ? "옆" : "같은 색"} ${out.extra}개</span>` : "";
+  say(`<span>${escapeHtml(res.word)}</span><span class="arrow">→</span>
+       <b>${escapeHtml(out.matched)}</b><span class="acc">${pct}%</span>${also}
+       <span class="pts">+${out.gain.toLocaleString("ko-KR")}</span>`, "good");
+}
+
+function onBoard(word) {
+  return mode === "arcade" ? tiles.some(t => t.word === word)
+                           : grid.some(col => col.some(b => b.word === word));
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---------- loop ----------
+function tick() {
+  if (!running) return;
+  if (mode === "arcade") spawnArcade(); else spawnBlock();
+  if (!running) return;
+  spawnEvery = Math.max(SPAWN_FLOOR, spawnEvery - SPAWN_DECAY);
+  spawnTimer = setTimeout(tick, spawnEvery);
+}
+
+function fitCapacity() {
+  const h = el.field.clientHeight - 16;
+  if (h > 0) ARCADE_CAP = Math.max(7, Math.min(14, Math.floor(h / TILE_H)));
+}
+
+function start() {
+  clearTimeout(spawnTimer);
+  fitCapacity();
+  running = true;
+  score = 0; streak = 0; bestStreak = 0; cleared = 0;
+  spawnEvery = SPAWN_START;
+  tiles = [];
+  grid = Array.from({ length: BLOCK_COLS }, () => []);
+  uid = 0;
+  el.overlay.hidden = true;
+  el.danger.hidden = false;
+  el.arcade.hidden = mode !== "arcade";
+  el.blocks.hidden = mode !== "blocks";
+  el.clue.disabled = false; el.send.disabled = false;
+  paintScores();
+  say(mode === "arcade"
+    ? "쌓이는 단어 중 하나와 뜻이 가까운 말을 입력하세요. 정확할수록 많이 터집니다."
+    : "같은 색 블록이 붙어 있으면 한 번에 터집니다.");
+  const seed = mode === "arcade" ? 4 : 10;
+  for (let i = 0; i < seed; i++) { if (mode === "arcade") spawnArcade(); else spawnBlock(); }
+  if (mode === "arcade") paintArcade(); else paintBlocks();
+  spawnTimer = setTimeout(tick, spawnEvery);
+  el.clue.focus();
+}
+
+function gameOver() {
+  running = false;
+  clearTimeout(spawnTimer);
+  el.clue.disabled = true; el.send.disabled = true;
+  el.danger.hidden = true;
+  if (score > (best[mode] || 0)) { best[mode] = score; store.set("semantris-ko-best", best); }
+  paintScores();
+
+  const left = mode === "arcade" ? tiles.map(t => t.word) : grid.flat().map(b => b.word);
+  const hintFor = left.slice(0, 5).map(w => {
+    const p = (DATA.profiles[w] || []).slice(0, 3).join(", ");
+    return p ? `<span><em>${escapeHtml(w)}</em> ← ${escapeHtml(p)}</span>` : "";
+  }).filter(Boolean).join("");
+
+  el.ovTitle.textContent = "끝났습니다";
+  el.ovBody.innerHTML = `<span class="finalscore">${score.toLocaleString("ko-KR")}</span>`;
+  el.ovHow.innerHTML = `
+    <li><i class="k">✓</i><div>단어 <b>${cleared}개</b>를 지웠고, 최고 연속은 <b>${bestStreak}회</b>였습니다.</div></li>
+    ${hintFor ? `<li><i class="k">?</i><div>남은 단어는 이렇게 노릴 수 있었어요.<div class="missed" style="margin-top:6px">${hintFor}</div></div></li>` : ""}`;
+  el.ovStart.textContent = "다시 하기";
+  el.ovStart.disabled = false;
+  el.ovMeta.textContent = mode === "arcade"
+    ? "아래쪽 단어를 지울수록 점수가 큽니다. 정확한 단서는 옆 단어까지 함께 터뜨립니다."
+    : "같은 색이 넓게 붙어 있을 때 터뜨리면 점수가 급격히 커집니다.";
+  el.overlay.hidden = false;
+  el.ovStart.focus();
+}
+
+function showIntro() {
+  running = false;
+  clearTimeout(spawnTimer);
+  el.danger.hidden = true;
+  el.clue.disabled = true; el.send.disabled = true;
+  el.arcade.replaceChildren(); el.blocks.replaceChildren();
+  el.arcade.hidden = mode !== "arcade";
+  el.blocks.hidden = mode !== "blocks";
+  say("");
+  if (mode === "arcade") {
+    el.ovTitle.textContent = "단어를 직접 쓰지 않고 맞히는 게임";
+    el.ovBody.innerHTML = "화면에 단어가 쌓입니다. 그 단어와 <b>뜻이 가까운 다른 단어</b>를 입력하면 가장 가까운 것이 사라집니다. <code>해변</code>을 지우려면 <code>모래</code>나 <code>파라솔</code>처럼요.";
+    el.ovHow.innerHTML = `
+      <li><i class="k">1</i><div>단어 자체는 쓸 수 없습니다. <b>연상되는 말</b>을 쓰세요.</div></li>
+      <li><i class="k">2</i><div>단서가 <b>정확할수록</b> 옆 단어까지 함께 터집니다. 연속 성공은 배수로 쌓입니다.</div></li>
+      <li><i class="k">3</i><div>위쪽 <b>위험선</b>까지 차면 끝납니다.</div></li>`;
+  } else {
+    el.ovTitle.textContent = "같은 색을 모아서 한 번에 터뜨리기";
+    el.ovBody.innerHTML = "블록이 아래부터 쌓입니다. 연상되는 말을 입력하면 가장 가까운 블록이 터지고, <b>맞닿은 같은 색 블록이 함께</b> 사라집니다.";
+    el.ovHow.innerHTML = `
+      <li><i class="k">1</i><div>한 번에 많이 터뜨릴수록 점수가 <b>급격히</b> 커집니다.</div></li>
+      <li><i class="k">2</i><div>같은 색이 뭉칠 때까지 <b>기다리는 것</b>도 전략입니다.</div></li>
+      <li><i class="k">3</i><div>격자가 꽉 차면 끝납니다.</div></li>`;
+  }
+  el.ovStart.textContent = DATA ? "시작" : "데이터 불러오는 중…";
+  el.ovStart.disabled = !DATA;
+  el.ovMeta.textContent = DATA
+    ? `한국어 임베딩 모델 KURE-v1로 미리 계산한 단서 ${DATA.clues.length.toLocaleString("ko-KR")}개 × 단어 ${DATA.targets.length}개의 의미 거리표를 씁니다. 모든 판정은 기기 안에서 끝나고, 입력은 어디로도 전송되지 않습니다.`
+    : el.ovMeta.textContent;
+  el.overlay.hidden = false;
+  paintScores();
+}
+
+// ---------- mode + theme ----------
+function setMode(next) {
+  if (next === mode) return;
+  mode = next;
+  el.tabA.setAttribute("aria-selected", String(mode === "arcade"));
+  el.tabB.setAttribute("aria-selected", String(mode === "blocks"));
+  store.set("semantris-ko-mode", mode);
+  showIntro();
+}
+el.tabA.addEventListener("click", () => setMode("arcade"));
+el.tabB.addEventListener("click", () => setMode("blocks"));
+
+el.theme.addEventListener("click", () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const next = cur ? (cur === "dark" ? "light" : "dark") : (dark ? "light" : "dark");
+  document.documentElement.setAttribute("data-theme", next);
+  store.set("semantris-ko-theme", next);
+});
+
+el.form.addEventListener("submit", submit);
+el.ovStart.addEventListener("click", () => { if (DATA) start(); });
+el.field.addEventListener("click", () => { if (running) el.clue.focus(); });
+addEventListener("resize", () => {
+  if (mode !== "arcade") return;
+  fitCapacity();
+  if (running && tiles.length > ARCADE_CAP) gameOver(); else if (running) paintArcade();
+});
+
+// ---------- boot ----------
+function boot(restored) {
+  best = store.get("semantris-ko-best", { arcade: 0, blocks: 0 }) || { arcade: 0, blocks: 0 };
+  const savedTheme = store.get("semantris-ko-theme", null);
+  if (savedTheme === "dark" || savedTheme === "light") document.documentElement.setAttribute("data-theme", savedTheme);
+  const savedMode = store.get("semantris-ko-mode", "arcade");
+  if (savedMode === "blocks") {
+    mode = "blocks";
+    el.tabA.setAttribute("aria-selected", "false");
+    el.tabB.setAttribute("aria-selected", "true");
+  }
+  if (restored && restored.best) best = restored.best;
+  paintScores();
+
+  load().then(() => {
+    showIntro();
+  }).catch(err => {
+    el.ovTitle.textContent = "데이터를 불러오지 못했습니다";
+    el.ovBody.textContent = "의미 거리표를 읽는 데 실패했습니다 (" + err.message + "). 새로고침하면 다시 시도합니다.";
+    el.ovHow.replaceChildren();
+    el.ovStart.textContent = "다시 시도";
+    el.ovStart.disabled = false;
+    el.ovStart.onclick = () => location.reload();
+  });
+}
+
+// keep the high scores across a republish
+if (window.claude && window.claude.hot) {
+  try {
+    window.claude.hot.snapshot(() => ({ best }));
+    window.claude.hot.ready ? window.claude.hot.ready(boot) : boot(window.claude.hot.data || {});
+  } catch { boot({}); }
+} else {
+  boot({});
+}
+})();
+</script>
+
+</body></html>
