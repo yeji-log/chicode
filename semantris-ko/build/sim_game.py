@@ -4,7 +4,7 @@ import json, numpy as np
 from pathlib import Path
 M=json.loads(Path('dist/meta.json').read_text(encoding='utf-8'))
 T,Cl,prof=M['targets'],M['clues'],M['profiles']
-Q=np.frombuffer(Path('dist/sim.u8').read_bytes(),dtype=np.uint8).reshape(M['rows'],M['cols'])
+Q=np.frombuffer(Path('dist/sim.bin').read_bytes(),dtype=np.uint8).reshape(M['rows'],M['cols'])
 ci={c:i for i,c in enumerate(Cl)}; ti={t:j for j,t in enumerate(T)}
 rng=np.random.default_rng(7)
 

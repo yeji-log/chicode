@@ -1,5 +1,9 @@
-# 빌드 중간물 — dist/sim.b64.txt 에서 다시 만들 수 있다
+# 빌드 중간물 — dist/sim.csr.b64.txt 에서 다시 만들 수 있다
 dist/sim.bin
 build/emb_cache.npz
 __pycache__/
 .venv/
+
+# 외부 입력 (아래 스크립트로 내려받는다)
+data/full.txt
+data/dict.txt

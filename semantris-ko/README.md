@@ -7,6 +7,7 @@
 원작은 영어 전용이고 한국어판이 없어서, 한국어 임베딩으로 거리표를 새로 만들었다.
 
 브라우저만 있으면 돌아간다. 판정은 전부 기기 안에서 끝나고 입력은 어디로도 나가지 않는다.
+게임 안의 **`?` 버튼**에 원리 설명과, 아무 단어나 넣어 거리표를 직접 조회해보는 상자가 들어 있다.
 
 ```bash
 cd semantris-ko && python3 -m http.server 8731
@@ -22,36 +23,53 @@ cd semantris-ko && python3 -m http.server 8731
 
 ## 구조
 
-런타임에는 모델이 없다. 단서 7,335개 × 단어 486개의 의미 거리를 **미리 다 계산해서** uint8 행렬로
-싣고, 게임은 조회만 한다. 덕분에 모델 크기가 제약이 아니게 되어 빌드에는 큰 한국어 모델을 쓴다.
+런타임에는 모델이 없다. 단서 14,764개 × 단어 486개의 의미 거리를 **미리 다 계산해서** 싣고,
+게임은 조회만 한다. 덕분에 모델 크기가 제약이 아니게 되어 빌드에는 큰 한국어 모델을 쓴다.
+
+거리표는 **임계값을 넘는 쌍만** 저장한다. 단서 하나가 486개 전부와 의미 있게 가깝지는 않기
+때문에, 조밀 행렬이면 9.6MB일 것이 1.5MB로 줄었다.
 
 ```
-index.html          게임 전체 (단일 파일)
-dist/game.json      단어·단서 목록, 활용형 맵, 카테고리
-dist/sim.b64.txt    거리 행렬 7,335 × 486 uint8 (base64)
-data/               원본 단어 데이터 (손으로 쓴 것 + 빈도 목록에서 뽑은 것)
-build/              빌드 및 검증 스크립트
+index.html             게임 전체 (단일 파일)
+dist/game.json         단어·단서 목록, 활용형 맵, 카테고리
+dist/sim.csr.b64.txt   거리표 (CSR 희소, base64) — 저장 쌍 352,753개
+data/                  원본 단어 데이터
+build/                 빌드 및 검증 스크립트
 ```
 
-`sim.b64.txt`가 base64인 것은 호스팅 쪽이 임의의 바이너리를 서빙하지 않기 때문이다.
-일반 서버에 올릴 때는 `.bin`을 그대로 써도 된다.
+거리표 바이너리는 `uint32 magic, uint32 단서수, uint32 쌍수`에 이어 `offsets / target id / score`
+세 배열이 붙은 CSR이다. base64인 것은 호스팅 쪽이 임의의 바이너리를 서빙하지 않기 때문이다.
 
 ## 데이터를 다시 만들려면
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python build/make_vocab.py <한국어_빈도목록.txt> 12000   # data/clues.txt, surface.json
-.venv/bin/python build/build_matrix.py                            # dist/ 전체
-.venv/bin/python build/check.py                                   # 품질 확인
+sh build/fetch_sources.sh                  # 빈도 목록 + 사전 목록 내려받기
+.venv/bin/python build/make_vocab.py       # data/clues.txt, surface.json
+.venv/bin/python build/build_matrix.py     # dist/ 전체
+.venv/bin/python build/decode.py           # 분석용 조밀 행렬 복원
+.venv/bin/python build/check.py            # 품질 확인
 ```
 
-빈도 목록은 [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords)의 `ko_50k.txt`를 썼다.
-OpenSubtitles 기반이라 구어체·활용형·인물명이 많아서, [Kiwi](https://github.com/bab2min/kiwipiepy)로
-형태소 분석해 명사와 서술어 원형만 남긴다.
+임베딩은 `build/emb_cache.npz`에 문자열 단위로 캐시된다. 어휘를 바꿔도 새로 추가된 말만 다시 돈다.
+
+## 어휘를 어떻게 고르나
+
+소스 두 개가 각자 잘하는 일을 한다.
+
+- **사전 목록** 36만 개가 "이게 한국어 단어인가"를 판정한다. 자막 코퍼스의 인물명, 오타, 조각을 걸러낸다.
+- **빈도 목록**([hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) `ko_full.txt`, 68만 줄)이
+  "그중 실을 만큼 흔한가"를 판정한다.
+
+빈도 목록은 OpenSubtitles 기반이라 표면형이 활용된 채로 들어 있다. [Kiwi](https://github.com/bab2min/kiwipiepy)로
+형태소 분석해 표제어로 모으고, 그 과정에서 나온 활용형 5만 개는 `surface.json`에 남겨
+게임이 플레이어 입력을 해석하는 데 쓴다.
+
+자막에 안 나오는 일상어(`대중교통`, `분리수거`, `인공지능`)는 `data/seeds.txt`에 직접 적는다.
 
 ## 만들면서 걸렸던 것들
 
-품질이 그냥 나오지 않아서 네 번 고쳤다. 전부 `build/`에 측정 스크립트가 남아 있다.
+품질이 그냥 나오지 않았다. 전부 `build/`에 측정 스크립트가 남아 있다.
 
 **1. 다국어 모델은 한국어 단어 연상에 못 쓴다.** `paraphrase-multilingual-MiniLM`, `multilingual-e5`는
 15문항에서 7~8개만 맞았다. 게다가 `병원`·`김치` 같은 허브 단어가 모든 입력을 빨아들였다.
@@ -72,13 +90,23 @@ OpenSubtitles 기반이라 구어체·활용형·인물명이 많아서, [Kiwi](
 그래서 운이 아니라 **단서의 정확도**에 보상을 걸었다. 강도 215 이상이면 옆 1개, 248 이상이면 2개가
 함께 터진다. 정당한 매칭의 70%/42%가 여기 도달하고, 무관한 단어는 0.2%만 닿는다.
 
+**5. 흔한 단어를 직접 걸러버렸다.** 첫 버전의 STOP 목록에 `사람`·`인간`·`남자`·`여자`·`생각`을
+"연상 신호가 없다"며 넣었는데, `사람`은 빈도 목록에서 4,444회로 최상위권인 멀쩡한 단어다.
+무엇을 받아줄지는 단어 목록이 아니라 **매칭 임계값**이 정해야 한다. 지금 STOP에는 조사·대명사·
+형식명사만 남아 있다.
+
+**6. numpy에서 `-uint8`은 음수가 아니다.** 희소 저장용으로 `np.argsort(-Q)`를 썼는데 `Q`가 uint8이라
+부호 반전이 256으로 래핑되어, 점수 0인 항목이 정렬 맨 앞으로 올라왔다. 조밀 행렬은 멀쩡했으므로
+품질 지표에는 잡히지 않고 출력물만 망가져 있었다. `-Q.astype(np.int16)`으로 고쳤고,
+희소 표를 조밀 행렬과 대조하는 검증을 붙였다.
+
 ## 지금 품질
 
-`build/check.py` — 프로필에 없는 단서 110개로 486개 전체에서 평가
+`build/check.py` — 단서 110개로 486개 전체에서 평가
 
 | | |
 |---|---|
-| top-1 | 91.8% |
+| top-1 | 93.6% |
 | top-3 | 99.1% |
 | top-5 | 100% |
 
@@ -86,16 +114,16 @@ OpenSubtitles 기반이라 구어체·활용형·인물명이 많아서, [Kiwi](
 
 | 화면 단어 수 | 정확도 |
 |---|---|
-| 8 | 98.7% |
-| 12 | 97.4% |
-| 16 | 96.7% |
+| 8 | 98.5% |
+| 12 | 97.1% |
+| 16 | 96.2% |
 
 임계값 130은 실측으로 잡았다. 정당한 매칭의 99.8%가 넘고, 무관한 입력의 90.5%가 걸러진다.
 
 ## 한계
 
-- **단서 어휘가 고정되어 있다.** 7,335개 밖의 단어는 "아는 단어가 아니에요"로 거절된다.
-  조사와 흔한 활용형은 `surface.json`과 규칙으로 처리하지만 완전하지 않다.
+- **단서 어휘가 14,764개로 고정되어 있다.** 목록 밖의 말은 거절된다. 조사와 흔한 활용형은
+  `surface.json`과 규칙으로 처리하지만 완전하지 않다.
 - **음절 겹침 오탐이 남아 있다.** 페널티로 많이 줄었지만 `경관`→왕관 같은 사례가 아직 있다.
 - **타깃 486개는 손으로 고른 목록이다.** 구체적이고 연상 가능한 명사 위주라, 추상어는 상대적으로 약하다.
 
@@ -104,3 +132,4 @@ OpenSubtitles 기반이라 구어체·활용형·인물명이 많아서, [Kiwi](
 - 임베딩 [nlpai-lab/KURE-v1](https://huggingface.co/nlpai-lab/KURE-v1) (빌드 시점에만)
 - 형태소 분석 [kiwipiepy](https://github.com/bab2min/kiwipiepy)
 - 빈도 목록 [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) (ko, OpenSubtitles)
+- 사전 목록 [acidsound/korean_wordlist](https://github.com/acidsound/korean_wordlist)

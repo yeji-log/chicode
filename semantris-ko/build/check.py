@@ -3,7 +3,7 @@ import json, sys, numpy as np
 from pathlib import Path
 M = json.loads(Path('dist/meta.json').read_text(encoding='utf-8'))
 T, Cl = M['targets'], M['clues']
-Q = np.frombuffer(Path('dist/sim.u8').read_bytes(), dtype=np.uint8).reshape(M['rows'], M['cols'])
+Q = np.frombuffer(Path('dist/sim.bin').read_bytes(), dtype=np.uint8).reshape(M['rows'], M['cols'])
 ci = {c:i for i,c in enumerate(Cl)}
 prof = M['profiles']
 

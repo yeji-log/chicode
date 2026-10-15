@@ -1,78 +1,100 @@
 # -*- coding: utf-8 -*-
-"""Extract a clean Korean clue vocabulary (nouns + predicate lemmas) from a frequency list."""
+"""Build the clue vocabulary.
+
+Two sources, each doing what it is good at:
+  - a Korean dictionary list decides what counts as a real word (kills subtitle
+    character names, typos and fragments),
+  - a frequency corpus decides which real words are common enough to be worth shipping.
+Kiwi lemmatises the corpus first, so inflected surface forms collapse onto their lemma
+and the inflections become a lookup table the game uses to resolve what the player types.
+"""
 import re, sys, json
 from pathlib import Path
 from kiwipiepy import Kiwi
 
-freq_path = Path(sys.argv[1])
-LIMIT = int(sys.argv[2]) if len(sys.argv) > 2 else 12000
+freq_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('data/full.txt')
+dict_path = Path(sys.argv[2]) if len(sys.argv) > 2 else Path('data/dict.txt')
+LIMIT     = int(sys.argv[3]) if len(sys.argv) > 3 else 30000
+MIN_FREQ  = 3
 
 kiwi = Kiwi()
 HANGUL = re.compile(r'^[가-힣]+$')
 
-FUNC_VERBS = set('''
-괜찮다 위하다 대하다 보이다 죽이다 나오다 만나다 만들다 나가다 기다리다 보내다 좋아하다 들어가다
-일어나다 가지다 떠나다 돌아오다 원하다 돌아가다 부르다 끝나다 도와주다 미치다 그러다 이러다 저러다
-생각하다 말하다 시작하다 그만두다 데려가다 데려오다 집어넣다 가져오다 가져가다 내려가다 올라가다
-들어오다 나타나다 사라지다 변하다 바뀌다 지나가다 다가오다 어쩌다 어떡하다 그렇다 이렇다 저렇다
-고맙다 미안하다 반갑다 죄송하다 괜찮다 됐다 맞다 틀리다 아니다 싶다 말다 버리다 두다 치다 놓다
-하여다 당하다 시키다 삼다 여기다 느끼다 알아보다 살펴보다 쳐다보다 바라보다 들여다보다
+# Only genuine function words. Everything else — 사람, 인간, 남자, 생각 — is a word a
+# player may reasonably type, so it belongs in the vocabulary; the match threshold,
+# not the word list, decides whether it hits anything.
+STOP = set('''것 거 수 줄 리 바 데 뿐 채 등 들 분 쪽 년 월 일 시 초 때 곳 중 후 전 간 내 외 상 하
+그것 이것 저것 여기 거기 저기 이거 그거 저거 무엇 누구 어디 언제 얼마 자기 자신 서로
+나 너 저 우리 저희 당신 그들 이들 그녀 그이 누가 아무 아무것
+하다 되다 있다 없다 같다 아니다 이렇다 그렇다 어떻다 그러다 이러다 저러다 드리다 싶다 말다
+씨 님 분들 여러분 거야 거지 건지 걸까
 '''.split())
 
-STOP = set('''사람 사람들 그것 이것 저것 때문 경우 정도 자신 자기 당신 여기 거기 저기 이번 다음 지난
-생각 얘기 이야기 소리 모습 모양 때 곳 것 수 줄 리 바 데 뿐 등 들 분 명 개 번 살 원 시 초 년 월 일 주 중 후 전 간 쪽
-누구 어디 언제 얼마 무엇 아무 모두 전부 서로 자꾸 다시 벌써 아직 이제 지금 오늘 내일 어제 방금 금방
-있다 없다 하다 되다 같다 아니다 이렇다 그렇다 어떻다 그러다 이러다 저러다 드리다 주다 받다 가다 오다 보다 알다 모르다
-씨 님 네 야 응 어 아 음 흠 원래 사실 진짜 정말 완전 엄청 조금 약간 거의 전혀 절대 제발 아마 혹시
-남자 여자 아이 어른 애들 녀석 자식 인간 놈 년 분들 여러분'''.split())
+# predicate endings that mean the token is an inflected form, not a lemma
+VERBISH = re.compile(r'(어요|아요|예요|에요|어서|아서|는데|은데|니까|잖아|겠어|더라|구나|'
+                     r'세요|시죠|지요|라고요|대요|네요|군요|거든|더군|려고|'
+                     r'었어|았어|았다|었다|겠다|린다|한다|된다)$')
 
-# surface frequency, aggregated onto lemmas
+print("사전 목록 읽는 중…", flush=True)
+DICT = {w for w in dict_path.read_text(encoding='utf-8').split() if HANGUL.match(w)}
+print(f"  사전 표제어 {len(DICT):,}", flush=True)
+
 lemma_freq, surface_map = {}, {}
 
 def add(lemma, count, surface):
-    if not HANGUL.match(lemma) or len(lemma) < 2 or lemma in STOP or lemma in FUNC_VERBS:
+    if not HANGUL.match(lemma) or not (2 <= len(lemma) <= 7) or lemma in STOP:
         return
     lemma_freq[lemma] = lemma_freq.get(lemma, 0) + count
-    # remember the inflected surface form so the game can resolve typed input
     if surface != lemma and HANGUL.match(surface):
         prev = surface_map.get(surface)
         if prev is None or count > prev[1]:
             surface_map[surface] = (lemma, count)
 
-for line in freq_path.read_text(encoding='utf-8').splitlines():
+print("빈도 목록 형태소 분석 중…", flush=True)
+lines = freq_path.read_text(encoding='utf-8').splitlines()
+for n, line in enumerate(lines):
+    if n % 100000 == 0 and n:
+        print(f"  {n:,}/{len(lines):,}", flush=True)
     p = line.split()
     if len(p) != 2:
         continue
     surface, count = p[0], int(p[1])
-    if not HANGUL.match(surface) or count < 15:
+    if not HANGUL.match(surface) or count < MIN_FREQ or len(surface) > 10:
         continue
     toks = kiwi.tokenize(surface)
-    tags = [t.tag for t in toks]
-    # a single noun, optionally followed by particles only
-    if any(t.tag == 'NNP' for t in toks):
+    if any(t.tag == 'NNP' for t in toks):      # subtitle corpora are full of character names
         continue
     nouns = [t for t in toks if t.tag == 'NNG']
     rest  = [t for t in toks if t.tag != 'NNG']
-    if len(nouns) == 1 and all(t.tag.startswith('J') for t in rest):
-        add(nouns[0].form, count, surface)
-    # compound of two nouns and nothing else -> keep the compound
-    elif len(nouns) == 2 and all(t.tag.startswith('J') for t in rest) and len(toks) <= 3:
-        add(''.join(n.form for n in nouns), count, surface)
-    # predicate -> dictionary form (뜨겁 + 다)
+    if nouns and all(t.tag.startswith('J') for t in rest) and len(nouns) <= 2:
+        add(''.join(t.form for t in nouns), count, surface)
     elif toks and toks[0].tag.startswith(('VA', 'VV')) and len(toks[0].form) >= 2:
         add(toks[0].form + '다', count, surface)
 
-targets = [w for w in Path('data/targets.clean.txt').read_text().split() if w]
-ranked = sorted(lemma_freq.items(), key=lambda kv: -kv[1])
-vocab = {w for w, _ in ranked[:LIMIT]} | set(targets)
-vocab = sorted(vocab)
+print(f"  표제어 후보 {len(lemma_freq):,}", flush=True)
+
+# a lemma ships only if the dictionary agrees it is a word
+real = {w: c for w, c in lemma_freq.items() if w in DICT and not VERBISH.search(w)}
+print(f"  사전과 일치 {len(real):,}", flush=True)
+
+targets = [w for w in Path('data/targets.clean.txt').read_text(encoding='utf-8').split() if w]
+seeds   = [w for w in Path('data/seeds.txt').read_text(encoding='utf-8').split() if HANGUL.match(w)] \
+          if Path('data/seeds.txt').exists() else []
+profile_words = []
+for line in Path('data/profiles.txt').read_text(encoding='utf-8').splitlines():
+    if ':' in line and not line.startswith('#'):
+        profile_words += [w for w in line.split(':', 1)[1].split() if HANGUL.match(w)]
+
+ranked = sorted(real.items(), key=lambda kv: -kv[1])
+vocab = sorted(set(w for w, _ in ranked[:LIMIT]) | set(targets) | set(seeds) | set(profile_words))
 
 Path('data/clues.txt').write_text('\n'.join(vocab) + '\n', encoding='utf-8')
-# only keep surface forms that resolve to a word we actually kept
-sm = {s: l for s, (l, _) in surface_map.items() if l in set(vocab) and s not in set(vocab)}
+keep = set(vocab)
+sm = {s: l for s, (l, _) in surface_map.items() if l in keep and s not in keep}
 Path('data/surface.json').write_text(json.dumps(sm, ensure_ascii=False), encoding='utf-8')
 
-print(f"표제어 추출 {len(lemma_freq)}  →  단서 어휘 {len(vocab)}   활용형 맵 {len(sm)}")
-print("상위 50:", ' '.join(w for w, _ in ranked[:50]))
-print("3000위대:", ' '.join(w for w, _ in ranked[3000:3030]))
-print("9000위대:", ' '.join(w for w, _ in ranked[9000:9030]))
+print(f"\n단서 어휘 {len(vocab):,}   활용형 맵 {len(sm):,}")
+missing = [w for w in ['인간','사람','대중교통','남자','여자','아이','생각','재활용','스마트폰',
+                       '지하철역','소방차','손수건','가로등','인공지능'] if w not in keep]
+print("예시 단어 누락:", ' '.join(missing) if missing else "없음")
+print("상위 40:", ' '.join(w for w, _ in ranked[:40]))

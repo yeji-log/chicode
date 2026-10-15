@@ -1,13 +1,8 @@
 <!doctype html>
-<html lang="ko"><head>
-<meta charset="utf-8">
+<html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<style>
-:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
-body { margin: 0; font: 14px system-ui, sans-serif }
-img { max-width: 100% }
-[hidden] { display: none !important }
-</style>
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
 </head><body>
 <title>연상 아케이드</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -206,6 +201,53 @@ button.send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .missed span { font-size: 11.5px; font-weight: 500; padding: 4px 9px; border-radius: 7px;
                background: var(--panel-2); border: 1px solid var(--line); color: var(--ink-dim) }
 .missed span em { font-family: var(--display); font-style: normal; font-weight: 700; color: var(--ink) }
+/* explanation panel */
+.sheet { position: absolute; inset: 0; z-index: 6; background: var(--panel); overflow-y: auto;
+         padding: 0 20px 20px; display: flex; flex-direction: column; gap: 16px }
+.sheet .topbar { position: sticky; top: 0; z-index: 1; display: flex; justify-content: flex-end;
+                 background: var(--panel); padding: 14px 0 10px; margin: 0 -20px; padding-inline: 20px;
+                 border-bottom: 1px solid var(--line) }
+.sheet h3 { margin: 0; font-family: var(--display); font-size: 21px; font-weight: 700;
+            letter-spacing: -.025em; line-height: 1.3 }
+.sheet h4 { margin: 0 0 6px; font-size: 11px; font-weight: 800; letter-spacing: .1em;
+            text-transform: uppercase; color: var(--ink-faint) }
+.sheet p { margin: 0; font-size: 13.5px; line-height: 1.7; color: var(--ink-dim) }
+.sheet section { display: flex; flex-direction: column; gap: 7px }
+.sheet .close { font: inherit; font-size: 13px;
+                font-weight: 700; padding: 7px 15px; border-radius: 8px; border: 1px solid var(--line);
+                background: var(--panel); color: var(--ink-dim); cursor: pointer }
+.sheet .close:hover { border-color: var(--line-strong); color: var(--ink) }
+.sheet .close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.steps { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; counter-reset: step }
+.steps li { display: grid; grid-template-columns: 22px 1fr; gap: 11px; align-items: start;
+            font-size: 13px; line-height: 1.6; color: var(--ink-dim) }
+.steps li::before { counter-increment: step; content: counter(step);
+                    width: 22px; height: 22px; border-radius: 7px; background: var(--accent);
+                    color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center }
+.steps b { color: var(--ink); font-weight: 700 }
+.try { background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; padding: 13px;
+       display: flex; flex-direction: column; gap: 10px }
+.try form { display: flex; gap: 7px; padding: 0 }
+.try input { padding: 9px 12px; font-size: 14px; border-radius: 8px }
+.try button { font: inherit; font-size: 13px; font-weight: 700; padding: 0 14px; border: 0;
+              border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer }
+.rank { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none }
+.rank li { display: grid; grid-template-columns: 4.5em 1fr 2.6em; gap: 9px; align-items: center;
+           font-size: 12.5px }
+.rank .w { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink);
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.rank .track { height: 9px; border-radius: 5px; background: var(--line); overflow: hidden }
+.rank .track i { display: block; height: 100%; background: var(--accent); border-radius: 5px }
+.rank .pc { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums;
+            color: var(--ink-faint); font-size: 11.5px }
+.rank li.under .track i { background: var(--line-strong) }
+.rank li.under .w { color: var(--ink-faint) }
+.try .note { font-size: 11.5px; line-height: 1.55; color: var(--ink-faint); margin: 0 }
+.limits { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none }
+.limits li { font-size: 12.5px; line-height: 1.6; color: var(--ink-dim); padding-left: 13px;
+             position: relative }
+.limits li::before { content: "·"; position: absolute; left: 3px; color: var(--ink-faint);
+                     font-weight: 800 }
 .bar { height: 4px; border-radius: 3px; background: var(--panel-2); overflow: hidden }
 .bar i { display: block; height: 100%; background: var(--accent); width: 0%; transition: width .2s }
 
@@ -219,6 +261,7 @@ button.send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
       <button role="tab" id="tab-arcade" aria-selected="true">아케이드</button>
       <button role="tab" id="tab-blocks" aria-selected="false">블록</button>
     </div>
+    <button class="theme-btn" id="explain-btn" title="게임 설명과 원리" aria-label="게임 설명과 원리">?</button>
     <button class="theme-btn" id="theme" title="밝기 전환" aria-label="밝기 전환">◑</button>
   </header>
 
@@ -244,7 +287,64 @@ button.send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
       </ul>
       <button class="start" id="ov-start" disabled>데이터 불러오는 중…</button>
       <div class="bar" id="ov-bar"><i></i></div>
+      <button class="start" id="ov-explain" style="align-self:flex-start;background:transparent;color:var(--accent);border:1px solid var(--line);padding:9px 16px;font-size:13px;box-shadow:none">게임 설명과 원리</button>
       <p class="meta" id="ov-meta">한국어 임베딩 모델 KURE-v1로 미리 계산한 단서 7,335개 × 단어 486개의 의미 거리표를 씁니다. 모든 판정은 기기 안에서 끝나고, 입력은 어디로도 전송되지 않습니다.</p>
+    </div>
+    <div class="sheet" id="sheet" hidden>
+      <div class="topbar"><button class="close" id="sheet-close">닫기</button></div>
+
+      <h3>뜻이 가까운 말로 지우는 게임</h3>
+      <p>구글이 2018년에 공개한 <b>Semantris</b>를 한국어로 다시 만든 것입니다. 원작은 영어 전용이고
+         한국어판이 없어서, 한국어 임베딩으로 의미 거리표를 새로 계산해 붙였습니다.</p>
+      <p>화면에 단어가 쌓입니다. 그 단어를 <b>직접 입력하면 안 되고</b>, 뜻이 가까운 다른 말을 찾아
+         입력해야 합니다. <code>해변</code>을 지우려면 <code>모래</code>나 <code>파라솔</code>처럼요.
+         답이 하나가 아니라서 사람마다 전략이 달라집니다.</p>
+
+      <section>
+        <h4>어떻게 가까운지 판단하나</h4>
+        <ol class="steps">
+          <li><div>단어를 <b>숫자 벡터</b>로 바꿉니다. 많은 한국어 문장을 학습한 모델이, 비슷한 자리에
+              쓰이는 말끼리 비슷한 벡터를 갖도록 배치합니다. 그래서 <b>모래</b>와 <b>해변</b>은
+              가깝고, <b>모래</b>와 <b>피아노</b>는 멉니다.</div></li>
+          <li><div>단어마다 <b>연상어 묶음</b>을 따로 적어두고 그것도 함께 벡터로 만듭니다. 사전적
+              유사도만으로는 <b>야옹 → 고양이</b> 같은 연상이 잡히지 않기 때문입니다.</div></li>
+          <li><div>이 둘을 섞은 거리를 <b>미리 전부 계산</b>해 표로 싣습니다. 그래서 게임 중에는
+              모델이 돌지 않고, 표를 찾아보기만 합니다. 입력한 말은 기기 밖으로 나가지 않습니다.</div></li>
+        </ol>
+      </section>
+
+      <section>
+        <h4>직접 확인해보기</h4>
+        <div class="try">
+          <form id="try-form" autocomplete="off">
+            <input type="text" id="try-input" placeholder="예: 모래, 야옹, 카페인"
+                   aria-label="살펴볼 단어" spellcheck="false" autocapitalize="off">
+            <button type="submit">찾기</button>
+          </form>
+          <ul class="rank" id="try-out"></ul>
+          <p class="note" id="try-note">아무 단어나 넣어보세요. 그 말과 가장 가까운 단어 다섯 개를
+             거리표에서 그대로 꺼내 보여줍니다. 회색 막대는 게임이 매칭으로 인정하지 않는 거리입니다.</p>
+        </div>
+      </section>
+
+      <section>
+        <h4>점수</h4>
+        <p>단서가 정확할수록 더 많이 터집니다. 거리가 <b>84%</b>를 넘으면 옆 단어 하나가,
+           <b>97%</b>를 넘으면 둘이 같이 사라집니다. 아케이드에서는 아래쪽 단어일수록 점수가 크고,
+           연속으로 맞히면 배수가 붙습니다.</p>
+      </section>
+
+      <section>
+        <h4>한계</h4>
+        <ul class="limits">
+          <li>단서 어휘가 <b id="lim-count">고정</b>되어 있습니다. 목록 밖의 말은 "아는 단어가
+              아니에요"로 거절됩니다. 조사와 흔한 활용형은 따로 처리하지만 완전하지는 않습니다.</li>
+          <li>짧은 한국어 단어에서는 <b>음절이 겹치기만 해도</b> 거리가 가까워지는 경향이 있습니다.
+              페널티로 많이 눌렀지만 <code>경관 → 왕관</code> 같은 사례가 남아 있습니다.</li>
+          <li>화면에 등장하는 486개 단어는 손으로 고른 목록이라, 구체적인 명사에 비해
+              추상어는 약합니다.</li>
+        </ul>
+      </section>
     </div>
   </div>
 
@@ -267,7 +367,7 @@ let   ARCADE_CAP   = 12;     // recomputed from the field's real height
 const ARCADE_WARN   = 3;     // top tiles marked as urgent
 const BLOCK_COLS    = 7;
 const BLOCK_ROWS    = 9;
-const MATCH_MIN     = 130;   // measured: 99.8% of real associations clear this, 90% of unrelated words don't
+let   MATCH_MIN     = 130;   // measured: 99.8% of real associations clear this, 90% of unrelated words don't
 const PRECISE_1     = 215;   // 70% of real associations reach this; unrelated words, 0.2%
 const PRECISE_2     = 248;   // 42% reach this — a precise clue takes the neighbours with it
 const CLUSTER_P     = 0.3;   // chance a new word comes from a category already on the board
@@ -277,7 +377,7 @@ const SPAWN_DECAY   = 70;    // ms removed per spawn
 const COLORS        = 4;
 
 // ---------- state ----------
-let DATA = null, SIM = null, clueIndex = null, targetIndex = null;
+let DATA = null, OFF = null, IDS = null, SCORES = null, clueIndex = null, targetIndex = null;
 let mode = "arcade";
 let running = false, spawnTimer = 0, spawnEvery = SPAWN_START;
 let score = 0, streak = 0, bestStreak = 0, cleared = 0;
@@ -294,6 +394,9 @@ const el = {
   ovHow: $("ov-how"), ovStart: $("ov-start"), ovBar: $("ov-bar"), ovMeta: $("ov-meta"),
   feedback: $("feedback"), form: $("form"), clue: $("clue"), send: $("send"),
   tabA: $("tab-arcade"), tabB: $("tab-blocks"), theme: $("theme"),
+  sheet: $("sheet"), sheetClose: $("sheet-close"), explainBtn: $("explain-btn"),
+  ovExplain: $("ov-explain"), tryForm: $("try-form"), tryInput: $("try-input"),
+  tryOut: $("try-out"), tryNote: $("try-note"), limCount: $("lim-count"),
 };
 
 // ---------- storage (per-viewer convenience only) ----------
@@ -308,22 +411,46 @@ async function load() {
   const bar = el.ovBar.firstElementChild;
   const meta = await fetch("dist/game.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
   bar.style.width = "35%";
-  // the distance table ships base64-encoded, since artifacts only serve text and media types
-  const b64 = await fetch("dist/sim.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); });
+  // the table ships base64-encoded, since artifacts only serve text and media types
+  const b64 = await fetch("dist/sim.csr.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); });
   bar.style.width = "85%";
   const bin = atob(b64.trim());
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   bar.style.width = "100%";
+
+  // header: magic, clue count, stored-pair count; then offsets, target ids, scores
+  const dv = new DataView(bytes.buffer);
+  if (dv.getUint32(0, true) !== 0x4B534D31) throw new Error("거리표 형식을 알 수 없습니다");
+  const nClues = dv.getUint32(4, true), nnz = dv.getUint32(8, true);
+  if (nClues !== meta.clues.length) throw new Error("거리표와 단어 목록이 맞지 않습니다");
+  let at = 12;
+  OFF = new Uint32Array(bytes.buffer.slice(at, at + (nClues + 1) * 4)); at += (nClues + 1) * 4;
+  IDS = new Uint16Array(bytes.buffer.slice(at, at + nnz * 2));         at += nnz * 2;
+  SCORES = new Uint8Array(bytes.buffer.slice(at, at + nnz));
+
   DATA = meta;
-  SIM = bytes;
-  if (SIM.length !== meta.rows * meta.cols) throw new Error("거리표 크기가 맞지 않습니다");
+  MATCH_MIN = meta.matchMin || MATCH_MIN;
   clueIndex = new Map(meta.clues.map((c, i) => [c, i]));
   targetIndex = new Map(meta.targets.map((t, i) => [t, i]));
   buildCats();
 }
 
-const sim = (row, targetId) => SIM[row * DATA.cols + targetId];
+// A clue's stored pairs, strongest first. Anything absent scored below the threshold.
+function rowScores(row) {
+  const m = new Map();
+  for (let k = OFF[row]; k < OFF[row + 1]; k++) m.set(IDS[k], SCORES[k]);
+  return m;
+}
+function topMatches(row, n, skipWord) {
+  const out = [];
+  for (let k = OFF[row]; k < OFF[row + 1] && out.length < n; k++) {
+    const word = DATA.targets[IDS[k]];
+    if (word === skipWord) continue;   // the word matching itself explains nothing
+    out.push({ word, score: SCORES[k] });
+  }
+  return out;
+}
 
 // ---------- input resolution ----------
 const PARTICLES = ["으로서","으로써","이라고","이라는","에서는","에게는","한테는","으로는","라고","라는",
@@ -428,8 +555,9 @@ function spawnArcade() {
 }
 
 function guessArcade(res) {
+  const sc = rowScores(res.row);
   let bestI = -1, bestS = -1;
-  tiles.forEach((t, i) => { const s = sim(res.row, t.id); if (s > bestS) { bestS = s; bestI = i; } });
+  tiles.forEach((t, i) => { const s = sc.get(t.id) || 0; if (s > bestS) { bestS = s; bestI = i; } });
   if (bestI < 0 || bestS < MATCH_MIN) return null;
 
   // a precise clue takes its neighbours with it; a merely adequate one does not
@@ -492,9 +620,10 @@ function spawnBlock() {
 }
 
 function guessBlocks(res) {
+  const sc = rowScores(res.row);
   let bc = -1, br = -1, bestS = -1;
   grid.forEach((col, c) => col.forEach((b, r) => {
-    const s = sim(res.row, b.id);
+    const s = sc.get(b.id) || 0;
     if (s > bestS) { bestS = s; bc = c; br = r; }
   }));
   if (bc < 0 || bestS < MATCH_MIN) return null;
@@ -697,6 +826,61 @@ el.theme.addEventListener("click", () => {
   store.set("semantris-ko-theme", next);
 });
 
+// ---------- explanation panel ----------
+let pausedBySheet = false;
+
+function openSheet() {
+  if (running) { clearTimeout(spawnTimer); pausedBySheet = true; }
+  el.sheet.hidden = false;
+  el.sheet.scrollTop = 0;
+  if (DATA && !el.tryOut.children.length) showMatches("모래");
+  el.sheetClose.focus();
+}
+function closeSheet() {
+  el.sheet.hidden = true;
+  if (pausedBySheet && running) { spawnTimer = setTimeout(tick, spawnEvery); el.clue.focus(); }
+  pausedBySheet = false;
+}
+
+function showMatches(word) {
+  const res = resolve(word);
+  if (!res) {
+    el.tryOut.replaceChildren();
+    el.tryNote.textContent = `"${word}" 는 단서 목록에 없는 말입니다. 목록은 ${DATA ? DATA.clues.length.toLocaleString("ko-KR") : ""}개이고, 그 밖의 말은 게임에서도 거절됩니다.`;
+    return;
+  }
+  const rows = topMatches(res.row, 5, res.word);
+  if (!rows.length) {
+    el.tryOut.replaceChildren();
+    el.tryNote.textContent = `"${res.word}" 와 충분히 가까운 단어가 486개 중에 없습니다. 게임에서도 이런 말은 아무것도 터뜨리지 못합니다.`;
+    return;
+  }
+  el.tryOut.replaceChildren(...rows.map(r => {
+    const pc = Math.round(r.score / 255 * 100);
+    const li = document.createElement("li");
+    if (r.score < MATCH_MIN) li.className = "under";
+    const w = document.createElement("span"); w.className = "w"; w.textContent = r.word;
+    const tr = document.createElement("span"); tr.className = "track";
+    const fill = document.createElement("i"); fill.style.width = pc + "%";
+    tr.append(fill);
+    const n = document.createElement("span"); n.className = "pc"; n.textContent = pc + "%";
+    li.append(w, tr, n);
+    return li;
+  }));
+  const shown = res.word === word.trim() ? `"${res.word}"` : `"${word.trim()}" (→ ${res.word})`;
+  el.tryNote.textContent = `${shown} 에서 가장 가까운 단어들입니다. 게임은 ${Math.round(MATCH_MIN / 255 * 100)}% 미만이면 매칭으로 치지 않습니다.`;
+}
+
+el.explainBtn.addEventListener("click", openSheet);
+el.ovExplain.addEventListener("click", openSheet);
+el.sheetClose.addEventListener("click", closeSheet);
+addEventListener("keydown", (e) => { if (e.key === "Escape" && !el.sheet.hidden) closeSheet(); });
+el.tryForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = el.tryInput.value.trim();
+  if (v) showMatches(v);
+});
+
 el.form.addEventListener("submit", submit);
 el.ovStart.addEventListener("click", () => { if (DATA) start(); });
 el.field.addEventListener("click", () => { if (running) el.clue.focus(); });
@@ -721,6 +905,7 @@ function boot(restored) {
   paintScores();
 
   load().then(() => {
+    if (el.limCount) el.limCount.textContent = DATA.clues.length.toLocaleString("ko-KR") + "개로 고정";
     showIntro();
   }).catch(err => {
     el.ovTitle.textContent = "데이터를 불러오지 못했습니다";
